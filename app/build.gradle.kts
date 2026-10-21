@@ -3,6 +3,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// The release key is NOT in the repository (see signingConfigs below).
+val keyProps = java.util.Properties().apply {
+    val f = rootProject.file("keystore/keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.faznet.tv"
     compileSdk = 36
@@ -23,10 +29,6 @@ android {
 
     // The release key is NOT in the repository. Keep keystore/faznet.jks + keystore/keystore.properties locally
     // (storePassword=..., keyPassword=...) or provide FAZNET_STORE_PASSWORD / FAZNET_KEY_PASSWORD.
-    val keyProps = java.util.Properties().apply {
-        val f = rootProject.file("keystore/keystore.properties")
-        if (f.exists()) f.inputStream().use { load(it) }
-    }
     signingConfigs {
         create("release") {
             storeFile = rootProject.file("keystore/faznet.jks")
