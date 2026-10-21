@@ -1,3 +1,11 @@
+## Faznet v1.1.1
+
+**Shqip:** Ngarkimi i listës nga webi tani punon online: hap **https://whatsthatbrother.github.io/faznet**, shkruaj MAC + PIN që shfaq aplikacioni dhe shto listën. Pajisja e merr vetë.
+
+- Online upload server (Cloudflare Worker) at `faznet.diarfazliu.workers.dev`
+- Upload website on GitHub Pages: https://whatsthatbrother.github.io/faznet
+- Signed release build (uninstall older test builds before installing)
+
 ## Faznet v1.1.0
 
 **Shqip:** Stabilitet shumë më i mirë për kanalet IPTV, zë për kanalet MP2/AC3, ngarkim i playlist-ës nga webi me MAC + PIN, dhe përmirësime për Android TV.
