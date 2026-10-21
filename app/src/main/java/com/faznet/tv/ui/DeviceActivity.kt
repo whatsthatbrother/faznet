@@ -38,6 +38,7 @@ class DeviceActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_device)
+        findViewById<android.view.View>(android.R.id.content).applyTvSafeArea()
         repo = Repository.get(this)
         tvMac = findViewById(R.id.tvMac)
         tvPin = findViewById(R.id.tvPin)

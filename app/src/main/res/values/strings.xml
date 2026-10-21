@@ -72,5 +72,12 @@
     <string name="upload_from_web">Upload from web (MAC)</string>
     <string name="from_web">From the web</string>
     <string name="welcome_mac">Or upload from the web: open %3$s and enter\nMAC  %1$s    PIN  %2$s</string>
-    <string name="show_stats">Show stream stats in the player (buffer, speed, codecs) — Menu key toggles</string>
+    <string name="show_stats">Show stream stats in the player (buffer, speed, codecs) — Menu → Stats in the player</string>
+    <string name="channel_list">Channel list</string>
+    <string name="stats">Stream stats</string>
+    <string name="prev_group">Previous group</string>
+    <string name="next_group">Next group</string>
+    <string name="list_count">%1$d / %2$d</string>
+    <string name="group_search">Search results</string>
+    <string name="picture">Picture: %1$s</string>
 </resources>

@@ -31,11 +31,6 @@ data class Playlist(
         else -> null
     }
 
-    fun describe(): String = when (type) {
-        TYPE_XTREAM -> "Xtream · $username @ ${normalizeServer(source)}"
-        TYPE_FILE -> source
-        else -> source
-    }
 
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("name", name).put("type", type).put("source", source)
@@ -64,4 +59,13 @@ data class Playlist(
 
         private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
     }
+}
+
+/** Error text that never reveals playlist addresses, hosts or IPs (the app must not show where a playlist comes from). */
+fun Throwable.safeMessage(): String {
+    val m = message?.takeIf { it.isNotBlank() } ?: return javaClass.simpleName
+    return m.replace(Regex("""[a-zA-Z][a-zA-Z0-9+.-]*://\S+"""), "…")
+        .replace(Regex("""\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b"""), "…")
+        .replace(Regex("""(?i)\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?\b"""), "…")
+        .take(120)
 }

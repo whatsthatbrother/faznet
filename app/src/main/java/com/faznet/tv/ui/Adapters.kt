@@ -1,5 +1,8 @@
 package com.faznet.tv.ui
 
+import android.app.UiModeManager
+import android.content.Context
+import android.content.res.Configuration
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -144,4 +147,15 @@ fun loadLogo(view: ImageView, url: String?) {
             error(R.drawable.ic_tv)
         }
     }
+}
+
+fun Context.isTv(): Boolean =
+    (getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
+        packageManager.hasSystemFeature("android.software.leanback")
+
+/** TVs may crop the picture edges (overscan): keep content inside the title-safe area. */
+fun View.applyTvSafeArea() {
+    if (!context.isTv()) return
+    val d = resources.displayMetrics.density
+    setPadding(paddingLeft + (32 * d).toInt(), paddingTop + (18 * d).toInt(), paddingRight + (32 * d).toInt(), paddingBottom + (18 * d).toInt())
 }

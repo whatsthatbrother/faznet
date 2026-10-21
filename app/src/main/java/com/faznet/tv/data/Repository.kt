@@ -245,5 +245,7 @@ object ChannelStore {
     var playlistId: String = ""
     var all: List<Channel> = emptyList()
     var current: List<Channel> = emptyList()
+    /** Group the player starts in (MainActivity.KEY_* or a group name); null = the `current` list as-is (search). */
+    var groupKey: String? = null
     var lastPlayedUrl: String? = null
 }

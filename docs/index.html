@@ -146,7 +146,7 @@
       var li = document.createElement("li");
       var n = document.createElement("div"); n.className = "n";
       var b = document.createElement("b"); b.textContent = p.name;
-      var s = document.createElement("small"); s.textContent = p.detail;
+      var s = document.createElement("small"); s.textContent = { url: "Lista M3U", xtream: "Xtream Codes", file: "File M3U" }[p.type] || "";
       n.appendChild(b); n.appendChild(s);
       var del = document.createElement("button"); del.className = "ghost"; del.type = "button"; del.textContent = "Fshij";
       del.onclick = function () {
@@ -206,6 +206,8 @@
   $("addForm").addEventListener("submit", function (e) {
     e.preventDefault(); clearMsg();
     var base = { mac: state.mac, pin: state.pin, type: state.type, name: $("name").value.trim() };
+    // Never name a playlist after its server address: the TV shows the name.
+    if (!base.name && state.type !== "file") base.name = (state.type === "xtream" ? "Xtream " : "Lista ") + (($("list").children.length || 0) + 1);
     if (state.type === "url") { base.url = $("url").value.trim(); return send(base); }
     if (state.type === "xtream") {
       base.server = $("xserver").value.trim(); base.username = $("xuser").value.trim(); base.password = $("xpass").value;

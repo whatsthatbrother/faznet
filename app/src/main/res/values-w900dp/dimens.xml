@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="overlay_row">54dp</dimen>
+    <dimen name="overlay_number">15sp</dimen>
+    <dimen name="overlay_name">17sp</dimen>
+    <dimen name="overlay_logo_w">56dp</dimen>
+    <dimen name="overlay_logo_h">38dp</dimen>
+    <dimen name="overlay_title">19sp</dimen>
+    <dimen name="infobar_name">22sp</dimen>
+    <dimen name="infobar_number">32sp</dimen>
+    <dimen name="infobar_logo_w">96dp</dimen>
+    <dimen name="infobar_logo_h">60dp</dimen>
+    <dimen name="infobar_pad">36dp</dimen>
+</resources>

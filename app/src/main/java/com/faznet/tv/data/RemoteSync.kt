@@ -60,7 +60,7 @@ object RemoteSync {
                     Result.Ok(list.size, changed)
                 }
             } catch (e: IOException) {
-                Result.Error(e.message ?: e.javaClass.simpleName)
+                Result.Error(e.safeMessage())
             } catch (e: Exception) {
                 Result.Error(e.javaClass.simpleName)
             }

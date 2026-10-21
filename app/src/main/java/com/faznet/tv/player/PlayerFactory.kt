@@ -1,5 +1,6 @@
 package com.faznet.tv.player
 
+import android.app.ActivityManager
 import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.C
@@ -47,13 +48,16 @@ object PlayerFactory {
             )
             .setEnableDecoderFallback(true)
 
-        // Live IPTV: start quickly (1.5 s) and keep a healthy cushion (15–40 s).
+        // Live IPTV: start quickly (1 s) and keep a healthy cushion.
         // Many IPTV TS streams are muxed with audio and video several seconds apart, so one track must be
         // buffered far ahead of the other. Time must win over the byte cap, otherwise loading stops with
-        // "target buffer size reached with < 500 ms buffered" and playback stalls. 64 MB is still safe on 1 GB sticks.
+        // "target buffer size reached with < 500 ms buffered" and playback stalls.
+        // The buffer lives on the Java heap: on 1 GB sticks (Mi TV Stick) a big one causes GC pauses and
+        // frozen video after some minutes, so it is sized from the device's memory.
+        val low = isLowMemory(context)
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(15_000, 40_000, 1_500, 3_000)
-            .setTargetBufferBytes(64 * 1024 * 1024)
+            .setBufferDurationsMs(if (low) 10_000 else 15_000, if (low) 25_000 else 40_000, 1_000, 2_500)
+            .setTargetBufferBytes(bufferBytes(context, low))
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
@@ -62,6 +66,19 @@ object PlayerFactory {
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .setHandleAudioBecomingNoisy(true)
             .build()
+    }
+
+    fun isLowMemory(context: Context): Boolean {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val info = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+        return am.isLowRamDevice || info.totalMem in 1 until 1_700L * 1024 * 1024
+    }
+
+    private fun bufferBytes(context: Context, low: Boolean): Int {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val heapMb = am.largeMemoryClass.coerceAtLeast(64)
+        val mb = if (low) (heapMb / 4).coerceIn(16, 32) else (heapMb / 3).coerceIn(32, 64)
+        return mb * 1024 * 1024
     }
 
     fun mediaSource(context: Context, ch: Channel, userAgent: String, type: StreamType): MediaSource {

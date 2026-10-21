@@ -1,3 +1,15 @@
+## Faznet v1.1.2
+
+**Shqip:** Figura që ngrin ndërsa zëri vazhdon rregullohet vetë; lista e kanaleve me OK mbi figurë (majtas/djathtas ndërron grupin); madhësia e figurës (Përshtat / Shtrij / Zmadho); lidhjet e playlist-ave nuk shfaqen më.
+
+- Picture freeze watchdog: no first frame, frozen picture or stuck playback → the channel re-opens automatically
+- Player buffer sized from device memory (lighter on 1 GB sticks such as the Mi TV Stick), faster channel start
+- OK while watching opens the channel list of the current group over the picture; Left/Right switch group
+- Infobar with logo and clock on every channel change; Menu opens options (list, favorite, picture size, stats)
+- Picture size: Fit / Stretch / Zoom (remembered)
+- TV safe area (overscan) and denser channel grid on TVs
+- Playlist addresses, hosts and Xtream usernames are never shown in the app or on the website
+
 ## Faznet v1.1.1
 
 **Shqip:** Ngarkimi i listës nga webi tani punon online: hap **https://whatsthatbrother.github.io/faznet**, shkruaj MAC + PIN që shfaq aplikacioni dhe shto listën. Pajisja e merr vetë.

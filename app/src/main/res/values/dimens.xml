@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Player overlays. Phones use these; TVs/tablets (w900dp) get the larger set. -->
+    <dimen name="overlay_row">48dp</dimen>
+    <dimen name="overlay_number">13sp</dimen>
+    <dimen name="overlay_name">15sp</dimen>
+    <dimen name="overlay_logo_w">48dp</dimen>
+    <dimen name="overlay_logo_h">32dp</dimen>
+    <dimen name="overlay_title">17sp</dimen>
+    <dimen name="infobar_name">18sp</dimen>
+    <dimen name="infobar_number">26sp</dimen>
+    <dimen name="infobar_logo_w">72dp</dimen>
+    <dimen name="infobar_logo_h">48dp</dimen>
+    <dimen name="infobar_pad">20dp</dimen>
+</resources>

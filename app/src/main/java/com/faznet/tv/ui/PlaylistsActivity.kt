@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.faznet.tv.R
 import com.faznet.tv.data.Playlist
+import com.faznet.tv.data.safeMessage
 import com.faznet.tv.data.Repository
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
@@ -41,6 +42,7 @@ class PlaylistsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_playlists)
+        findViewById<android.view.View>(android.R.id.content).applyTvSafeArea()
         repo = Repository.get(this)
 
         adapter = PlaylistAdapter(
@@ -114,8 +116,7 @@ class PlaylistsActivity : AppCompatActivity() {
                         val user = etUser.text.toString().trim()
                         val pass = etPass.text.toString()
                         if (server.isEmpty() || user.isEmpty() || pass.isEmpty()) return@setOnClickListener required()
-                        val host = Uri.parse(Playlist.normalizeServer(server)).host ?: server
-                        save(dialog, Playlist(id, name.ifEmpty { host }, Playlist.TYPE_XTREAM, server, user, pass))
+                        save(dialog, Playlist(id, name.ifEmpty { getString(R.string.type_xtream) }, Playlist.TYPE_XTREAM, server, user, pass))
                     }
                     R.id.rbFile -> {
                         val uri = pickedUri ?: return@setOnClickListener required()
@@ -126,7 +127,7 @@ class PlaylistsActivity : AppCompatActivity() {
                                 repo.importFile(uri, id)
                                 save(dialog, Playlist(id, name.ifEmpty { label.substringBeforeLast('.') }, Playlist.TYPE_FILE, label))
                             } catch (e: Exception) {
-                                Toast.makeText(this@PlaylistsActivity, getString(R.string.err_import, e.message ?: ""), Toast.LENGTH_LONG).show()
+                                Toast.makeText(this@PlaylistsActivity, getString(R.string.err_import, e.safeMessage()), Toast.LENGTH_LONG).show()
                             }
                         }
                     }
@@ -134,8 +135,7 @@ class PlaylistsActivity : AppCompatActivity() {
                         var url = etUrl.text.toString().trim()
                         if (url.isEmpty()) return@setOnClickListener required()
                         if (!url.contains("://")) url = "http://$url"
-                        val host = Uri.parse(url).host ?: getString(R.string.default_playlist_name)
-                        save(dialog, Playlist(id, name.ifEmpty { host }, Playlist.TYPE_URL, url))
+                        save(dialog, Playlist(id, name.ifEmpty { getString(R.string.default_playlist_name) }, Playlist.TYPE_URL, url))
                     }
                 }
             }
@@ -198,7 +198,14 @@ class PlaylistAdapter(
     override fun onBindViewHolder(h: VH, position: Int) {
         val p = items[position]
         h.name.text = p.name
-        h.source.text = if (p.isRemote) "${h.itemView.context.getString(R.string.from_web)} · ${p.describe()}" else p.describe()
+        // Only the kind of playlist — never its address or account.
+        val ctx = h.itemView.context
+        val kind = ctx.getString(when (p.type) {
+            Playlist.TYPE_XTREAM -> R.string.type_xtream
+            Playlist.TYPE_FILE -> R.string.type_file
+            else -> R.string.type_url
+        })
+        h.source.text = if (p.isRemote) "${ctx.getString(R.string.from_web)} · $kind" else kind
         h.active.visibility = if (p.id == activeId) View.VISIBLE else View.INVISIBLE
         h.row.setOnClickListener { onSelect(p) }
         h.delete.setOnClickListener { onDelete(p) }

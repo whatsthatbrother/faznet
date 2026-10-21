@@ -84,7 +84,7 @@ function forDevice(p, origin) {
 }
 
 function forWeb(p) {
-  const detail = p.type === "xtream" ? `Xtream · ${p.username}` : p.type === "file" ? "File" : "URL";
+  const detail = p.type === "xtream" ? "Xtream" : p.type === "file" ? "File" : "URL";
   return { id: p.id, name: p.name, type: p.type, detail };
 }
 

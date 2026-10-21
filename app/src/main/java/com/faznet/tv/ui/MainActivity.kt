@@ -23,6 +23,7 @@ import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.Playlist
 import com.faznet.tv.data.RemoteSync
 import com.faznet.tv.data.Repository
+import com.faznet.tv.data.safeMessage
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -59,6 +60,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         repo = Repository.get(this)
+        findViewById<View>(android.R.id.content).applyTvSafeArea()
 
         tvPlaylist = findViewById(R.id.tvPlaylist)
         etSearch = findViewById(R.id.etSearch)
@@ -225,8 +227,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun spanCount(wide: Boolean): Int {
-        val widthDp = resources.configuration.screenWidthDp - if (wide) 280 else 0
-        return (widthDp / 340).coerceIn(1, 4)
+        val widthDp = resources.configuration.screenWidthDp - (if (wide) 280 else 0) - (if (isTv()) 64 else 0)
+        // TV cards can be narrower: the remote doesn't need big touch targets, more channels fit on screen.
+        return (widthDp / (if (isTv()) 210 else 320)).coerceIn(1, 4)
     }
 
     private fun load(p: Playlist, force: Boolean) {
@@ -255,7 +258,7 @@ class MainActivity : AppCompatActivity() {
                 all = emptyList(); byUrl = emptyMap()
                 groupAdapter.submit(emptyList(), KEY_ALL)
                 channelAdapter.submit(emptyList(), emptySet())
-                showEmpty(p.name, getString(R.string.err_load, e.message ?: e.javaClass.simpleName), getString(R.string.retry)) {
+                showEmpty(p.name, getString(R.string.err_load, e.safeMessage()), getString(R.string.retry)) {
                     load(p, true)
                 }
             }
@@ -344,6 +347,7 @@ class MainActivity : AppCompatActivity() {
         ChannelStore.playlistId = p.id
         ChannelStore.all = all
         ChannelStore.current = visible
+        ChannelStore.groupKey = if (etSearch.text.isNullOrBlank()) selectedGroup else null
         startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_INDEX, position))
     }
 
@@ -356,6 +360,7 @@ class MainActivity : AppCompatActivity() {
         ChannelStore.playlistId = p.id
         ChannelStore.all = all
         ChannelStore.current = all
+        ChannelStore.groupKey = KEY_ALL
         startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_INDEX, idx))
     }
 
