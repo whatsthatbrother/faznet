@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faznet · Ngarko playlist</title>
+<meta name="description" content="Dërgo playlist-ën M3U ose Xtream në Faznet me MAC dhe PIN.">
+<link rel="icon" href="icon.png">
+<style>
+  :root{--bg:#0e1116;--surface:#171b22;--surface2:#202632;--line:#2a3140;--text:#e8eaed;--dim:#9aa3ae;--accent:#ff6a3d;--accent2:#e8364f;--ok:#2ec27e;--err:#ff5d6c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:560px;margin:0 auto;padding:28px 16px 48px}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+  header img{width:44px;height:44px;border-radius:12px}
+  header h1{font-size:22px;margin:0}
+  header p{margin:0;color:var(--dim);font-size:13px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px}
+  h2{font-size:16px;margin:0 0 14px}
+  label{display:block;font-size:13px;color:var(--dim);margin:12px 0 6px}
+  input[type=text],input[type=password],input[type=url],input[type=file]{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px}
+  input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
+  .mac{font-family:ui-monospace,Consolas,monospace;letter-spacing:.06em;text-transform:uppercase}
+  button{display:inline-block;border:0;border-radius:10px;padding:12px 18px;font-weight:600;font-size:15px;cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;width:100%;margin-top:18px}
+  button:disabled{opacity:.6;cursor:wait}
+  .ghost{background:transparent;border:1px solid var(--line);color:var(--dim);width:auto;margin:0;padding:8px 12px;font-size:13px}
+  .msg{border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:14px;display:none}
+  .msg.err{display:block;background:rgba(255,93,108,.12);color:var(--err);border:1px solid rgba(255,93,108,.35)}
+  .msg.ok{display:block;background:rgba(46,194,126,.12);color:var(--ok);border:1px solid rgba(46,194,126,.35)}
+  .tabs{display:flex;gap:6px;background:var(--bg);padding:4px;border-radius:12px;border:1px solid var(--line)}
+  .tabs button{flex:1;margin:0;padding:9px 6px;border-radius:9px;background:transparent;color:var(--dim);font-weight:500;font-size:14px;width:auto}
+  .tabs button.on{background:var(--surface2);color:#fff}
+  .pane{display:none}.pane.on{display:block}
+  ul{list-style:none;margin:0;padding:0}
+  li{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+  li:first-child{border-top:0}
+  li .n{flex:1;min-width:0}
+  li .n b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  li .n small{color:var(--dim)}
+  .steps{color:var(--dim);font-size:14px;margin:0;padding-left:18px}
+  .devline{display:flex;justify-content:space-between;align-items:center;color:var(--dim);font-size:13px;margin-bottom:16px;gap:8px}
+  .devline .mac{color:var(--text);font-size:15px}
+  .hidden{display:none}
+  footer{color:var(--dim);font-size:12px;text-align:center;margin-top:28px}
+  footer a{color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="icon.png" alt="">
+    <div><h1>Faznet</h1><p>Ngarko playlist-ën në TV ose telefon</p></div>
+  </header>
+
+  <div id="msg" class="msg" role="status"></div>
+
+  <section id="login" class="card">
+    <h2>Lidhu me pajisjen</h2>
+    <ol class="steps">
+      <li>Hap Faznet në TV / telefon.</li>
+      <li>Shko te ikona <b>Pajisja</b> (ose ekrani i mirëseardhjes) dhe shiko MAC dhe PIN.</li>
+      <li>Shkruaji këtu poshtë.</li>
+    </ol>
+    <form id="loginForm" autocomplete="off">
+      <label for="mac">MAC adresa</label>
+      <input class="mac" id="mac" type="text" placeholder="AA:BB:CC:DD:EE:FF" maxlength="17" required>
+      <label for="pin">PIN</label>
+      <input id="pin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" placeholder="••••" required>
+      <button type="submit">Vazhdo</button>
+    </form>
+  </section>
+
+  <section id="device" class="hidden">
+    <div class="devline">
+      <span>Pajisja: <span class="mac" id="devMac"></span> <span id="devModel"></span></span>
+      <button class="ghost" id="logout" type="button">Dil</button>
+    </div>
+    <div class="card">
+      <h2>Shto playlist</h2>
+      <form id="addForm" autocomplete="off">
+        <div class="tabs" role="tablist">
+          <button type="button" class="on" data-type="url">URL M3U</button>
+          <button type="button" data-type="xtream">Xtream</button>
+          <button type="button" data-type="file">File</button>
+        </div>
+        <label for="name">Emri (opsional)</label>
+        <input id="name" type="text" maxlength="60" placeholder="p.sh. Kanalet e mia">
+        <div class="pane on" data-pane="url">
+          <label for="url">URL e playlist-ës</label>
+          <input id="url" type="url" placeholder="http://server.com/get.php?...">
+        </div>
+        <div class="pane" data-pane="xtream">
+          <label for="xserver">Serveri</label><input id="xserver" type="text" placeholder="http://host:port">
+          <label for="xuser">Përdoruesi</label><input id="xuser" type="text">
+          <label for="xpass">Fjalëkalimi</label><input id="xpass" type="password">
+        </div>
+        <div class="pane" data-pane="file">
+          <label for="file">File .m3u / .m3u8</label>
+          <input id="file" type="file" accept=".m3u,.m3u8,.txt,audio/x-mpegurl">
+        </div>
+        <button type="submit" id="addBtn">Dërgo në pajisje</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2 id="listTitle">Playlist-at në këtë pajisje</h2>
+      <ul id="list"></ul>
+      <p id="empty" style="color:var(--dim);margin:0">Ende asnjë playlist. Shto të parën më lart.</p>
+    </div>
+  </section>
+
+  <footer>Faznet është player falas dhe nuk ofron kanale. Të dhënat përdoren vetëm për t'i dërguar në pajisjen tënde.<br>
+    <a href="https://github.com/whatsthatbrother/faznet/releases/latest">Shkarko Faznet për Android / Android TV</a></footer>
+</div>
+<script src="config.js"></script>
+<script>
+(function () {
+  var API = (window.FAZNET_API || "").replace(/\/+$/, "");
+  var MSG = {
+    invalid: "MAC ose PIN nuk është në formatin e duhur.",
+    unknown: "Ky MAC nuk është regjistruar. Hape Faznet në pajisje me internet dhe provo sërish.",
+    wrong: "PIN-i është gabim. Shiko PIN-in në ekranin e Faznet.",
+    locked: "Shumë tentime të gabuara. Provo sërish pas 15 minutash.",
+    limit: "Ke arritur maksimumin e playlist-ave për këtë pajisje.",
+    fields: "Plotëso fushat e nevojshme.",
+    badurl: "URL-ja duhet të fillojë me http:// ose https://",
+    badfile: "File-i nuk duket si playlist M3U.",
+    network: "Serveri nuk u arrit. Kontrollo internetin dhe provo sërish."
+  };
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { mac: "", pin: "", type: "url" };
+
+  function show(text, ok) { var m = $("msg"); m.textContent = text; m.className = "msg " + (ok ? "ok" : "err"); }
+  function clearMsg() { $("msg").className = "msg"; }
+
+  function api(path, data) {
+    return fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
+      .then(function (r) { return r.json().catch(function () { return { error: "network" }; }); })
+      .catch(function () { return { error: "network" }; });
+  }
+
+  function render(list, max) {
+    var ul = $("list"); ul.innerHTML = "";
+    $("empty").style.display = list.length ? "none" : "block";
+    $("listTitle").textContent = "Playlist-at në këtë pajisje (" + list.length + "/" + (max || 20) + ")";
+    list.forEach(function (p) {
+      var li = document.createElement("li");
+      var n = document.createElement("div"); n.className = "n";
+      var b = document.createElement("b"); b.textContent = p.name;
+      var s = document.createElement("small"); s.textContent = p.detail;
+      n.appendChild(b); n.appendChild(s);
+      var del = document.createElement("button"); del.className = "ghost"; del.type = "button"; del.textContent = "Fshij";
+      del.onclick = function () {
+        if (!confirm("Ta fshij “" + p.name + "”?")) return;
+        api("/api/web/delete", { mac: state.mac, pin: state.pin, id: p.id }).then(function (r) {
+          if (r.error) return show(MSG[r.error] || r.error);
+          render(r.playlists, state.max); show("Playlist-a u fshi.", true);
+        });
+      };
+      li.appendChild(n); li.appendChild(del); ul.appendChild(li);
+    });
+  }
+
+  $("mac").addEventListener("input", function () {
+    var v = this.value.toUpperCase().replace(/[^0-9A-F]/g, "").slice(0, 12);
+    this.value = (v.match(/.{1,2}/g) || []).join(":");
+  });
+  var q = new URLSearchParams(location.search).get("mac");
+  if (q) { $("mac").value = q; $("mac").dispatchEvent(new Event("input")); $("pin").focus(); }
+
+  $("loginForm").addEventListener("submit", function (e) {
+    e.preventDefault(); clearMsg();
+    var btn = e.target.querySelector("button"); btn.disabled = true;
+    var mac = $("mac").value, pin = $("pin").value;
+    api("/api/web/login", { mac: mac, pin: pin }).then(function (r) {
+      btn.disabled = false;
+      if (r.error) return show(MSG[r.error] || r.error);
+      state.mac = r.mac; state.pin = pin; state.max = r.max;
+      $("devMac").textContent = r.mac; $("devModel").textContent = r.model ? "· " + r.model : "";
+      $("login").classList.add("hidden"); $("device").classList.remove("hidden");
+      render(r.playlists, r.max);
+    });
+  });
+
+  $("logout").onclick = function () { location.href = location.pathname; };
+
+  document.querySelectorAll(".tabs button").forEach(function (t) {
+    t.onclick = function () {
+      state.type = t.dataset.type;
+      document.querySelectorAll(".tabs button").forEach(function (x) { x.classList.toggle("on", x === t); });
+      document.querySelectorAll(".pane").forEach(function (p) { p.classList.toggle("on", p.dataset.pane === state.type); });
+    };
+  });
+
+  function send(payload) {
+    var btn = $("addBtn"); btn.disabled = true;
+    api("/api/web/add", payload).then(function (r) {
+      btn.disabled = false;
+      if (r.error) return show(MSG[r.error] || r.error);
+      render(r.playlists, state.max);
+      show("U shtua. Në Faznet shtyp Rifresko — ose prit pak, pajisja e merr vetë.", true);
+      $("addForm").reset();
+      document.querySelector('.tabs button[data-type="' + state.type + '"]').click();
+    });
+  }
+
+  $("addForm").addEventListener("submit", function (e) {
+    e.preventDefault(); clearMsg();
+    var base = { mac: state.mac, pin: state.pin, type: state.type, name: $("name").value.trim() };
+    if (state.type === "url") { base.url = $("url").value.trim(); return send(base); }
+    if (state.type === "xtream") {
+      base.server = $("xserver").value.trim(); base.username = $("xuser").value.trim(); base.password = $("xpass").value;
+      return send(base);
+    }
+    var f = $("file").files[0];
+    if (!f) return show(MSG.fields);
+    if (f.size > 20 * 1024 * 1024) return show("File-i është shumë i madh (maks. 20 MB).");
+    var rd = new FileReader();
+    rd.onload = function () { base.content = rd.result; if (!base.name) base.name = f.name.replace(/\.[^.]+$/, ""); send(base); };
+    rd.readAsText(f);
+  });
+})();
+</script>
+</body>
+</html>
