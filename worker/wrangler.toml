@@ -7,6 +7,6 @@ compatibility_date = "2025-09-01"
 # and paste its id here.
 [[kv_namespaces]]
 binding = "FAZNET"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "a77107ba15444239a23fb18b1750af0d"
 
 # Set a secret for PIN hashing:  npx wrangler secret put SECRET

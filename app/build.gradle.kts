@@ -11,11 +11,11 @@ android {
         applicationId = "com.faznet.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.1.1"
 
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
-        val server = (project.findProperty("faznetServer") as String?) ?: "https://faznet.REPLACE.workers.dev"
+        val server = (project.findProperty("faznetServer") as String?) ?: "https://faznet.diarfazliu.workers.dev"
         val web = (project.findProperty("faznetWeb") as String?) ?: "https://whatsthatbrother.github.io/faznet"
         buildConfigField("String", "SERVER_URL", "\"$server\"")
         buildConfigField("String", "WEB_URL", "\"$web\"")
