@@ -80,4 +80,5 @@
     <string name="group_search">Rezultatet e kërkimit</string>
     <string name="picture">Figura: %1$s</string>
     <string name="use_tunneling">Tunneling (Android TV) — figurë më e rrjedhshme në TV stick; fike nëse një kanal mbetet pa figurë ose zë</string>
+    <string name="err_refused">Serveri e refuzoi kanalin (%1$d) — nuk është në paketë, nuk transmeton ose ka shumë lidhje</string>
 </resources>

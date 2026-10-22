@@ -23,6 +23,7 @@ import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
@@ -99,6 +100,7 @@ class PlayerActivity : AppCompatActivity() {
     private var lastPos = -1L
     private var lastPosAt = 0L
     private var recoveries = 0
+    private var httpRetried = false
     private var totalRecoveries = 0
 
     private val handler = Handler(Looper.getMainLooper())
@@ -240,7 +242,6 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         if (channels.isEmpty()) return
-        initPlayer()
         play(index)
         if (repo.showStats) startStats()
         handler.removeCallbacks(frameWatch)
@@ -300,7 +301,7 @@ class PlayerActivity : AppCompatActivity() {
     // ---------- player ----------
 
     private fun initPlayer() {
-        val p = PlayerFactory.create(this, repo.useFfmpeg, repo.tunneling)
+        val p = PlayerFactory.create(this, repo.useFfmpeg, tunneling = false)
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
@@ -367,6 +368,7 @@ class PlayerActivity : AppCompatActivity() {
         index = i
         forceHls = false
         retries = 0
+        httpRetried = false
         recoveries = 0
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
@@ -377,12 +379,27 @@ class PlayerActivity : AppCompatActivity() {
         bufferingTotalMs = 0
         bufferingSince = 0
         lastWarning = ""
+        // A brand-new player (and video decoder) for every channel: re-using the decoder across channels is what
+        // left the Mi TV Stick with sound but a frozen picture; re-opening always fixed it, so always do that.
+        freshPlayer()
         startCurrent()
         showInfo(ch)
         tvTitle.text = "${ch.number}. ${ch.name}"
         updateFavIcon()
         if (listPanel.visibility == View.VISIBLE) listAdapter.setPlaying(ch.url)
         repo.markWatched(ChannelStore.playlistId, ch.url)
+    }
+
+    private fun freshPlayer() {
+        probeJob?.cancel()
+        player?.let {
+            playerView.player = null
+            it.release()
+        }
+        player = null
+        videoDecoder = ""
+        audioDecoder = ""
+        initPlayer()
     }
 
     private fun startCurrent() {
@@ -416,7 +433,7 @@ class PlayerActivity : AppCompatActivity() {
         ) return
         val now = SystemClock.elapsedRealtime()
         val hasVideo = p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)
-        val tunneled = repo.tunneling
+        val tunneled = false
         val rendered = p.videoDecoderCounters?.let { it.ensureUpdated(); it.renderedOutputBufferCount } ?: 0
         if (rendered != lastRendered) {
             lastRendered = rendered
@@ -441,6 +458,7 @@ class PlayerActivity : AppCompatActivity() {
         totalRecoveries++
         lastWarning = "auto-fix: $reason"
         showReconnecting()
+        freshPlayer()
         startCurrent()
     }
 
@@ -466,6 +484,22 @@ class PlayerActivity : AppCompatActivity() {
                 p.prepare()
                 return
             }
+        }
+        // The server refused the channel (not in the package, offline, or the account's connection limit while
+        // zapping fast): one retry after a pause for the old connection to close, then say so plainly.
+        val http = generateSequence<Throwable>(error) { it.cause }
+            .filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
+        if (http != null && http in 400..499) {
+            if (!httpRetried) {
+                httpRetried = true
+                showReconnecting()
+                handler.removeCallbacks(retry)
+                handler.postDelayed(retry, 2000)
+            } else {
+                tvError.text = getString(R.string.err_refused, http)
+                tvError.visibility = View.VISIBLE
+            }
+            return
         }
         val transient = error.errorCode in 1000..2999 || error.errorCode in 4000..4999
         if (transient && retries < MAX_RETRIES) {
@@ -822,8 +856,8 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_INDEX = "index"
         private const val STALL_TIMEOUT_MS = 8_000L
         private const val MAX_RETRIES = 5
-        private const val FIRST_FRAME_TIMEOUT_MS = 3_000L
-        private const val FROZEN_TIMEOUT_MS = 4_000L
+        private const val FIRST_FRAME_TIMEOUT_MS = 2_500L
+        private const val FROZEN_TIMEOUT_MS = 2_500L
         private const val STUCK_TIMEOUT_MS = 8_000L
         private const val MAX_RECOVERIES = 4
         private const val INFO_MS = 4_000L

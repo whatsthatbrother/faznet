@@ -81,4 +81,5 @@
     <string name="group_search">Search results</string>
     <string name="picture">Picture: %1$s</string>
     <string name="use_tunneling">Tunneling (Android TV) — smoother picture on TV sticks; turn off if a channel has no picture or sound</string>
+    <string name="err_refused">Channel refused by the server (%1$d) — not in your package, offline, or too many connections</string>
 </resources>

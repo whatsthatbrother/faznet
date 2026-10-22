@@ -375,8 +375,6 @@ class MainActivity : AppCompatActivity() {
         cbFfmpeg.isChecked = repo.useFfmpeg
         val cbStats = v.findViewById<CheckBox>(R.id.cbStats)
         cbStats.isChecked = repo.showStats
-        val cbTunneling = v.findViewById<CheckBox>(R.id.cbTunneling)
-        cbTunneling.isChecked = repo.tunneling
         ua.setText(repo.customUserAgent)
         cb.isChecked = repo.autoPlayLast
         v.findViewById<TextView>(R.id.tvAbout).text = getString(R.string.about, BuildConfig.VERSION_NAME)
@@ -388,7 +386,6 @@ class MainActivity : AppCompatActivity() {
                 repo.autoPlayLast = cb.isChecked
                 repo.useFfmpeg = cbFfmpeg.isChecked
                 repo.showStats = cbStats.isChecked
-                repo.tunneling = cbTunneling.isChecked
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
