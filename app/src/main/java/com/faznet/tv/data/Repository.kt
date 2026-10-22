@@ -223,6 +223,11 @@ class Repository private constructor(private val ctx: Context) {
         get() = prefs.getBoolean("tunneling", false)
         set(v) = prefs.edit().putBoolean("tunneling", v).apply()
 
+    /** Software video decoder for SD channels (the Mi TV Stick's hardware decoder sometimes stalls on 576i). */
+    var softwareSd: Boolean
+        get() = prefs.getBoolean("software_sd", false)
+        set(v) = prefs.edit().putBoolean("software_sd", v).apply()
+
     var showStats: Boolean
         get() = prefs.getBoolean(KEY_STATS, false)
         set(v) = prefs.edit().putBoolean(KEY_STATS, v).apply()

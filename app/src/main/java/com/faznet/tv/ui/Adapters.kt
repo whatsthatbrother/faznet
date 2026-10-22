@@ -20,7 +20,8 @@ data class GroupItem(val key: String, val title: String, val count: Int)
 class GroupAdapter(
     private val horizontal: Boolean,
     private val selectOnFocus: Boolean,
-    private val onSelect: (String) -> Unit,
+    /** key, fromClick (false when the D-pad merely moved over the group) */
+    private val onSelect: (String, Boolean) -> Unit,
     private val onLongSelect: (String) -> Unit = {},
 ) : RecyclerView.Adapter<GroupAdapter.VH>() {
 
@@ -67,11 +68,11 @@ class GroupAdapter(
         h.name.text = item.title
         h.count.text = item.count.toString()
         h.itemView.isSelected = item.key == selectedKey
-        h.itemView.setOnClickListener { onSelect(item.key) }
+        h.itemView.setOnClickListener { onSelect(item.key, true) }
         h.itemView.setOnLongClickListener { onLongSelect(item.key); true }
         // TV: moving the D-pad over a category opens it, like a TV guide
         h.itemView.setOnFocusChangeListener { v, hasFocus ->
-            if (hasFocus && selectOnFocus && !v.isInTouchMode && item.key != selectedKey) onSelect(item.key)
+            if (hasFocus && selectOnFocus && !v.isInTouchMode && item.key != selectedKey) onSelect(item.key, false)
         }
     }
 }

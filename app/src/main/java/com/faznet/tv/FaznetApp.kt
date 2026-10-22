@@ -9,6 +9,11 @@ import com.faznet.tv.net.Http
 
 /** Channel logos are kept on the device: they are downloaded once, not on every screen. */
 class FaznetApp : Application(), ImageLoaderFactory {
+    override fun onCreate() {
+        super.onCreate()
+        com.faznet.tv.player.StreamProbe.app = this
+    }
+
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
         .okHttpClient { Http.client }
         .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.15).build() }

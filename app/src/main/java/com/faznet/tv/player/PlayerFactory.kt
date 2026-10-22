@@ -12,6 +12,8 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -46,7 +48,16 @@ object PlayerFactory {
         .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
         .setConstantBitrateSeekingEnabled(true)
 
-    fun create(context: Context, useFfmpeg: Boolean, tunneling: Boolean = false): ExoPlayer {
+    /**
+     * Video decoders, with software ones first when [softwareVideo] is set. The Mi TV Stick's hardware H.264
+     * decoder sometimes stalls on SD (576i) channels; its CPU handles SD in software without trouble.
+     */
+    private fun codecSelector(softwareVideo: Boolean) = MediaCodecSelector { mime, secure, tunneling ->
+        val list = MediaCodecUtil.getDecoderInfos(mime, secure, tunneling)
+        if (softwareVideo && mime.startsWith("video/")) list.sortedBy { if (it.softwareOnly) 0 else 1 } else list
+    }
+
+    fun create(context: Context, useFfmpeg: Boolean, tunneling: Boolean = false, softwareVideo: Boolean = false): ExoPlayer {
         val renderers = DefaultRenderersFactory(context)
             .setExtensionRendererMode(
                 when {
@@ -57,6 +68,7 @@ object PlayerFactory {
                 }
             )
             .setEnableDecoderFallback(true)
+            .setMediaCodecSelector(codecSelector(softwareVideo))
 
         val trackSelector = DefaultTrackSelector(context).apply {
             setParameters(buildUponParameters().setTunnelingEnabled(tunneling))

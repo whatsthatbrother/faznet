@@ -59,6 +59,18 @@
             android:src="@drawable/ic_aspect" />
 
         <ImageButton
+            android:id="@+id/btnTracks"
+            style="@style/IconButton"
+            android:contentDescription="@string/tracks"
+            android:src="@drawable/ic_tracks" />
+
+        <ImageButton
+            android:id="@+id/btnSleep"
+            style="@style/IconButton"
+            android:contentDescription="@string/sleep_timer"
+            android:src="@drawable/ic_sleep" />
+
+        <ImageButton
             android:id="@+id/btnStats"
             style="@style/IconButton"
             android:contentDescription="@string/stats"

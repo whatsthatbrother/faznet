@@ -14,6 +14,12 @@ enum class StreamType { HLS, DASH, PROGRESSIVE }
  */
 object StreamProbe {
     private val cache = ConcurrentHashMap<String, StreamType>()
+    /** Set by FaznetApp: detected types are kept across restarts, so a channel is probed only once ever. */
+    @Volatile var app: android.content.Context? = null
+
+    private fun stored(url: String): StreamType? = app?.let { c ->
+        com.faznet.tv.data.ChannelMemory.get(c, url)?.type?.let { t -> runCatching { StreamType.valueOf(t) }.getOrNull() }
+    }
     private val XTREAM_LIVE = Regex("""^[a-z]+://[^/]+(/live)?/[^/]+/[^/]+/\d+$""")
 
     fun guess(url: String): StreamType? {
@@ -37,6 +43,7 @@ object StreamProbe {
     suspend fun detect(url: String, userAgent: String, referer: String?): StreamType {
         guess(url)?.let { return it }
         cache[url]?.let { return it }
+        stored(url)?.let { cache[url] = it; return it }
         val type = withContext(Dispatchers.IO) {
             try {
                 val req = Request.Builder().url(url)
@@ -67,7 +74,7 @@ object StreamProbe {
             }
         }
         return if (type != null) {
-            cache[url] = type
+            remember(url, type)
             type
         } else {
             StreamType.PROGRESSIVE
@@ -76,5 +83,6 @@ object StreamProbe {
 
     fun remember(url: String, type: StreamType) {
         cache[url] = type
+        app?.let { com.faznet.tv.data.ChannelMemory.rememberType(it, url, type.name) }
     }
 }

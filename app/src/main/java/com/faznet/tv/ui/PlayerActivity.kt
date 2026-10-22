@@ -41,6 +41,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
 import com.faznet.tv.data.ChannelStore
+import com.faznet.tv.data.ChannelMemory
+import com.faznet.tv.data.Parental
+import com.faznet.tv.data.ProblemLog
 import com.faznet.tv.data.ChannelCheck
 import com.faznet.tv.data.Epg
 import com.faznet.tv.data.Repository
@@ -246,6 +249,8 @@ class PlayerActivity : AppCompatActivity() {
         btnFav.setOnClickListener { toggleFavorite(); bumpOptions() }
         findViewById<View>(R.id.btnAspect).setOnClickListener { cycleAspect(); bumpOptions() }
         findViewById<View>(R.id.btnStats).setOnClickListener { toggleStats(); bumpOptions() }
+        findViewById<View>(R.id.btnTracks).setOnClickListener { hideOptions(); showTracks() }
+        findViewById<View>(R.id.btnSleep).setOnClickListener { hideOptions(); showSleep() }
 
         gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
@@ -326,7 +331,7 @@ class PlayerActivity : AppCompatActivity() {
     // ---------- groups ----------
 
     private fun buildGroups(start: List<Channel>) {
-        val all = ChannelStore.all.ifEmpty { start }
+        val all = Parental.visible(this, ChannelStore.all.ifEmpty { start })
         val favs = repo.favorites(ChannelStore.playlistId)
         val byUrl = all.associateBy { it.url }
         val list = ArrayList<Group>()
@@ -354,8 +359,19 @@ class PlayerActivity : AppCompatActivity() {
 
     // ---------- player ----------
 
+    /** Software video decoder for SD channels that froze before (or always for SD, if chosen in Settings). */
+    private fun wantsSoftwareVideo(ch: Channel?): Boolean {
+        ch ?: return false
+        val info = ChannelMemory.get(this, ch.url) ?: return false
+        val sd = info.height in 1..720
+        return sd && (repo.softwareSd || info.fixes > 0)
+    }
+
+    private var softwareVideo = false
+
     private fun initPlayer() {
-        val p = PlayerFactory.create(this, repo.useFfmpeg, tunneling = false)
+        softwareVideo = wantsSoftwareVideo(channels.getOrNull(index))
+        val p = PlayerFactory.create(this, repo.useFfmpeg, tunneling = false, softwareVideo = softwareVideo)
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
@@ -396,6 +412,9 @@ class PlayerActivity : AppCompatActivity() {
             }
             override fun onVideoDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
                 videoDecoder = decoderName
+            }
+            override fun onVideoInputFormatChanged(t: AnalyticsListener.EventTime, format: androidx.media3.common.Format, decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?) {
+                channels.getOrNull(index)?.let { ChannelMemory.rememberHeight(this@PlayerActivity, it.url, format.height) }
             }
             override fun onAudioDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
                 audioDecoder = decoderName
@@ -439,11 +458,23 @@ class PlayerActivity : AppCompatActivity() {
         // left the Mi TV Stick with sound but a frozen picture; re-opening always fixed it, so always do that.
         freshPlayer()
         startCurrent()
+        warmNeighbours()
         showInfo(ch)
         tvTitle.text = "${ch.number}. ${ch.name}"
         updateFavIcon()
         if (listPanel.visibility == View.VISIBLE) listAdapter.setPlaying(ch.url)
         repo.markWatched(ChannelStore.playlistId, ch.url)
+    }
+
+    /** Resolve the servers of the previous/next channels in advance, so zapping to them starts sooner. */
+    private fun warmNeighbours() {
+        val n = channels.size
+        if (n < 2) return
+        val hosts = listOf(channels[(index + 1) % n], channels[(index - 1 + n) % n])
+            .mapNotNull { runCatching { java.net.URI(it.url).host }.getOrNull() }.distinct()
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            hosts.forEach { h -> runCatching { java.net.InetAddress.getAllByName(h) } }
+        }
     }
 
     private fun freshPlayer() {
@@ -518,6 +549,11 @@ class PlayerActivity : AppCompatActivity() {
         recoveries++
         totalRecoveries++
         lastWarning = "auto-fix: $reason"
+        channels.getOrNull(index)?.let { ch ->
+            ChannelMemory.addFix(this, ch.url)
+            p.videoFormat?.let { ChannelMemory.rememberHeight(this, ch.url, it.height) }
+            ProblemLog.add(this, ch.name, reason + if (softwareVideo) " (software)" else "")
+        }
         showReconnecting()
         freshPlayer()
         startCurrent()
@@ -558,6 +594,7 @@ class PlayerActivity : AppCompatActivity() {
                 handler.postDelayed(retry, 2000)
             } else {
                 tvError.text = getString(R.string.err_refused, http)
+                channels.getOrNull(index)?.let { ProblemLog.add(this, it.name, "refused by server (HTTP $http)") }
                 tvError.visibility = View.VISIBLE
             }
             return
@@ -571,6 +608,7 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
         tvError.text = getString(R.string.err_stream, error.errorCodeName)
+        channels.getOrNull(index)?.let { ProblemLog.add(this, it.name, "error ${error.errorCodeName}") }
         tvError.visibility = View.VISIBLE
     }
 
@@ -606,7 +644,7 @@ class PlayerActivity : AppCompatActivity() {
                     append("Stalls  ${(stallCount - 1).coerceAtLeast(0)}   Underruns $underruns\n")
                     val buffering = bufferingTotalMs + if (bufferingSince != 0L) SystemClock.elapsedRealtime() - bufferingSince else 0L
                     append("Waiting %.1f s   ${stateName(p.playbackState)}\n".format(buffering / 1000.0))
-                    if (videoDecoder.isNotEmpty()) append("VDec    ${videoDecoder.take(34)}\n")
+                    if (videoDecoder.isNotEmpty()) append("VDec    ${videoDecoder.take(34)}${if (softwareVideo) " (SW)" else ""}\n")
                     if (audioDecoder.isNotEmpty()) append("ADec    ${audioDecoder.take(34)}\n")
                     val rt = Runtime.getRuntime()
                     append("Memory  ${(rt.totalMemory() - rt.freeMemory()) / 1048576}/${rt.maxMemory() / 1048576} MB")
@@ -748,6 +786,79 @@ class PlayerActivity : AppCompatActivity() {
         val ch = channels.getOrNull(index) ?: return
         val fav = repo.favorites(ChannelStore.playlistId).contains(ch.url)
         btnFav.setImageResource(if (fav) R.drawable.ic_star else R.drawable.ic_star_border)
+    }
+
+    /** Sound language and subtitles of the current channel. */
+    private fun showTracks() {
+        val p = player ?: return
+        val labels = ArrayList<String>()
+        val actions = ArrayList<() -> Unit>()
+        var checked = -1
+        fun name(f: androidx.media3.common.Format, n: Int): String {
+            val lang = f.language?.takeIf { it != "und" }?.let { java.util.Locale(it).displayLanguage.ifEmpty { it } }
+            val codec = f.sampleMimeType?.substringAfter('/') ?: ""
+            return listOfNotNull(f.label, lang).firstOrNull()?.let { "$it ($codec)" } ?: "#$n ($codec)"
+        }
+        var n = 0
+        for (g in p.currentTracks.groups) {
+            if (g.type != C.TRACK_TYPE_AUDIO) continue
+            n++
+            labels.add(getString(R.string.track_audio, name(g.getTrackFormat(0), n)))
+            if (g.isSelected) checked = labels.size - 1
+            val group = g.mediaTrackGroup
+            actions.add {
+                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                    .setOverrideForType(androidx.media3.common.TrackSelectionOverride(group, 0)).build()
+            }
+        }
+        labels.add(getString(R.string.track_subs_off))
+        val offIndex = labels.size - 1
+        actions.add {
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+        }
+        var anyText = false
+        n = 0
+        for (g in p.currentTracks.groups) {
+            if (g.type != C.TRACK_TYPE_TEXT) continue
+            n++
+            anyText = true
+            labels.add(getString(R.string.track_subs, name(g.getTrackFormat(0), n)))
+            if (g.isSelected) checked = labels.size - 1
+            val group = g.mediaTrackGroup
+            actions.add {
+                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setOverrideForType(androidx.media3.common.TrackSelectionOverride(group, 0)).build()
+            }
+        }
+        if (anyText && checked < 0) checked = offIndex
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.tracks)
+            .setSingleChoiceItems(labels.toTypedArray(), checked) { d, which -> actions[which](); d.dismiss() }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private var sleepAt = 0L
+    private val sleepRunnable = Runnable { finishAffinity() }
+
+    private fun showSleep() {
+        val minutes = intArrayOf(0, 30, 60, 90, 120)
+        val labels = minutes.map { if (it == 0) getString(R.string.sleep_off) else getString(R.string.sleep_minutes, it) }.toTypedArray()
+        val current = if (sleepAt == 0L) 0 else -1
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.sleep_timer)
+            .setSingleChoiceItems(labels, current) { d, which ->
+                handler.removeCallbacks(sleepRunnable)
+                val m = minutes[which]
+                sleepAt = if (m == 0) 0L else SystemClock.elapsedRealtime() + m * 60_000L
+                if (m > 0) handler.postDelayed(sleepRunnable, m * 60_000L)
+                toast(labels[which])
+                d.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun cycleAspect() {

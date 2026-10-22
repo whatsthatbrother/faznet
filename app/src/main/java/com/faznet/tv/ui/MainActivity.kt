@@ -21,6 +21,8 @@ import com.faznet.tv.R
 import com.faznet.tv.data.Channel
 import com.faznet.tv.data.ChannelCheck
 import com.faznet.tv.data.ChannelStore
+import com.faznet.tv.data.Parental
+import com.faznet.tv.data.ProblemLog
 import com.faznet.tv.data.Playlist
 import com.faznet.tv.data.RemoteSync
 import com.faznet.tv.data.Repository
@@ -80,7 +82,7 @@ class MainActivity : AppCompatActivity() {
         }
         groupAdapter = GroupAdapter(
             horizontal = !wide, selectOnFocus = wide,
-            onSelect = { key -> selectGroup(key) },
+            onSelect = { key, click -> selectGroup(key, click) },
             onLongSelect = { key -> confirmCheck(key) },
         )
         rvGroups.itemAnimator = null
@@ -106,6 +108,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnSettings).setOnClickListener { showSettings() }
 
         autoPlayPending = savedInstanceState == null && repo.autoPlayLast
+        if (savedInstanceState == null) checkForUpdate()
         if (BuildConfig.DEBUG && repo.playlists().none { it.name == "Test2 (debug)" } &&
             runCatching { assets.open("test.m3u").close() }.isSuccess) addDebugTestPlaylist()
     }
@@ -336,7 +339,12 @@ class MainActivity : AppCompatActivity() {
         applyFilter(keepScroll)
     }
 
-    private fun selectGroup(key: String) {
+    private fun selectGroup(key: String, fromClick: Boolean = true) {
+        if (Parental.isLocked(this, key)) {
+            // Locked group: only a real click asks for the PIN (not the D-pad passing over it).
+            if (fromClick) askParentalPin { rebuild(keepScroll = false); selectGroup(key) }
+            return
+        }
         if (key == selectedGroup && groupAdapter.selectedKey == key) return
         selectedGroup = key
         groupAdapter.select(key)
@@ -347,12 +355,13 @@ class MainActivity : AppCompatActivity() {
         val p = playlist ?: return
         if (loadedPlaylistId == null) return
         val favs = repo.favorites(p.id)
-        val base = when (selectedGroup) {
+        if (Parental.isLocked(this, selectedGroup)) selectedGroup = KEY_ALL
+        val base = Parental.visible(this, when (selectedGroup) {
             KEY_ALL -> all
             KEY_FAV -> all.filter { favs.contains(it.url) }
             KEY_RECENT -> repo.recents(p.id).mapNotNull { byUrl[it] }
             else -> all.filter { it.group == selectedGroup }
-        }
+        })
         val q = etSearch.text.toString().trim().lowercase()
         visible = if (q.isEmpty()) base else base.filter { it.name.lowercase().contains(q) }
         channelAdapter.submit(visible, favs)
@@ -396,11 +405,13 @@ class MainActivity : AppCompatActivity() {
         val p = playlist ?: return emptyList()
         val counts = LinkedHashMap<String, Int>()
         for (c in all) counts[c.group] = (counts[c.group] ?: 0) + 1
+        val shown = Parental.visible(this, all)
+        val shownUrls = shown.mapTo(HashSet()) { it.url }
         val items = ArrayList<GroupItem>(counts.size + 3)
-        items.add(GroupItem(KEY_ALL, getString(R.string.group_all), all.size))
-        items.add(GroupItem(KEY_FAV, getString(R.string.group_favorites), all.count { favs.contains(it.url) }))
-        items.add(GroupItem(KEY_RECENT, getString(R.string.group_recent), repo.recents(p.id).count { byUrl.containsKey(it) }))
-        counts.forEach { (g, n) -> items.add(GroupItem(g, g, n)) }
+        items.add(GroupItem(KEY_ALL, getString(R.string.group_all), shown.size))
+        items.add(GroupItem(KEY_FAV, getString(R.string.group_favorites), shown.count { favs.contains(it.url) }))
+        items.add(GroupItem(KEY_RECENT, getString(R.string.group_recent), repo.recents(p.id).count { it in shownUrls }))
+        counts.forEach { (g, n) -> items.add(GroupItem(g, if (Parental.isLocked(this, g)) "🔒 $g" else g, n)) }
         return items
     }
 
@@ -418,7 +429,7 @@ class MainActivity : AppCompatActivity() {
         autoPlayPending = false
         val last = repo.lastChannel(p.id) ?: return
         val idx = all.indexOfFirst { it.url == last }
-        if (idx < 0) return
+        if (idx < 0 || Parental.isLocked(this, all[idx].group)) return
         ChannelStore.playlistId = p.id
         ChannelStore.all = all
         ChannelStore.current = all
@@ -438,10 +449,15 @@ class MainActivity : AppCompatActivity() {
         cbFfmpeg.isChecked = repo.useFfmpeg
         val cbStats = v.findViewById<CheckBox>(R.id.cbStats)
         cbStats.isChecked = repo.showStats
+        val cbSoftSd = v.findViewById<CheckBox>(R.id.cbSoftSd)
+        cbSoftSd.isChecked = repo.softwareSd
         ua.setText(repo.customUserAgent)
         cb.isChecked = repo.autoPlayLast
         v.findViewById<TextView>(R.id.tvAbout).text = getString(R.string.about, BuildConfig.VERSION_NAME)
-        MaterialAlertDialogBuilder(this)
+        var dialog: androidx.appcompat.app.AlertDialog? = null
+        v.findViewById<Button>(R.id.btnLog).setOnClickListener { showProblemLog() }
+        v.findViewById<Button>(R.id.btnParental).setOnClickListener { dialog?.dismiss(); setupParental() }
+        dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.settings)
             .setView(v)
             .setPositiveButton(R.string.save) { _, _ ->
@@ -449,12 +465,138 @@ class MainActivity : AppCompatActivity() {
                 repo.autoPlayLast = cb.isChecked
                 repo.useFfmpeg = cbFfmpeg.isChecked
                 repo.showStats = cbStats.isChecked
+                repo.softwareSd = cbSoftSd.isChecked
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
+    // ---------- problem log ----------
+    private fun showProblemLog() {
+        val lines = ProblemLog.read(this)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.problem_log)
+            .setMessage(if (lines.isEmpty()) getString(R.string.problem_log_empty) else lines.joinToString("\n"))
+            .setPositiveButton(android.R.string.ok, null)
+            .setNeutralButton(R.string.clear) { _, _ -> ProblemLog.clear(this) }
+            .show()
+    }
+
+    // ---------- parental lock ----------
+    private fun pinField(): EditText = EditText(this).apply {
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        filters = arrayOf<android.text.InputFilter>(android.text.InputFilter.LengthFilter(4))
+        hint = "••••"
+    }
+
+    private fun padded(view: View): View = android.widget.FrameLayout(this).apply {
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        setPadding(pad, pad / 2, pad, 0)
+        addView(view)
+    }
+
+    /** Asks for the parental PIN; on success the locked groups stay open until the app is closed. */
+    private fun askParentalPin(onOk: () -> Unit) {
+        val et = pinField()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.parental_enter_pin)
+            .setView(padded(et))
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                if (et.text.toString() == Parental.pin(this)) {
+                    Parental.unlocked = true
+                    onOk()
+                } else Toast.makeText(this, R.string.parental_wrong_pin, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+        et.requestFocus()
+    }
+
+    private fun setupParental() {
+        if (Parental.pin(this).length == 4 && !Parental.unlocked) {
+            askParentalPin { setupParental() }
+            return
+        }
+        val et = pinField().apply { setText(Parental.pin(this@MainActivity)) }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.parental_title)
+            .setMessage(R.string.parental_set_pin)
+            .setView(padded(et))
+            .setPositiveButton(R.string.next) { _, _ ->
+                val pin = et.text.toString()
+                if (pin.isEmpty()) {
+                    Parental.setPin(this, ""); Parental.setLockedGroups(this, emptySet())
+                    Toast.makeText(this, R.string.parental_off, Toast.LENGTH_SHORT).show()
+                    rebuild(keepScroll = true)
+                } else if (pin.length != 4) {
+                    Toast.makeText(this, R.string.parental_pin_4, Toast.LENGTH_SHORT).show()
+                } else chooseLockedGroups(pin)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun chooseLockedGroups(pin: String) {
+        val groups = all.map { it.group }.distinct()
+        if (groups.isEmpty()) return
+        val locked = Parental.lockedGroups(this)
+        val checked = BooleanArray(groups.size) { groups[it] in locked }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.parental_groups)
+            .setMultiChoiceItems(groups.toTypedArray(), checked) { _, which, on -> checked[which] = on }
+            .setPositiveButton(R.string.save) { _, _ ->
+                Parental.setPin(this, pin)
+                Parental.setLockedGroups(this, groups.filterIndexed { i, _ -> checked[i] }.toSet())
+                Parental.unlocked = false
+                Toast.makeText(this, R.string.parental_saved, Toast.LENGTH_SHORT).show()
+                rebuild(keepScroll = false)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    // ---------- update notice ----------
+    /** Once a day: if a newer Faznet is published on GitHub, say so. */
+    private fun checkForUpdate() {
+        val prefs = getSharedPreferences("faznet_update", MODE_PRIVATE)
+        if (System.currentTimeMillis() - prefs.getLong("checked", 0) < 24 * 3600_000L) return
+        lifecycleScope.launch {
+            val latest = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val req = okhttp3.Request.Builder().url(UPDATE_URL).header("Accept", "application/vnd.github+json").build()
+                    com.faznet.tv.net.Http.api.newCall(req).execute().use { r ->
+                        if (!r.isSuccessful) null
+                        else org.json.JSONObject(r.body?.string() ?: "").let { it.optString("tag_name") to it.optString("html_url") }
+                    }
+                }.getOrNull()
+            } ?: return@launch
+            prefs.edit().putLong("checked", System.currentTimeMillis()).apply()
+            val tag = latest.first.trimStart('v', 'V')
+            if (!isNewer(tag, BuildConfig.VERSION_NAME) || prefs.getString("dismissed", "") == tag) return@launch
+            MaterialAlertDialogBuilder(this@MainActivity)
+                .setTitle(R.string.update_title)
+                .setMessage(getString(R.string.update_msg, tag, BuildConfig.VERSION_NAME))
+                .setPositiveButton(R.string.update_open) { _, _ ->
+                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(latest.second))) }
+                        .onFailure { Toast.makeText(this@MainActivity, R.string.update_no_browser, Toast.LENGTH_LONG).show() }
+                }
+                .setNegativeButton(R.string.update_later) { _, _ -> prefs.edit().putString("dismissed", tag).apply() }
+                .show()
+        }
+    }
+
+    private fun isNewer(a: String, b: String): Boolean {
+        val x = a.split('.').map { it.filter(Char::isDigit).toIntOrNull() ?: 0 }
+        val y = b.split('.').map { it.filter(Char::isDigit).toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(x.size, y.size)) {
+            val d = x.getOrElse(i) { 0 } - y.getOrElse(i) { 0 }
+            if (d != 0) return d > 0
+        }
+        return false
+    }
+
     companion object {
+        private const val UPDATE_URL = "https://api.github.com/repos/whatsthatbrother/faznet/releases/latest"
         const val KEY_ALL = "\u0000all"
         const val KEY_FAV = "\u0000fav"
         const val KEY_RECENT = "\u0000recent"
