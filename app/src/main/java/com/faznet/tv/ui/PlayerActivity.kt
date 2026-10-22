@@ -167,6 +167,7 @@ class PlayerActivity : AppCompatActivity() {
                 startCurrent()
             } else {
                 tvError.text = getString(R.string.err_stream, "TIMEOUT")
+                pbStart.visibility = View.GONE
                 tvError.visibility = View.VISIBLE
             }
         }
@@ -231,6 +232,7 @@ class PlayerActivity : AppCompatActivity() {
         infoEpg = findViewById(R.id.infoEpg)
         infoEpgProgress = findViewById(R.id.infoEpgProgress)
         listEpg = findViewById(R.id.listEpg)
+        pbStart = findViewById(R.id.pbStart)
 
         playerView.useController = false
         playerView.resizeMode = aspectModes[repo.aspectMode.coerceIn(0, aspectModes.size - 1)]
@@ -369,6 +371,28 @@ class PlayerActivity : AppCompatActivity() {
 
     private var softwareVideo = false
 
+    // ---- clean start: picture and sound stay hidden until the picture runs smoothly ----
+    private lateinit var pbStart: View
+    private var revealed = true
+    private var hiddenSince = 0L
+
+    private fun hideUntilStable() {
+        if (revealed) hiddenSince = SystemClock.elapsedRealtime()
+        revealed = false
+        playerView.alpha = 0f
+        player?.volume = 0f
+        pbStart.visibility = View.VISIBLE
+    }
+
+    private fun reveal() {
+        if (revealed) return
+        revealed = true
+        playerView.alpha = 1f
+        player?.volume = 1f
+        pbStart.visibility = View.GONE
+        tvError.visibility = View.GONE
+    }
+
     private fun initPlayer() {
         softwareVideo = wantsSoftwareVideo(channels.getOrNull(index))
         val p = PlayerFactory.create(this, repo.useFfmpeg, tunneling = false, softwareVideo = softwareVideo)
@@ -498,6 +522,7 @@ class PlayerActivity : AppCompatActivity() {
         readySince = 0L
         lastRendered = -1
         lastPos = -1L
+        hideUntilStable()
         val ua = ch.userAgent ?: repo.userAgent
         probeJob?.cancel()
         // stop() disables the renderers, so the video decoder is released and re-created for the new stream:
@@ -515,6 +540,8 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun checkFrames() {
         val p = player ?: return
+        // Never keep a channel hidden for long: if it can't settle, show it anyway.
+        if (!revealed && SystemClock.elapsedRealtime() - hiddenSince > MAX_HIDDEN_MS) reveal()
         if (p.playbackState != Player.STATE_READY || !p.playWhenReady ||
             p.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE || readySince == 0L
         ) return
@@ -530,6 +557,10 @@ class PlayerActivity : AppCompatActivity() {
         }
         val pos = p.currentPosition
         if (pos != lastPos) { lastPos = pos; lastPosAt = now }
+        if (!revealed) {
+            val running = rendered >= STABLE_FRAMES && now - lastRenderedAt < 400
+            if (running || (!hasVideo && now - readySince > 500)) reveal()
+        }
 
         // Right after a channel opens is when the picture freezes on the Mi TV Stick (MP2 sound via FFmpeg runs
         // ahead of the picture); re-opening always fixes it, so react within about a second there.
@@ -550,7 +581,9 @@ class PlayerActivity : AppCompatActivity() {
         totalRecoveries++
         lastWarning = "auto-fix: $reason"
         channels.getOrNull(index)?.let { ch ->
-            ChannelMemory.addFix(this, ch.url)
+            // A freeze right at the start comes from the provider (the first seconds of a channel it just
+            // started serving); it has nothing to do with the decoder, so don't switch decoders for it.
+            if (!reason.endsWith("at start")) ChannelMemory.addFix(this, ch.url)
             p.videoFormat?.let { ChannelMemory.rememberHeight(this, ch.url, it.height) }
             ProblemLog.add(this, ch.name, reason + if (softwareVideo) " (software)" else "")
         }
@@ -560,6 +593,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showReconnecting() {
+        // While a channel is still opening behind the loading circle, a quiet retry needs no message.
+        if (!revealed) return
         tvError.text = getString(R.string.reconnecting)
         tvError.visibility = View.VISIBLE
     }
@@ -594,6 +629,7 @@ class PlayerActivity : AppCompatActivity() {
                 handler.postDelayed(retry, 2000)
             } else {
                 tvError.text = getString(R.string.err_refused, http)
+                pbStart.visibility = View.GONE
                 channels.getOrNull(index)?.let { ProblemLog.add(this, it.name, "refused by server (HTTP $http)") }
                 tvError.visibility = View.VISIBLE
             }
@@ -608,6 +644,7 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
         tvError.text = getString(R.string.err_stream, error.errorCodeName)
+        pbStart.visibility = View.GONE
         channels.getOrNull(index)?.let { ProblemLog.add(this, it.name, "error ${error.errorCodeName}") }
         tvError.visibility = View.VISIBLE
     }
@@ -1102,6 +1139,8 @@ class PlayerActivity : AppCompatActivity() {
         private const val FROZEN_TIMEOUT_MS = 2_500L
         private const val EARLY_WINDOW_MS = 6_000L
         private const val EARLY_FROZEN_MS = 2_000L
+        private const val STABLE_FRAMES = 12
+        private const val MAX_HIDDEN_MS = 9_000L
         private const val STUCK_TIMEOUT_MS = 8_000L
         private const val MAX_RECOVERIES = 4
         private const val INFO_MS = 4_000L

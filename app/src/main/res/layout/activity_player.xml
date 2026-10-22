@@ -259,6 +259,16 @@
             android:visibility="gone" />
     </LinearLayout>
 
+    <!-- Clean start: shown while a channel is opening, until its picture runs smoothly -->
+    <ProgressBar
+        android:id="@+id/pbStart"
+        style="?android:attr/progressBarStyleLarge"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="center"
+        android:indeterminateTint="@color/accent"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/tvNumberEntry"
         android:layout_width="wrap_content"
