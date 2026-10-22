@@ -363,7 +363,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun wantsSoftwareVideo(ch: Channel?): Boolean {
         ch ?: return false
         val info = ChannelMemory.get(this, ch.url) ?: return false
-        val sd = info.height in 1..720
+        val sd = info.height in 1..576
         return sd && (repo.softwareSd || info.fixes > 0)
     }
 
@@ -1101,7 +1101,7 @@ class PlayerActivity : AppCompatActivity() {
         private const val FIRST_FRAME_TIMEOUT_MS = 2_500L
         private const val FROZEN_TIMEOUT_MS = 2_500L
         private const val EARLY_WINDOW_MS = 6_000L
-        private const val EARLY_FROZEN_MS = 1_000L
+        private const val EARLY_FROZEN_MS = 2_000L
         private const val STUCK_TIMEOUT_MS = 8_000L
         private const val MAX_RECOVERIES = 4
         private const val INFO_MS = 4_000L
