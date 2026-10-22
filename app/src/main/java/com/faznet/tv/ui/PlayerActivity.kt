@@ -114,6 +114,7 @@ class PlayerActivity : AppCompatActivity() {
     private var lastPosAt = 0L
     private var recoveries = 0
     private var httpRetried = false
+    private var okLong = false
     private var totalRecoveries = 0
 
     private val handler = Handler(Looper.getMainLooper())
@@ -177,7 +178,7 @@ class PlayerActivity : AppCompatActivity() {
     private val frameWatch = object : Runnable {
         override fun run() {
             checkFrames()
-            handler.postDelayed(this, 1000)
+            handler.postDelayed(this, 500)
         }
     }
 
@@ -499,10 +500,15 @@ class PlayerActivity : AppCompatActivity() {
         val pos = p.currentPosition
         if (pos != lastPos) { lastPos = pos; lastPosAt = now }
 
+        // Right after a channel opens is when the picture freezes on the Mi TV Stick (MP2 sound via FFmpeg runs
+        // ahead of the picture); re-opening always fixes it, so react within about a second there.
+        val early = now - readySince < EARLY_WINDOW_MS
+        val frozenLimit = if (early) EARLY_FROZEN_MS else FROZEN_TIMEOUT_MS
         val reason = when {
             hasVideo && !firstFrameSeen && now - readySince > FIRST_FRAME_TIMEOUT_MS -> "no picture"
             // Tunneled playback does not report decoded frames, so only the other checks apply there.
-            !tunneled && hasVideo && firstFrameSeen && now - lastRenderedAt > FROZEN_TIMEOUT_MS && now - lastPosAt < 2_000 -> "picture frozen"
+            !tunneled && hasVideo && firstFrameSeen && now - lastRenderedAt > frozenLimit && now - lastPosAt < 1_000 ->
+                if (early) "picture frozen at start" else "picture frozen"
             now - lastPosAt > STUCK_TIMEOUT_MS -> "playback stuck"
             else -> return
         }
@@ -596,6 +602,7 @@ class PlayerActivity : AppCompatActivity() {
                     }
                     val keyMode = if (channels.getOrNull(index)?.url?.let { it in PlayerFactory.looseKeyframes } == true) "loose" else "IDR"
                     append("Frames  $frames   Drops $dropped   Fixes $totalRecoveries   Start $keyMode\n")
+                    if (counters != null) append("Late    skip ${counters.skippedOutputBufferCount}  toKey ${counters.droppedToKeyframeCount}  inDrop ${counters.droppedInputBufferCount}  maxRun ${counters.maxConsecutiveDroppedBufferCount}\n")
                     append("Stalls  ${(stallCount - 1).coerceAtLeast(0)}   Underruns $underruns\n")
                     val buffering = bufferingTotalMs + if (bufferingSince != 0L) SystemClock.elapsedRealtime() - bufferingSince else 0L
                     append("Waiting %.1f s   ${stateName(p.playbackState)}\n".format(buffering / 1000.0))
@@ -917,7 +924,15 @@ class PlayerActivity : AppCompatActivity() {
                 if (first) zap(-1); return true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                if (first) { if (numberBuffer.isNotEmpty()) jumpToNumber() else showChannelList() }
+                // Short OK = channel list, long OK = options (the Mi TV Stick remote has no Menu key).
+                if (down && event.repeatCount == 0) okLong = false
+                if (down && event.repeatCount > 0 && !okLong && numberBuffer.isEmpty()) {
+                    okLong = true
+                    showOptions()
+                }
+                if (event.action == KeyEvent.ACTION_UP && !okLong) {
+                    if (numberBuffer.isNotEmpty()) jumpToNumber() else showChannelList()
+                }
                 return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_GUIDE -> {
@@ -974,6 +989,8 @@ class PlayerActivity : AppCompatActivity() {
         private const val MAX_RETRIES = 5
         private const val FIRST_FRAME_TIMEOUT_MS = 2_500L
         private const val FROZEN_TIMEOUT_MS = 2_500L
+        private const val EARLY_WINDOW_MS = 6_000L
+        private const val EARLY_FROZEN_MS = 1_000L
         private const val STUCK_TIMEOUT_MS = 8_000L
         private const val MAX_RECOVERIES = 4
         private const val INFO_MS = 4_000L
