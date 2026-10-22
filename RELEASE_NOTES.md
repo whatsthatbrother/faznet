@@ -1,3 +1,11 @@
+## Faznet v1.1.3
+
+**Shqip:** Kanali hapet vetëm në kuadër të pastër (pa figurë të ngrirë kur ndërron kanal); opsioni Tunneling për TV stick; adresa e faqes së ngarkimit nuk shfaqet më në aplikacion.
+
+- Video starts on a real IDR key frame; channels that never send one switch to tolerant mode automatically
+- Settings: Tunneling (Android TV) for smoother playback on Amlogic sticks
+- The upload website address, QR and server button are no longer shown in the app (MAC + PIN only)
+
 ## Faznet v1.1.2
 
 **Shqip:** Figura që ngrin ndërsa zëri vazhdon rregullohet vetë; lista e kanaleve me OK mbi figurë (majtas/djathtas ndërron grupin); madhësia e figurës (Përshtat / Shtrij / Zmadho); lidhjet e playlist-ave nuk shfaqen më.

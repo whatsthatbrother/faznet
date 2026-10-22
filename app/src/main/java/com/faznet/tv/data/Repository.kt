@@ -212,6 +212,11 @@ class Repository private constructor(private val ctx: Context) {
         get() = prefs.getBoolean(KEY_FFMPEG, true)
         set(v) = prefs.edit().putBoolean(KEY_FFMPEG, v).apply()
 
+    /** Android TV tunneled playback: picture and sound go straight through the TV chip (smoother on Amlogic). */
+    var tunneling: Boolean
+        get() = prefs.getBoolean("tunneling", false)
+        set(v) = prefs.edit().putBoolean("tunneling", v).apply()
+
     var showStats: Boolean
         get() = prefs.getBoolean(KEY_STATS, false)
         set(v) = prefs.edit().putBoolean(KEY_STATS, v).apply()

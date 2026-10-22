@@ -36,6 +36,12 @@
         android:text="@string/use_ffmpeg" />
 
     <CheckBox
+        android:id="@+id/cbTunneling"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/use_tunneling" />
+
+    <CheckBox
         android:id="@+id/cbStats"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

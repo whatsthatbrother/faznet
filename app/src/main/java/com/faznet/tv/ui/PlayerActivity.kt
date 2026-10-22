@@ -300,7 +300,7 @@ class PlayerActivity : AppCompatActivity() {
     // ---------- player ----------
 
     private fun initPlayer() {
-        val p = PlayerFactory.create(this, repo.useFfmpeg)
+        val p = PlayerFactory.create(this, repo.useFfmpeg, repo.tunneling)
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
@@ -416,6 +416,7 @@ class PlayerActivity : AppCompatActivity() {
         ) return
         val now = SystemClock.elapsedRealtime()
         val hasVideo = p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)
+        val tunneled = repo.tunneling
         val rendered = p.videoDecoderCounters?.let { it.ensureUpdated(); it.renderedOutputBufferCount } ?: 0
         if (rendered != lastRendered) {
             lastRendered = rendered
@@ -428,7 +429,8 @@ class PlayerActivity : AppCompatActivity() {
 
         val reason = when {
             hasVideo && !firstFrameSeen && now - readySince > FIRST_FRAME_TIMEOUT_MS -> "no picture"
-            hasVideo && firstFrameSeen && now - lastRenderedAt > FROZEN_TIMEOUT_MS && now - lastPosAt < 2_000 -> "picture frozen"
+            // Tunneled playback does not report decoded frames, so only the other checks apply there.
+            !tunneled && hasVideo && firstFrameSeen && now - lastRenderedAt > FROZEN_TIMEOUT_MS && now - lastPosAt < 2_000 -> "picture frozen"
             now - lastPosAt > STUCK_TIMEOUT_MS -> "playback stuck"
             else -> return
         }

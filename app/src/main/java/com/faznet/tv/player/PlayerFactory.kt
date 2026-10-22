@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
@@ -45,13 +46,21 @@ object PlayerFactory {
         .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
         .setConstantBitrateSeekingEnabled(true)
 
-    fun create(context: Context, useFfmpeg: Boolean): ExoPlayer {
+    fun create(context: Context, useFfmpeg: Boolean, tunneling: Boolean = false): ExoPlayer {
         val renderers = DefaultRenderersFactory(context)
             .setExtensionRendererMode(
-                if (useFfmpeg) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-                else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+                when {
+                    !useFfmpeg -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+                    // Tunneling needs the platform audio decoder: use FFmpeg only for what the TV can't decode (MP2, AC3…)
+                    tunneling -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                    else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                }
             )
             .setEnableDecoderFallback(true)
+
+        val trackSelector = DefaultTrackSelector(context).apply {
+            setParameters(buildUponParameters().setTunnelingEnabled(tunneling))
+        }
 
         // Live IPTV: start quickly (1 s) and keep a healthy cushion.
         // Many IPTV TS streams are muxed with audio and video several seconds apart, so one track must be
@@ -67,6 +76,7 @@ object PlayerFactory {
             .build()
 
         return ExoPlayer.Builder(context, renderers)
+            .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .setHandleAudioBecomingNoisy(true)

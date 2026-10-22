@@ -48,7 +48,9 @@ class DeviceActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<Button>(R.id.btnSync).setOnClickListener { syncOnce(manual = true) }
-        findViewById<Button>(R.id.btnServer).setOnClickListener { editServer() }
+        // Server address is built in; hidden from users (long-press Sync to change it).
+        findViewById<Button>(R.id.btnServer).visibility = View.GONE
+        findViewById<Button>(R.id.btnSync).setOnLongClickListener { editServer(); true }
         findViewById<Button>(R.id.btnReset).setOnClickListener { confirmReset() }
         knownCount = repo.playlists().count { it.isRemote }
         render()
@@ -69,17 +71,11 @@ class DeviceActivity : AppCompatActivity() {
         val server = repo.serverUrl
         tvMac.text = repo.deviceMac
         tvPin.text = repo.devicePin
-        if (server.isEmpty()) {
-            tvUrl.text = "—"
-            ivQr.setImageBitmap(null)
-            ivQr.visibility = View.GONE
-        } else {
-            val web = repo.webUrl
-            val url = "$web/?mac=${repo.deviceMac.replace(":", "")}"
-            tvUrl.text = web.removePrefix("https://").removePrefix("http://")
-            ivQr.visibility = View.VISIBLE
-            ivQr.setImageBitmap(qr(url, 512))
-        }
+        // The upload website is given to users separately: the app never shows its address (no URL, no QR).
+        tvUrl.visibility = View.GONE
+        findViewById<View>(R.id.tvOpenSite).visibility = View.GONE
+        ivQr.setImageBitmap(null)
+        ivQr.visibility = View.GONE
     }
 
     private fun syncOnce(manual: Boolean) {
