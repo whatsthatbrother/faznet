@@ -72,6 +72,13 @@
         android:orientation="horizontal">
 
         <Button
+            android:id="@+id/btnShowPin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="@string/show_pin" />
+
+        <Button
             android:id="@+id/btnSync"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

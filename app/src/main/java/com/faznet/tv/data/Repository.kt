@@ -67,6 +67,12 @@ class Repository private constructor(private val ctx: Context) {
         }
     }
 
+    /** How old the cached copy of a downloadable playlist is (Long.MAX_VALUE if there is none). */
+    fun cacheAgeMs(p: Playlist): Long {
+        val f = cacheFile(p.id)
+        return if (p.m3uUrl() == null || !f.exists()) Long.MAX_VALUE else System.currentTimeMillis() - f.lastModified()
+    }
+
     suspend fun importFile(uri: Uri, id: String) = withContext(Dispatchers.IO) {
         val input = ctx.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open file")
         val tmp = File(cacheDir, "$id.tmp")
@@ -205,7 +211,7 @@ class Repository private constructor(private val ctx: Context) {
     val userAgent: String get() = customUserAgent.ifEmpty { DEFAULT_UA }
 
     var autoPlayLast: Boolean
-        get() = prefs.getBoolean(KEY_AUTOPLAY, false)
+        get() = prefs.getBoolean(KEY_AUTOPLAY, true)
         set(v) = prefs.edit().putBoolean(KEY_AUTOPLAY, v).apply()
 
     var useFfmpeg: Boolean

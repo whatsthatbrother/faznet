@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
+import com.faznet.tv.data.ChannelCheck
 
 data class GroupItem(val key: String, val title: String, val count: Int)
 
@@ -20,6 +21,7 @@ class GroupAdapter(
     private val horizontal: Boolean,
     private val selectOnFocus: Boolean,
     private val onSelect: (String) -> Unit,
+    private val onLongSelect: (String) -> Unit = {},
 ) : RecyclerView.Adapter<GroupAdapter.VH>() {
 
     private var items: List<GroupItem> = emptyList()
@@ -66,6 +68,7 @@ class GroupAdapter(
         h.count.text = item.count.toString()
         h.itemView.isSelected = item.key == selectedKey
         h.itemView.setOnClickListener { onSelect(item.key) }
+        h.itemView.setOnLongClickListener { onLongSelect(item.key); true }
         // TV: moving the D-pad over a category opens it, like a TV guide
         h.itemView.setOnFocusChangeListener { v, hasFocus ->
             if (hasFocus && selectOnFocus && !v.isInTouchMode && item.key != selectedKey) onSelect(item.key)
@@ -117,7 +120,9 @@ class ChannelAdapter(
         val ch = items[position]
         h.number.text = ch.number.toString()
         h.name.text = ch.name
-        h.group.text = ch.group
+        val dead = ChannelCheck.isDead(ch.url)
+        h.group.text = if (dead) h.itemView.context.getString(R.string.channel_dead) else ch.group
+        h.itemView.alpha = if (dead) 0.45f else 1f
         h.fav.visibility = if (favs.contains(ch.url)) View.VISIBLE else View.GONE
         loadLogo(h.logo, ch.logo)
         h.itemView.setOnFocusChangeListener { v, hasFocus ->

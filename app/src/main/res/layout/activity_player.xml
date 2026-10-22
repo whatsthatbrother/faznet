@@ -121,6 +121,27 @@
                 android:maxLines="1"
                 android:textColor="@color/text_dim"
                 android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/infoEpg"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="#E6FFFFFF"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/infoEpgProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="220dp"
+                android:layout_height="4dp"
+                android:layout_marginTop="4dp"
+                android:max="1000"
+                android:progressTint="@color/accent"
+                android:visibility="gone" />
         </LinearLayout>
 
         <TextClock
@@ -211,6 +232,19 @@
             android:paddingTop="4dp"
             android:paddingBottom="4dp"
             android:scrollbars="none" />
+
+        <TextView
+            android:id="@+id/listEpg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="#1AFFFFFF"
+            android:ellipsize="end"
+            android:maxLines="3"
+            android:padding="10dp"
+            android:textColor="#E6FFFFFF"
+            android:textSize="13sp"
+            android:visibility="gone" />
     </LinearLayout>
 
     <TextView

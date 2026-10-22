@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.faznet.tv.BuildConfig
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
+import com.faznet.tv.data.ChannelCheck
 import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.Playlist
 import com.faznet.tv.data.RemoteSync
@@ -77,7 +78,11 @@ class MainActivity : AppCompatActivity() {
             findViewById<View>(R.id.tvBrand).visibility = View.GONE
             findViewById<View>(R.id.clock).visibility = View.GONE
         }
-        groupAdapter = GroupAdapter(horizontal = !wide, selectOnFocus = wide) { key -> selectGroup(key) }
+        groupAdapter = GroupAdapter(
+            horizontal = !wide, selectOnFocus = wide,
+            onSelect = { key -> selectGroup(key) },
+            onLongSelect = { key -> confirmCheck(key) },
+        )
         rvGroups.itemAnimator = null
         rvGroups.layoutManager = LinearLayoutManager(
             this, if (wide) RecyclerView.VERTICAL else RecyclerView.HORIZONTAL, false
@@ -184,7 +189,7 @@ class MainActivity : AppCompatActivity() {
             channelAdapter.submit(emptyList(), emptySet())
             tvPlaylist.text = getString(R.string.add_playlist)
             val msg = if (repo.serverUrl.isEmpty()) getString(R.string.welcome_msg)
-            else getString(R.string.welcome_msg) + "\n\n" + getString(R.string.welcome_mac, repo.deviceMac, repo.devicePin)
+            else getString(R.string.welcome_msg) + "\n\n" + getString(R.string.welcome_mac, repo.deviceMac)
             showEmpty(getString(R.string.welcome_title), msg, getString(R.string.add_playlist)) {
                 openPlaylists(add = true)
             }
@@ -249,6 +254,8 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, R.string.hint_long_press, Toast.LENGTH_LONG).show()
                 }
                 maybeAutoPlay(p)
+                // Opened from the copy on the device (instant); refresh it from the server in the background.
+                if (!force && repo.cacheAgeMs(p) > BACKGROUND_REFRESH_MS) refreshInBackground(p)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -261,6 +268,62 @@ class MainActivity : AppCompatActivity() {
                     load(p, true)
                 }
             }
+        }
+    }
+
+    /** Long-press on a group: test its channels one by one and dim the ones that don't answer. */
+    private fun confirmCheck(key: String) {
+        val p = playlist ?: return
+        val favs = repo.favorites(p.id)
+        val list = when (key) {
+            KEY_ALL -> all
+            KEY_FAV -> all.filter { favs.contains(it.url) }
+            KEY_RECENT -> repo.recents(p.id).mapNotNull { byUrl[it] }
+            else -> all.filter { it.group == key }
+        }
+        if (list.isEmpty()) return
+        val title = groupItems(favs).firstOrNull { it.key == key }?.title ?: key
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.check_title)
+            .setMessage(getString(R.string.check_confirm, title, list.size))
+            .setPositiveButton(R.string.check_start) { _, _ -> runCheck(list) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun runCheck(list: List<Channel>) {
+        var job: Job? = null
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.check_title)
+            .setMessage(getString(R.string.check_progress, 0, list.size, 0))
+            .setNegativeButton(R.string.cancel) { _, _ -> job?.cancel() }
+            .setCancelable(false)
+            .show()
+        job = lifecycleScope.launch {
+            var bad = 0
+            list.forEachIndexed { i, ch ->
+                if (!ChannelCheck.check(ch, repo.userAgent)) bad++
+                dialog.setMessage(getString(R.string.check_progress, i + 1, list.size, bad))
+                delay(250) // gentle on the provider (connection limits)
+            }
+            dialog.dismiss()
+            channelAdapter.notifyDataSetChanged()
+            MaterialAlertDialogBuilder(this@MainActivity)
+                .setTitle(R.string.check_title)
+                .setMessage(getString(R.string.check_done, list.size - bad, bad))
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+        }
+        job?.invokeOnCompletion { channelAdapter.notifyDataSetChanged() }
+    }
+
+    private fun refreshInBackground(p: Playlist) {
+        lifecycleScope.launch {
+            val fresh = try { repo.loadChannels(p, forceRefresh = true) } catch (e: CancellationException) { throw e } catch (e: Exception) { return@launch }
+            if (playlist?.id != p.id || loadedPlaylistId != p.id || fresh.isEmpty()) return@launch
+            all = fresh
+            byUrl = fresh.associateBy { it.url }
+            rebuild(keepScroll = true)
         }
     }
 
@@ -395,5 +458,6 @@ class MainActivity : AppCompatActivity() {
         const val KEY_ALL = "\u0000all"
         const val KEY_FAV = "\u0000fav"
         const val KEY_RECENT = "\u0000recent"
+        private const val BACKGROUND_REFRESH_MS = 3 * 60 * 60 * 1000L
     }
 }

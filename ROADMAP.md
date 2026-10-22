@@ -1,6 +1,6 @@
 # Faznet — next release (1.1.4)
 
-Agreed with Diar on 2026-10-22. Items 1–4 are already in the code (commit c2809d2, not built yet).
+Agreed with Diar on 2026-10-22. All items are in 1.1.4 (EPG: Xtream channels only).
 
 ## Stability
 1. [x] Fresh player + video decoder for every channel (fixes sound with frozen picture on Mi TV Stick)

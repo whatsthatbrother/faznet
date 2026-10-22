@@ -1,5 +1,9 @@
 package com.faznet.tv.ui
 
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -12,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
@@ -36,6 +41,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
 import com.faznet.tv.data.ChannelStore
+import com.faznet.tv.data.ChannelCheck
+import com.faznet.tv.data.Epg
 import com.faznet.tv.data.Repository
 import com.faznet.tv.data.safeMessage
 import com.faznet.tv.player.PlayerFactory
@@ -71,6 +78,12 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var listCount: TextView
     private lateinit var listChannels: RecyclerView
     private lateinit var listAdapter: OverlayChannelAdapter
+    private lateinit var infoEpg: TextView
+    private lateinit var infoEpgProgress: ProgressBar
+    private lateinit var listEpg: TextView
+    private var infoEpgJob: Job? = null
+    private var listEpgJob: Job? = null
+    private val timeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
 
     private var stallCount = 0
     private var underruns = 0
@@ -110,6 +123,36 @@ class PlayerActivity : AppCompatActivity() {
     private val hideToast = Runnable { tvToast.visibility = View.GONE }
     private val commitNumber = Runnable { jumpToNumber() }
     private val retry = Runnable { startCurrent() }
+    private var pendingZap = -1
+    private val zapCommit = Runnable {
+        val i = pendingZap
+        pendingZap = -1
+        if (i >= 0) play(i)
+    }
+
+    /** Wi-Fi/network came back: re-open a channel that was stuck or failed instead of waiting for the watchdog. */
+    private val netCallback = object : ConnectivityManager.NetworkCallback() {
+        // onAvailable also fires right after registering: only react to a network that comes back after a loss.
+        @Volatile private var lost = false
+
+        override fun onLost(network: Network) { lost = true }
+
+        override fun onAvailable(network: Network) {
+            if (!lost) return
+            lost = false
+            handler.post {
+                val p = player ?: return@post
+                if (pendingZap < 0 && (p.playerError != null || p.playbackState == Player.STATE_BUFFERING ||
+                        p.playbackState == Player.STATE_IDLE || tvError.visibility == View.VISIBLE)
+                ) {
+                    retries = 0
+                    httpRetried = false
+                    freshPlayer()
+                    startCurrent()
+                }
+            }
+        }
+    }
 
     /** If a live stream stays stuck in buffering, re-open it at the live edge instead of freezing. */
     private val stallWatchdog = Runnable {
@@ -181,6 +224,9 @@ class PlayerActivity : AppCompatActivity() {
         listGroup = findViewById(R.id.listGroup)
         listCount = findViewById(R.id.listCount)
         listChannels = findViewById(R.id.listChannels)
+        infoEpg = findViewById(R.id.infoEpg)
+        infoEpgProgress = findViewById(R.id.infoEpgProgress)
+        listEpg = findViewById(R.id.listEpg)
 
         playerView.useController = false
         playerView.resizeMode = aspectModes[repo.aspectMode.coerceIn(0, aspectModes.size - 1)]
@@ -243,6 +289,11 @@ class PlayerActivity : AppCompatActivity() {
         super.onStart()
         if (channels.isEmpty()) return
         play(index)
+        runCatching {
+            (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).registerNetworkCallback(
+                NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), netCallback
+            )
+        }
         if (repo.showStats) startStats()
         handler.removeCallbacks(frameWatch)
         handler.postDelayed(frameWatch, 1000)
@@ -250,6 +301,8 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        runCatching { (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(netCallback) }
+        pendingZap = -1
         handler.removeCallbacksAndMessages(null)
         probeJob?.cancel()
         player?.release()
@@ -365,6 +418,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun play(i: Int) {
+        handler.removeCallbacks(zapCommit)
+        pendingZap = -1
         index = i
         forceHls = false
         retries = 0
@@ -576,13 +631,70 @@ class PlayerActivity : AppCompatActivity() {
 
     // ---------- infobar / options / toast ----------
 
+    /**
+     * Fast zapping: Up/Down only moves the selection and shows the infobar; the channel is opened when the
+     * presses stop. The old stream is stopped at once so the server sees a single connection.
+     */
     private fun zap(delta: Int) {
         if (channels.isEmpty()) return
         val n = channels.size
-        play(((index + delta) % n + n) % n)
+        val from = if (pendingZap >= 0) pendingZap else index
+        pendingZap = ((from + delta) % n + n) % n
+        val ch = channels[pendingZap]
+        showInfo(ch)
+        tvTitle.text = "${ch.number}. ${ch.name}"
+        handler.removeCallbacks(stallWatchdog)
+        handler.removeCallbacks(retry)
+        probeJob?.cancel()
+        player?.stop()
+        tvError.visibility = View.GONE
+        handler.removeCallbacks(zapCommit)
+        handler.postDelayed(zapCommit, ZAP_DELAY_MS)
+    }
+
+    private fun epgText(nn: Epg.NowNext): String = buildString {
+        nn.now?.let { append(getString(R.string.epg_now, it.title, "${timeFmt.format(it.start)}–${timeFmt.format(it.end)}")) }
+        nn.next?.let {
+            if (isNotEmpty()) append("\n")
+            append(getString(R.string.epg_next, it.title, timeFmt.format(it.start)))
+        }
+    }
+
+    private fun showInfoEpg(ch: Channel) {
+        infoEpgJob?.cancel()
+        infoEpg.visibility = View.GONE
+        infoEpgProgress.visibility = View.GONE
+        if (!Epg.supports(ch)) return
+        infoEpgJob = lifecycleScope.launch {
+            // While zapping quickly, only ask for the channel the user stops on.
+            if (Epg.cached(ch) == null) kotlinx.coroutines.delay(500)
+            val nn = Epg.nowNext(ch, ch.userAgent ?: repo.userAgent) ?: return@launch
+            infoEpg.text = epgText(nn)
+            infoEpg.visibility = View.VISIBLE
+            nn.now?.let { pr ->
+                val span = (pr.end - pr.start).coerceAtLeast(1)
+                infoEpgProgress.progress = (((System.currentTimeMillis() - pr.start) * 1000) / span).toInt().coerceIn(0, 1000)
+                infoEpgProgress.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun showListEpg(ch: Channel?) {
+        listEpgJob?.cancel()
+        if (ch == null || !Epg.supports(ch)) { listEpg.visibility = View.GONE; return }
+        Epg.cached(ch)?.let { listEpg.text = epgText(it); listEpg.visibility = View.VISIBLE } ?: run { listEpg.visibility = View.GONE }
+        // Small delay: scrolling quickly through the list must not fire a request per row.
+        listEpgJob = lifecycleScope.launch {
+            kotlinx.coroutines.delay(600)
+            val nn = Epg.nowNext(ch, ch.userAgent ?: repo.userAgent)
+            if (nn == null) { listEpg.visibility = View.GONE; return@launch }
+            listEpg.text = epgText(nn)
+            listEpg.visibility = View.VISIBLE
+        }
     }
 
     private fun showInfo(ch: Channel) {
+        showInfoEpg(ch)
         infoNumber.text = ch.number.toString()
         infoName.text = ch.name
         infoGroup.text = groups.getOrNull(playGroup)?.title ?: ch.group
@@ -693,6 +805,7 @@ class PlayerActivity : AppCompatActivity() {
         val pos = focusUrl?.let { u -> g.channels.indexOfFirst { it.url == u } }?.takeIf { it >= 0 } ?: 0
         listCount.text = getString(R.string.list_count, pos + 1, g.channels.size)
         focusListRow(pos)
+        showListEpg(g.channels.getOrNull(pos))
     }
 
     private fun focusListRow(pos: Int) {
@@ -722,7 +835,10 @@ class PlayerActivity : AppCompatActivity() {
     private fun onListFocusMoved() {
         val focused = listChannels.focusedChild ?: return
         val pos = listChannels.getChildAdapterPosition(focused)
-        if (pos >= 0) listCount.text = getString(R.string.list_count, pos + 1, listAdapter.itemCount)
+        if (pos >= 0) {
+            listCount.text = getString(R.string.list_count, pos + 1, listAdapter.itemCount)
+            showListEpg(groups.getOrNull(listGroupIndex)?.channels?.getOrNull(pos))
+        }
     }
 
     // ---------- remote / keyboard ----------
@@ -863,6 +979,7 @@ class PlayerActivity : AppCompatActivity() {
         private const val INFO_MS = 4_000L
         private const val OPTIONS_MS = 8_000L
         private const val LIST_MS = 12_000L
+        private const val ZAP_DELAY_MS = 450L
     }
 }
 
@@ -904,6 +1021,7 @@ internal class OverlayChannelAdapter(private val onPick: (Int) -> Unit) : Recycl
         h.number.text = ch.number.toString()
         h.name.text = ch.name
         h.itemView.isSelected = isPlaying
+        h.itemView.alpha = if (ChannelCheck.isDead(ch.url)) 0.45f else 1f
         h.playing.visibility = if (isPlaying) View.VISIBLE else View.GONE
         loadLogo(h.logo, ch.logo)
         h.itemView.setOnClickListener { h.bindingAdapterPosition.takeIf { it >= 0 }?.let(onPick) }

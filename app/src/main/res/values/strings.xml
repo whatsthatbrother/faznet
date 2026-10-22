@@ -71,7 +71,7 @@
     <string name="server_hint_url">https://faznet.example.com</string>
     <string name="upload_from_web">Upload from web (MAC)</string>
     <string name="from_web">From the web</string>
-    <string name="welcome_mac">Or upload from the web with\nMAC  %1$s    PIN  %2$s</string>
+    <string name="welcome_mac">Or upload from the web with\nMAC  %1$s    (PIN: press Upload from web → Show PIN)</string>
     <string name="show_stats">Show stream stats in the player (buffer, speed, codecs) — Menu → Stats in the player</string>
     <string name="channel_list">Channel list</string>
     <string name="stats">Stream stats</string>
@@ -82,4 +82,14 @@
     <string name="picture">Picture: %1$s</string>
     <string name="use_tunneling">Tunneling (Android TV) — smoother picture on TV sticks; turn off if a channel has no picture or sound</string>
     <string name="err_refused">Channel refused by the server (%1$d) — not in your package, offline, or too many connections</string>
+    <string name="epg_now">Now: %1$s  %2$s</string>
+    <string name="epg_next">Next: %1$s  %2$s</string>
+    <string name="show_pin">Show PIN</string>
+    <string name="hide_pin">Hide PIN</string>
+    <string name="channel_dead">Not working</string>
+    <string name="check_title">Check channels</string>
+    <string name="check_confirm">Test the %2$d channels in “%1$s”? It takes a few seconds per channel. Channels that don\'t answer are dimmed.</string>
+    <string name="check_start">Check</string>
+    <string name="check_progress">Checking %1$d / %2$d…\nNot working: %3$d</string>
+    <string name="check_done">Working: %1$d\nNot working: %2$d (dimmed in the list)</string>
 </resources>

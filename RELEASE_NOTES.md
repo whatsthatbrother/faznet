@@ -1,3 +1,18 @@
+## Faznet v1.1.4
+
+**Shqip:** Player i ri për çdo kanal (pa figurë të ngrirë), ndërrim i shpejtë i kanaleve, rilidhje kur kthehet interneti, mesazh i qartë për kanalet e refuzuara (403), programi TV (Tani / Më pas) për kanalet Xtream, PIN-i i fshehur, kontrolli i kanaleve.
+
+- Fresh player and video decoder for every channel; frozen picture is re-opened after ~2.5 s
+- Fast zapping: only the channel you stop on is opened; the old stream is released at once
+- Network comes back → the channel re-opens immediately
+- HTTP 4xx (e.g. 403): one retry, then "channel refused by the server"
+- EPG now/next in the infobar and the in-player channel list (Xtream Codes channels)
+- Last channel opens on start by default; playlist opens from the device copy and refreshes in the background
+- Channel logos cached on the device (80 MB)
+- PIN is hidden until "Show PIN" is pressed (30 s)
+- Long-press a group → check its channels; dead ones are dimmed
+- Tunneling option removed
+
 ## Faznet v1.1.3
 
 **Shqip:** Kanali hapet vetëm në kuadër të pastër (pa figurë të ngrirë kur ndërron kanal); opsioni Tunneling për TV stick; adresa e faqes së ngarkimit nuk shfaqet më në aplikacion.

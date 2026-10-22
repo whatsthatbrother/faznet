@@ -70,7 +70,7 @@
     <string name="server_hint_url">https://faznet.example.com</string>
     <string name="upload_from_web">Ngarko nga webi (MAC)</string>
     <string name="from_web">Nga webi</string>
-    <string name="welcome_mac">Ose ngarko listën nga webi me\nMAC  %1$s    PIN  %2$s</string>
+    <string name="welcome_mac">Ose ngarko listën nga webi me\nMAC  %1$s    (PIN-i: Ngarko nga webi → Shfaq PIN-in)</string>
     <string name="show_stats">Shfaq statistikat e stream-it në player (buffer, shpejtësia, kodekët) — në player: Menu → Statistikat</string>
     <string name="channel_list">Lista e kanaleve</string>
     <string name="stats">Statistikat</string>
@@ -81,4 +81,14 @@
     <string name="picture">Figura: %1$s</string>
     <string name="use_tunneling">Tunneling (Android TV) — figurë më e rrjedhshme në TV stick; fike nëse një kanal mbetet pa figurë ose zë</string>
     <string name="err_refused">Serveri e refuzoi kanalin (%1$d) — nuk është në paketë, nuk transmeton ose ka shumë lidhje</string>
+    <string name="epg_now">Tani: %1$s  %2$s</string>
+    <string name="epg_next">Më pas: %1$s  %2$s</string>
+    <string name="show_pin">Shfaq PIN-in</string>
+    <string name="hide_pin">Fshih PIN-in</string>
+    <string name="channel_dead">Nuk punon</string>
+    <string name="check_title">Kontrollo kanalet</string>
+    <string name="check_confirm">T\'i provoj %2$d kanalet e “%1$s”? Merr disa sekonda për kanal. Kanalet që nuk përgjigjen zbehen.</string>
+    <string name="check_start">Kontrollo</string>
+    <string name="check_progress">Duke kontrolluar %1$d / %2$d…\nNuk punojnë: %3$d</string>
+    <string name="check_done">Punojnë: %1$d\nNuk punojnë: %2$d (të zbehura në listë)</string>
 </resources>

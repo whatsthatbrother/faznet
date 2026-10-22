@@ -30,6 +30,9 @@ class DeviceActivity : AppCompatActivity() {
     private lateinit var repo: Repository
     private lateinit var tvMac: TextView
     private lateinit var tvPin: TextView
+    /** The PIN protects the device's playlists: shown only on request, hidden again after 30 s. */
+    private var pinVisible = false
+    private val hidePin = Runnable { pinVisible = false; render() }
     private lateinit var tvUrl: TextView
     private lateinit var tvStatus: TextView
     private lateinit var ivQr: ImageView
@@ -48,6 +51,12 @@ class DeviceActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<Button>(R.id.btnSync).setOnClickListener { syncOnce(manual = true) }
+        findViewById<Button>(R.id.btnShowPin).setOnClickListener {
+            pinVisible = !pinVisible
+            tvPin.removeCallbacks(hidePin)
+            if (pinVisible) tvPin.postDelayed(hidePin, 30_000)
+            render()
+        }
         // Server address is built in; hidden from users (long-press Sync to change it).
         findViewById<Button>(R.id.btnServer).visibility = View.GONE
         findViewById<Button>(R.id.btnSync).setOnLongClickListener { editServer(); true }
@@ -70,7 +79,8 @@ class DeviceActivity : AppCompatActivity() {
     private fun render() {
         val server = repo.serverUrl
         tvMac.text = repo.deviceMac
-        tvPin.text = repo.devicePin
+        tvPin.text = if (pinVisible) repo.devicePin else "••••"
+        findViewById<Button>(R.id.btnShowPin).setText(if (pinVisible) R.string.hide_pin else R.string.show_pin)
         // The upload website is given to users separately: the app never shows its address (no URL, no QR).
         tvUrl.visibility = View.GONE
         findViewById<View>(R.id.tvOpenSite).visibility = View.GONE
