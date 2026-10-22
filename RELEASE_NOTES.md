@@ -1,3 +1,11 @@
+## Faznet v1.2.1
+
+**Shqip:** Nisje e pastër: kanali mbetet i fshehur pas rrethit të ngarkimit derisa figura të ecë normalisht — pa figurë të ngrirë kur ndërron kanal.
+
+- Clean start: picture and sound stay hidden (loading circle) until the channel's picture runs; a freeze at start is re-opened quietly
+- Start freezes (provider side) no longer switch the channel to the software decoder
+- Software decoder only for real SD (576 lines or less)
+
 ## Faznet v1.2.0
 
 **Shqip:** Made by d1@r.f. Kanalet SD që ngrinin hapen me decoder software; ditari i problemeve; zgjedhja e zërit dhe titrave; kohëmatësi i gjumit; njoftim për version të ri; kyçja prindërore.
