@@ -1,3 +1,16 @@
+## Faznet v1.2.0
+
+**Shqip:** Made by d1@r.f. Kanalet SD që ngrinin hapen me decoder software; ditari i problemeve; zgjedhja e zërit dhe titrave; kohëmatësi i gjumit; njoftim për version të ri; kyçja prindërore.
+
+- Credit "Made by d1@r.f" (Settings, welcome screen, website)
+- Channels that needed an auto-fix are remembered; SD ones then open with a software video decoder
+- Settings: software video decoder for all SD channels (optional)
+- Problem log (last 50 auto-fixes / refused channels / errors) in Settings
+- Stream type remembered across restarts (no second probe); neighbouring channels' servers resolved in advance
+- Options (long OK): sound language & subtitles, sleep timer (30/60/90/120 min)
+- Update notice when a newer release is on GitHub (checked once a day)
+- Parental lock: 4-digit PIN for chosen groups, unlocked until the app is closed
+
 ## Faznet v1.1.4
 
 **Shqip:** Player i ri për çdo kanal (pa figurë të ngrirë), ndërrim i shpejtë i kanaleve, rilidhje kur kthehet interneti, mesazh i qartë për kanalet e refuzuara (403), programi TV (Tani / Më pas) për kanalet Xtream, PIN-i i fshehur, kontrolli i kanaleve.
