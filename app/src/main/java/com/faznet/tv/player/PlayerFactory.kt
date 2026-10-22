@@ -27,18 +27,23 @@ import com.faznet.tv.net.Http
 object PlayerFactory {
 
     /**
-     * IPTV-friendly TS parsing: tolerate streams that start without an IDR frame (common when joining a live
-     * channel). FLAG_DETECT_ACCESS_UNITS is deliberately NOT used: on interlaced 1080i broadcast streams it splits
+     * TS parsing. By default video starts only on a real IDR key frame: starting on a non-IDR I-frame makes some
+     * TV hardware decoders (Amlogic, Mi TV Stick) output nothing — sound plays, picture stays frozen.
+     * Streams that never send IDR frames get the tolerant mode instead (decided per channel at run time,
+     * see [looseKeyframes]).
+     * FLAG_DETECT_ACCESS_UNITS is deliberately NOT used: on interlaced 1080i broadcast streams it splits
      * pictures wrongly, which corrupts frames and starves the video decoder.
      */
-    private const val TS_FLAGS = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
+    private const val TS_FLAGS_STRICT = 0
+    private const val TS_FLAGS_LOOSE = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
 
-    private val extractors by lazy {
-        DefaultExtractorsFactory()
-            .setTsExtractorFlags(TS_FLAGS)
-            .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
-            .setConstantBitrateSeekingEnabled(true)
-    }
+    /** Channels (URLs) that showed no picture in strict mode this session: open them in tolerant mode. */
+    val looseKeyframes = HashSet<String>()
+
+    private fun extractors(flags: Int) = DefaultExtractorsFactory()
+        .setTsExtractorFlags(flags)
+        .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+        .setConstantBitrateSeekingEnabled(true)
 
     fun create(context: Context, useFfmpeg: Boolean): ExoPlayer {
         val renderers = DefaultRenderersFactory(context)
@@ -82,6 +87,7 @@ object PlayerFactory {
     }
 
     fun mediaSource(context: Context, ch: Channel, userAgent: String, type: StreamType): MediaSource {
+        val flags = if (ch.url in looseKeyframes) TS_FLAGS_LOOSE else TS_FLAGS_STRICT
         val headers = HashMap<String, String>()
         ch.referrer?.let { headers["Referer"] = it }
         val http = OkHttpDataSource.Factory(Http.client)
@@ -96,12 +102,12 @@ object PlayerFactory {
 
         return when (type) {
             StreamType.HLS -> HlsMediaSource.Factory(dataSource)
-                .setExtractorFactory(DefaultHlsExtractorFactory(TS_FLAGS, true))
+                .setExtractorFactory(DefaultHlsExtractorFactory(flags, true))
                 .setAllowChunklessPreparation(true)
                 .createMediaSource(item.setMimeType(MimeTypes.APPLICATION_M3U8).build())
             StreamType.DASH -> DashMediaSource.Factory(dataSource)
                 .createMediaSource(item.setMimeType(MimeTypes.APPLICATION_MPD).build())
-            StreamType.PROGRESSIVE -> ProgressiveMediaSource.Factory(dataSource, extractors)
+            StreamType.PROGRESSIVE -> ProgressiveMediaSource.Factory(dataSource, extractors(flags))
                 .createMediaSource(item.build())
         }
     }

@@ -433,6 +433,8 @@ class PlayerActivity : AppCompatActivity() {
             else -> return
         }
         if (recoveries >= MAX_RECOVERIES) return
+        // No picture at all in strict key-frame mode: this stream probably never sends IDR frames.
+        if (reason == "no picture") channels.getOrNull(index)?.let { PlayerFactory.looseKeyframes.add(it.url) }
         recoveries++
         totalRecoveries++
         lastWarning = "auto-fix: $reason"
@@ -501,7 +503,8 @@ class PlayerActivity : AppCompatActivity() {
                         })
                         append("\n")
                     }
-                    append("Frames  $frames   Drops $dropped   Fixes $totalRecoveries\n")
+                    val keyMode = if (channels.getOrNull(index)?.url?.let { it in PlayerFactory.looseKeyframes } == true) "loose" else "IDR"
+                    append("Frames  $frames   Drops $dropped   Fixes $totalRecoveries   Start $keyMode\n")
                     append("Stalls  ${(stallCount - 1).coerceAtLeast(0)}   Underruns $underruns\n")
                     val buffering = bufferingTotalMs + if (bufferingSince != 0L) SystemClock.elapsedRealtime() - bufferingSince else 0L
                     append("Waiting %.1f s   ${stateName(p.playbackState)}\n".format(buffering / 1000.0))
@@ -817,7 +820,7 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_INDEX = "index"
         private const val STALL_TIMEOUT_MS = 8_000L
         private const val MAX_RETRIES = 5
-        private const val FIRST_FRAME_TIMEOUT_MS = 3_500L
+        private const val FIRST_FRAME_TIMEOUT_MS = 3_000L
         private const val FROZEN_TIMEOUT_MS = 4_000L
         private const val STUCK_TIMEOUT_MS = 8_000L
         private const val MAX_RECOVERIES = 4
