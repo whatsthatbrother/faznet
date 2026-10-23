@@ -42,6 +42,7 @@ import com.faznet.tv.R
 import com.faznet.tv.data.Channel
 import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.ChannelMemory
+import com.faznet.tv.data.EnginePrefs
 import com.faznet.tv.data.Parental
 import com.faznet.tv.data.ProblemLog
 import com.faznet.tv.data.ChannelCheck
@@ -267,7 +268,10 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnPlaylistSwitch).setOnClickListener { hideOptions(); switchPlaylist() }
         findViewById<View>(R.id.btnEngine).setOnClickListener {
             hideOptions()
-            repo.useVlc = !repo.useVlc
+            val wasVlc = vlc != null
+            repo.useVlc = !wasVlc
+            // The user chose: forget what the app had learned for this channel.
+            channels.getOrNull(index)?.let { EnginePrefs.setOverride(this, it.url, null) }
             toast(getString(R.string.engine_now, if (repo.useVlc) "VLC" else "ExoPlayer"))
             channels.getOrNull(index)?.let { play(index) }
         }
@@ -509,6 +513,7 @@ class PlayerActivity : AppCompatActivity() {
         httpRetried = false
         recoveries = 0
         preReopened = false
+        enginesTried.clear()
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
         val ch = channels[index]
@@ -549,6 +554,7 @@ class PlayerActivity : AppCompatActivity() {
     private val vlcListener = object : VlcEngine.Listener {
         override fun onVlcPlaying() {
             retries = 0
+            if (vlcPlayingAt == 0L) vlcPlayingAt = SystemClock.elapsedRealtime()
             tvError.visibility = View.GONE
             // Audio-only channels never get a video output: show them after a moment anyway.
             handler.removeCallbacks(vlcReveal)
@@ -556,6 +562,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         override fun onVlcVideo() {
+            vlcVideo = true
             // VLC shows a few damaged frames until the first key frame arrives: keep them behind the
             // loading circle a little longer so the channel appears clean.
             handler.removeCallbacks(vlcReveal)
@@ -573,11 +580,118 @@ class PlayerActivity : AppCompatActivity() {
             handler.removeCallbacks(retry)
             handler.postDelayed(retry, (1000L * retries).coerceAtMost(5000L))
         } else {
+            if (tryOtherEngine("VLC: $what")) return
             pbStart.visibility = View.GONE
             tvError.text = getString(R.string.err_stream, "VLC")
             tvError.visibility = View.VISIBLE
             ProblemLog.add(this, ch.name, "VLC: $what")
         }
+    }
+
+    // ---- VLC freeze watchdog: VLC has no frame callbacks, so its decoding counters are compared every 0.5 s ----
+    private var vlcPlayingAt = 0L
+    private var vlcVideo = false
+    private var vlcPicturesSeen = false
+    private var vlcLast: VlcEngine.Progress? = null
+    private var vlcPicAt = 0L
+    private var vlcAudioAt = 0L
+    private var vlcTimeAt = 0L
+    private var vlcHealthySince = 0L
+
+    private fun resetVlcWatch() {
+        val now = SystemClock.elapsedRealtime()
+        vlcPlayingAt = 0L
+        vlcVideo = false
+        vlcPicturesSeen = false
+        vlcLast = null
+        vlcPicAt = now
+        vlcAudioAt = now
+        vlcTimeAt = now
+        vlcHealthySince = now
+    }
+
+    private fun checkVlc() {
+        val v = vlc ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (!revealed && now - hiddenSince > MAX_HIDDEN_MS) reveal()
+        if (vlcPlayingAt == 0L || pendingZap >= 0) return
+        val pr = v.progress() ?: return
+        val last = vlcLast
+        vlcLast = pr
+        if (last == null) return
+        if (pr.pictures != last.pictures) {
+            vlcPicAt = now
+            if (pr.pictures > 0) vlcPicturesSeen = true
+        }
+        if (pr.audio != last.audio) vlcAudioAt = now
+        if (pr.time != last.time) vlcTimeAt = now
+        val ch = channels.getOrNull(index) ?: return
+        val audioRuns = now - vlcAudioAt < 1_500
+        val early = now - vlcPlayingAt < 8_000
+        val reason = when {
+            // The TV's decoder gives nothing (black picture, sound plays): decode this channel with the CPU.
+            vlcVideo && !vlcPicturesSeen && audioRuns && now - vlcPlayingAt > VLC_NO_PICTURE_MS -> {
+                if (!EnginePrefs.vlcSoftware(this, ch.url)) {
+                    EnginePrefs.setVlcSoftware(this, ch.url, true)
+                    "no picture → software decoder"
+                } else "no picture"
+            }
+            vlcPicturesSeen && audioRuns && now - vlcPicAt > (if (early) VLC_EARLY_FROZEN_MS else VLC_FROZEN_MS) ->
+                if (early) "picture frozen at start" else "picture frozen"
+            now - vlcTimeAt > VLC_STUCK_MS && now - vlcAudioAt > VLC_STUCK_MS -> "playback stuck"
+            else -> {
+                // Healthy for a while: forgive earlier recoveries on this channel.
+                if (recoveries > 0 && now - vlcHealthySince > 30_000) recoveries = 0
+                return
+            }
+        }
+        if (recoveries >= MAX_RECOVERIES) {
+            tryOtherEngine("VLC: $reason")
+            return
+        }
+        recoveries++
+        totalRecoveries++
+        lastWarning = "auto-fix: $reason"
+        ProblemLog.add(this, ch.name, "VLC: $reason")
+        showReconnecting()
+        freshPlayer()
+        startCurrent()
+    }
+
+    /** Which engine opens this channel: the one that worked for it before, otherwise the one in Settings. */
+    private fun useVlcFor(ch: Channel?): Boolean = when (ch?.let { EnginePrefs.override(this, it.url) }) {
+        EnginePrefs.VLC -> true
+        EnginePrefs.EXO -> false
+        else -> repo.useVlc
+    }
+
+    private val enginesTried = HashSet<String>()
+
+    /**
+     * The current engine gave up on this channel: open it once with the other engine and, if that one plays,
+     * keep using it for this channel. @return false when both engines were already tried.
+     */
+    private fun tryOtherEngine(why: String): Boolean {
+        val ch = channels.getOrNull(index) ?: return false
+        val current = if (vlc != null) EnginePrefs.VLC else EnginePrefs.EXO
+        val other = if (current == EnginePrefs.VLC) EnginePrefs.EXO else EnginePrefs.VLC
+        enginesTried.add(current)
+        if (other in enginesTried) return false
+        enginesTried.add(other)
+        EnginePrefs.setOverride(this, ch.url, other)
+        ProblemLog.add(this, ch.name, "$why → ${if (other == EnginePrefs.VLC) "VLC" else "ExoPlayer"}")
+        lastWarning = "switched engine: $why"
+        retries = 0
+        recoveries = 0
+        httpRetried = false
+        showReconnecting()
+        // Posted: this can be called from inside the old engine's own callbacks.
+        handler.post {
+            if (channels.getOrNull(index)?.url != ch.url) return@post
+            freshPlayer()
+            startCurrent()
+        }
+        return true
     }
 
     private fun releaseEngines() {
@@ -595,7 +709,7 @@ class PlayerActivity : AppCompatActivity() {
         releaseEngines()
         videoDecoder = ""
         audioDecoder = ""
-        if (repo.useVlc) {
+        if (useVlcFor(channels.getOrNull(index))) {
             playerView.visibility = View.GONE
             vlcLayout.visibility = View.VISIBLE
             vlc = VlcEngine(this, vlcLayout, vlcListener).also { it.setScale(repo.aspectMode) }
@@ -613,7 +727,8 @@ class PlayerActivity : AppCompatActivity() {
             hideUntilStable()
             handler.removeCallbacks(vlcReveal)
             v.stop()
-            v.play(ch.url, ch.userAgent ?: repo.userAgent, ch.referrer)
+            resetVlcWatch()
+            v.play(ch.url, ch.userAgent ?: repo.userAgent, ch.referrer, hardware = !EnginePrefs.vlcSoftware(this, ch.url))
             return
         }
         val p = player ?: return
@@ -642,7 +757,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun checkFrames() {
         if (vlc != null) {
-            if (!revealed && SystemClock.elapsedRealtime() - hiddenSince > MAX_HIDDEN_MS) reveal()
+            checkVlc()
             return
         }
         val p = player ?: return
@@ -680,7 +795,10 @@ class PlayerActivity : AppCompatActivity() {
             now - lastPosAt > STUCK_TIMEOUT_MS -> "playback stuck"
             else -> return
         }
-        if (recoveries >= MAX_RECOVERIES) return
+        if (recoveries >= MAX_RECOVERIES) {
+            tryOtherEngine("ExoPlayer: $reason")
+            return
+        }
         // No picture at all in strict key-frame mode: this stream probably never sends IDR frames.
         if (reason == "no picture") channels.getOrNull(index)?.let { PlayerFactory.looseKeyframes.add(it.url) }
         recoveries++
@@ -750,6 +868,7 @@ class PlayerActivity : AppCompatActivity() {
             handler.postDelayed(retry, (1500L * retries).coerceAtMost(6000L))
             return
         }
+        if (tryOtherEngine("ExoPlayer: ${error.errorCodeName}")) return
         tvError.text = getString(R.string.err_stream, error.errorCodeName)
         pbStart.visibility = View.GONE
         channels.getOrNull(index)?.let { ProblemLog.add(this, it.name, "error ${error.errorCodeName}") }
@@ -1308,6 +1427,10 @@ class PlayerActivity : AppCompatActivity() {
         private const val STABLE_FRAMES = 12
         private const val MAX_HIDDEN_MS = 9_000L
         private const val VLC_REVEAL_MS = 900L
+        private const val VLC_NO_PICTURE_MS = 6_000L
+        private const val VLC_FROZEN_MS = 4_000L
+        private const val VLC_EARLY_FROZEN_MS = 2_000L
+        private const val VLC_STUCK_MS = 12_000L
         private const val STUCK_TIMEOUT_MS = 8_000L
         private const val MAX_RECOVERIES = 4
         private const val INFO_MS = 4_000L

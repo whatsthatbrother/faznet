@@ -120,3 +120,27 @@ object Parental {
         return list.filter { it.group !in locked }
     }
 }
+
+/**
+ * Per-channel engine memory: a channel that kept failing with one engine opens with the one that worked,
+ * and a channel whose picture stays black with the TV's video decoder in VLC is decoded by the CPU.
+ */
+object EnginePrefs {
+    const val EXO = "exo"
+    const val VLC = "vlc"
+
+    private fun sp(c: Context) = c.applicationContext.getSharedPreferences("engine_memory", Context.MODE_PRIVATE)
+    private fun key(url: String) = url.hashCode().toString(36) + "_" + url.length
+
+    fun override(c: Context, url: String): String? = sp(c).getString("e_" + key(url), null)
+
+    fun setOverride(c: Context, url: String, engine: String?) {
+        val s = sp(c)
+        if (s.all.size > 4000) s.edit().clear().apply()
+        if (engine == null) s.edit().remove("e_" + key(url)).apply() else s.edit().putString("e_" + key(url), engine).apply()
+    }
+
+    fun vlcSoftware(c: Context, url: String): Boolean = sp(c).getBoolean("s_" + key(url), false)
+
+    fun setVlcSoftware(c: Context, url: String, on: Boolean) = sp(c).edit().putBoolean("s_" + key(url), on).apply()
+}

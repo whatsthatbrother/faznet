@@ -73,4 +73,18 @@ object Reports {
         val crash = runCatching { f.readText() }.getOrDefault("")
         if (post(repo, "crash", "Crash:\n$crash\n\n" + summary(c, repo))) f.delete()
     }
+
+    /**
+     * Once a day at most: if the problem log has new entries since the last report, send it by itself
+     * (only when automatic reports are on), so problems reach the developer without anyone pressing a button.
+     */
+    suspend fun sendDailyIfNeeded(c: Context, repo: Repository) {
+        if (!repo.autoReports) return
+        val sp = c.applicationContext.getSharedPreferences("reports", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (now - sp.getLong("auto_at", 0) < 24 * 3600_000L) return
+        val top = ProblemLog.read(c).firstOrNull() ?: return
+        if (top == sp.getString("auto_top", null)) return
+        if (post(repo, "auto", summary(c, repo))) sp.edit().putLong("auto_at", now).putString("auto_top", top).apply()
+    }
 }

@@ -1,3 +1,14 @@
+## Faznet v2.1.0
+
+**Shqip:** Pamje blu-vjollcë në stilin e Smart IPTV; VLC tani rihap vetë kanalin kur figura ngrin ose ndalet, provon decoder-in software kur figura mbetet e zezë, dhe kalon te ExoPlayer kur një kanal nuk punon me VLC (dhe anasjelltas). Ndërrim më i shpejtë i kanaleve me VLC, playlistat hapen më shpejt pas rinisjes, ditari i problemeve dërgohet vetë një herë në ditë.
+
+- Blue-violet look in the style of Smart IPTV (home, dialogs, player overlays)
+- VLC freeze watchdog: re-open on frozen picture / stuck playback; software decoding for channels that stay black
+- Per-channel engine fallback: a channel that keeps failing with one engine opens with the other one, and is remembered
+- One shared LibVLC instance (faster zapping), prepared in the background at app start
+- Parsed playlists cached in a binary file (faster start after a restart)
+- Problem log sent automatically once a day when there are new entries (if automatic reports are on)
+
 ## Faznet v2.0.0
 
 **Shqip:** Ekrani kryesor i ri, i bërë me Jetpack Compose për telekomandë dhe prekje: karta më të mëdha me logo, kanali i fokusuar zmadhohet me kornizë portokalli, kërkimi hapet në dritare të vogël, fokusi kthehet te kanali i fundit. Përfshin gjithçka nga 1.4.0 (filma, seriale, udhërrëfyes me catch-up, raportet e problemeve).

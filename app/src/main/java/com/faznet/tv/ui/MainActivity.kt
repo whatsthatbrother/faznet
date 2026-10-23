@@ -62,7 +62,12 @@ class MainActivity : AppCompatActivity(), HomeActions {
         autoPlayPending = savedInstanceState == null && repo.autoPlayLast
         if (savedInstanceState == null) {
             checkForUpdate()
-            lifecycleScope.launch { com.faznet.tv.data.Reports.sendPendingCrash(this@MainActivity, repo) }
+            lifecycleScope.launch {
+                com.faznet.tv.data.Reports.sendPendingCrash(this@MainActivity, repo)
+                com.faznet.tv.data.Reports.sendDailyIfNeeded(this@MainActivity, repo)
+            }
+            // The VLC engine is prepared in the background, so the first channel opens sooner.
+            if (repo.useVlc) com.faznet.tv.player.VlcEngine.warmUp(applicationContext)
         }
         if (BuildConfig.DEBUG && repo.playlists().none { it.name == "Test2 (debug)" } &&
             runCatching { assets.open("test.m3u").close() }.isSuccess) addDebugTestPlaylist()

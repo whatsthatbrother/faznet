@@ -125,7 +125,7 @@
     <string name="report_explain">Dërgon ditarin e problemeve, versionin e aplikacionit dhe modelin e pajisjes te zhvilluesi. Nuk dërgohen adresat e listave as fjalëkalimet.</string>
     <string name="report_sent">Raporti u dërgua — faleminderit!</string>
     <string name="report_failed">Raporti nuk u dërgua (s\'ka internet?)</string>
-    <string name="auto_reports">Dërgo automatikisht raportet e mbylljeve te zhvilluesi (pa të dhëna nga listat)</string>
+    <string name="auto_reports">Dërgo automatikisht te zhvilluesi crash-et dhe ditarin e problemeve (një herë në ditë), pa të dhëna të playlistës</string>
     <string name="movies">Filma</string>
     <string name="series">Seriale</string>
     <string name="guide">Udhërrëfyesi TV</string>

@@ -20,16 +20,7 @@ class VlcEngine(context: Context, private val layout: VLCVideoLayout, private va
         fun onVlcEnded()
     }
 
-    private val lib = LibVLC(
-        context.applicationContext,
-        arrayListOf(
-            "--network-caching=1500",
-            "--live-caching=1500",
-            "--http-reconnect",
-            "--no-stats",
-            "--no-sub-autodetect-file",
-        )
-    )
+    private val lib = shared(context)
 
     private val mp = MediaPlayer(lib).apply {
         attachViews(layout, null, true, false)
@@ -45,17 +36,34 @@ class VlcEngine(context: Context, private val layout: VLCVideoLayout, private va
     }
 
     private var released = false
+    private var media: Media? = null
 
-    fun play(url: String, userAgent: String, referrer: String?) {
+    /** [hardware] false = decode the picture with the CPU (for channels the TV's decoder shows black or frozen). */
+    fun play(url: String, userAgent: String, referrer: String?, hardware: Boolean = true) {
         if (released) return
-        val media = Media(lib, Uri.parse(url))
-        media.setHWDecoderEnabled(true, false)
-        media.addOption(":http-user-agent=$userAgent")
-        referrer?.let { media.addOption(":http-referrer=$it") }
-        media.addOption(":network-caching=1500")
-        mp.media = media
-        media.release()
+        val m = Media(lib, Uri.parse(url))
+        m.setHWDecoderEnabled(hardware, false)
+        m.addOption(":http-user-agent=$userAgent")
+        referrer?.let { m.addOption(":http-referrer=$it") }
+        m.addOption(":network-caching=1500")
+        mp.media = m
+        media?.release()
+        media = m
         mp.play()
+    }
+
+    /** Counters used by the freeze watchdog (null while nothing is open). */
+    class Progress(val pictures: Long, val audio: Long, val bytes: Long, val time: Long)
+
+    fun progress(): Progress? {
+        if (released) return null
+        val st = runCatching { media?.stats }.getOrNull() ?: return null
+        return Progress(
+            pictures = st.displayedPictures.toLong() + st.decodedVideo.toLong(),
+            audio = st.decodedAudio.toLong(),
+            bytes = st.readBytes.toLong(),
+            time = runCatching { mp.time }.getOrDefault(0L),
+        )
     }
 
     fun stop() {
@@ -102,6 +110,30 @@ class VlcEngine(context: Context, private val layout: VLCVideoLayout, private va
         runCatching { mp.stop() }
         runCatching { mp.detachViews() }
         runCatching { mp.release() }
-        runCatching { lib.release() }
+        runCatching { media?.release() }
+        media = null
+        // The LibVLC instance itself is shared and stays alive: creating it costs a lot on a TV stick.
+    }
+
+    companion object {
+        @Volatile private var instance: LibVLC? = null
+
+        /** One LibVLC for the whole app: only the media player is new for every channel. */
+        fun shared(context: Context): LibVLC = instance ?: synchronized(this) {
+            instance ?: LibVLC(
+                context.applicationContext,
+                arrayListOf(
+                    "--network-caching=1500",
+                    "--live-caching=1500",
+                    "--http-reconnect",
+                    "--no-sub-autodetect-file",
+                )
+            ).also { instance = it }
+        }
+
+        /** Create it in the background before the first channel opens. */
+        fun warmUp(context: Context) {
+            Thread { runCatching { shared(context) } }.apply { priority = Thread.MIN_PRIORITY }.start()
+        }
     }
 }

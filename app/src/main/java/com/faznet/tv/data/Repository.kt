@@ -45,6 +45,7 @@ class Repository private constructor(private val ctx: Context) {
         val rest = playlists().filter { it.id != id }
         savePlaylists(rest)
         cacheFile(id).delete()
+        binFile(id).delete()
         prefs.edit().remove("fav_$id").remove("recent_$id").remove("last_$id").apply()
         if (activeId == id) activeId = rest.firstOrNull()?.id
     }
@@ -71,11 +72,53 @@ class Repository private constructor(private val ctx: Context) {
         // so coming back to the main screen or switching groups never re-parses them.
         val stamp = file.lastModified() xor file.length()
         parsed[p.id]?.let { (s, list) -> if (s == stamp) return@withContext list }
-        val list = file.inputStream().buffered(256 * 1024).reader(Charsets.UTF_8).buffered(256 * 1024).use {
+        // After a restart: the ready-made copy of the parsed list opens several times faster than the M3U text.
+        val list = readBinary(p.id, stamp) ?: file.inputStream().buffered(256 * 1024).reader(Charsets.UTF_8).buffered(256 * 1024).use {
             M3uParser.parse(it, ctx.getString(R.string.group_uncategorized))
-        }
+        }.also { writeBinary(p.id, stamp, it) }
         parsed[p.id] = stamp to list
         list
+    }
+
+    private fun binFile(id: String) = File(cacheDir, "$id.bin")
+
+    private fun readBinary(id: String, stamp: Long): List<Channel>? = try {
+        val f = binFile(id)
+        if (!f.exists()) null
+        else java.io.DataInputStream(f.inputStream().buffered(256 * 1024)).use { d ->
+            if (d.readInt() != BIN_MAGIC || d.readLong() != stamp) return@use null
+            val n = d.readInt()
+            val out = ArrayList<Channel>(n)
+            fun opt(): String? = if (d.readBoolean()) d.readUTF() else null
+            repeat(n) {
+                out.add(Channel(d.readInt(), d.readUTF(), d.readUTF(), opt(), d.readUTF(), opt(), opt()))
+            }
+            out
+        }
+    } catch (e: Exception) {
+        binFile(id).delete()
+        null
+    }
+
+    private fun writeBinary(id: String, stamp: Long, list: List<Channel>) {
+        val f = binFile(id)
+        val tmp = File(cacheDir, "$id.bin.part")
+        try {
+            java.io.DataOutputStream(tmp.outputStream().buffered(256 * 1024)).use { d ->
+                fun utf(v: String) = d.writeUTF(if (v.length > 20_000) v.take(20_000) else v)
+                fun opt(v: String?) { d.writeBoolean(v != null); if (v != null) utf(v) }
+                d.writeInt(BIN_MAGIC)
+                d.writeLong(stamp)
+                d.writeInt(list.size)
+                for (c in list) {
+                    d.writeInt(c.number); utf(c.name); utf(c.url); opt(c.logo); utf(c.group); opt(c.userAgent); opt(c.referrer)
+                }
+            }
+            if (f.exists()) f.delete()
+            tmp.renameTo(f)
+        } catch (e: Exception) {
+            tmp.delete()
+        }
     }
 
     private val parsed = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<Channel>>>()
@@ -263,6 +306,7 @@ class Repository private constructor(private val ctx: Context) {
     companion object {
         const val DEFAULT_UA = "Faznet/1.0 (Linux; Android)"
         private const val KEY_PLAYLISTS = "playlists"
+        private const val BIN_MAGIC = 0x465A4E31 // "FZN1"
         private const val KEY_ACTIVE = "active"
         private const val KEY_UA = "user_agent"
         private const val KEY_AUTOPLAY = "autoplay_last"

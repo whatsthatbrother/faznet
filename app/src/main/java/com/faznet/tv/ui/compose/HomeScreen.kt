@@ -111,7 +111,7 @@ fun HomeScreen(state: HomeState, actions: HomeActions, wide: Boolean, tv: Boolea
     Column(
         Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF151A24), Fz.bg)))
+            .background(Brush.linearGradient(listOf(Fz.bgTop, Fz.bg, Color(0xFF070A20))))
             .padding(if (tv) PaddingValues(horizontal = 32.dp, vertical = 16.dp) else PaddingValues(0.dp))
     ) {
         TopBar(state, actions, wide)
@@ -306,7 +306,7 @@ private fun ChannelCard(ch: Channel, index: Int, state: HomeState, actions: Home
             Modifier.fillMaxSize().padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(ch.number.toString(), color = if (focused) Fz.accent else Fz.dim, fontSize = 13.sp,
+            Text(ch.number.toString(), color = if (focused) Color.White else Fz.dim, fontSize = 13.sp,
                 textAlign = TextAlign.Center, modifier = Modifier.width(38.dp))
             Box(
                 Modifier.size(width = 70.dp, height = 48.dp).background(Color(0xFF0B0E13), RoundedCornerShape(8.dp)),
@@ -328,10 +328,10 @@ private fun ChannelCard(ch: Channel, index: Int, state: HomeState, actions: Home
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     if (dead) stringResource(R.string.channel_dead) else ch.group,
-                    color = if (dead) Fz.accent2 else Fz.dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = if (dead) Color(0xFFFF6B81) else if (focused) Color.White.copy(alpha = 0.8f) else Fz.dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (fav) Icon(painterResource(R.drawable.ic_star), null, tint = Fz.accent, modifier = Modifier.size(20.dp))
+            if (fav) Icon(painterResource(R.drawable.ic_star), null, tint = Color(0xFFFFC94D), modifier = Modifier.size(20.dp))
         }
     }
 }

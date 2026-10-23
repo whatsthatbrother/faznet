@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -35,14 +36,19 @@ import androidx.compose.ui.zIndex
 
 /** Faznet colours (same as res/values/colors.xml). */
 object Fz {
-    val bg = Color(0xFF0E1116)
-    val surface = Color(0xFF171B22)
-    val surface2 = Color(0xFF202632)
-    val accent = Color(0xFFFF6A3D)
-    val accent2 = Color(0xFFE8364F)
-    val text = Color(0xFFE8EAED)
-    val dim = Color(0xFF9AA3AE)
-    val line = Color(0xFF2A3140)
+    val bg = Color(0xFF0B1030)
+    val bgTop = Color(0xFF1B2266)
+    val surface = Color(0xFF141B45)
+    val surface2 = Color(0xFF1E2766)
+    val accent = Color(0xFF4F6BFF)
+    val accent2 = Color(0xFF8A4DFF)
+    val text = Color(0xFFEEF1FF)
+    val dim = Color(0xFFA0A8D0)
+    val line = Color(0xFF2A3475)
+    val selected = Color(0x404F6BFF)
+
+    /** The focused item: blue to violet, like Smart IPTV. */
+    val focusBrush = Brush.horizontalGradient(listOf(accent, accent2))
 }
 
 @Composable
@@ -63,7 +69,7 @@ fun FaznetTheme(content: @Composable () -> Unit) {
 
 /**
  * A focusable, clickable box made for the TV remote and for touch:
- * OK = click, OK held = long click; grows and gets an orange frame when focused.
+ * OK = click, OK held = long click; grows and turns blue-violet when focused.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -76,7 +82,8 @@ fun FocusBox(
     shape: Shape = RoundedCornerShape(12.dp),
     color: Color = Fz.surface,
     focusedColor: Color = Fz.surface2,
-    selectedColor: Color = Color(0x33FF6A3D),
+    selectedColor: Color = Fz.selected,
+    focusedBrush: Brush? = Fz.focusBrush,
     focusScale: Float = 1.04f,
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
@@ -95,8 +102,8 @@ fun FocusBox(
             .zIndex(if (focused) 1f else 0f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(shape)
-            .background(bg)
-            .border(if (focused) 2.dp else 0.dp, if (focused) Fz.accent else Color.Transparent, shape)
+            .then(if (focused && focusedBrush != null) Modifier.background(focusedBrush) else Modifier.background(bg))
+            .border(if (focused) 1.dp else 0.dp, if (focused) Color.White.copy(alpha = 0.35f) else Color.Transparent, shape)
             .onFocusChanged {
                 if (focused != it.isFocused) {
                     focused = it.isFocused

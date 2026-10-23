@@ -12,6 +12,21 @@
         <item name="android:navigationBarColor">@color/bg</item>
         <item name="android:textColorPrimary">@color/text</item>
         <item name="android:textColorSecondary">@color/text_dim</item>
+        <!-- Dialogs, buttons and switches in the same blue-violet look (no default Material purple) -->
+        <item name="colorOnSurface">@color/text</item>
+        <item name="colorOnSurfaceVariant">@color/text_dim</item>
+        <item name="colorSurfaceVariant">@color/surface2</item>
+        <item name="colorSurfaceContainerLowest">@color/bg</item>
+        <item name="colorSurfaceContainerLow">@color/surface</item>
+        <item name="colorSurfaceContainer">@color/surface</item>
+        <item name="colorSurfaceContainerHigh">@color/dialog_bg</item>
+        <item name="colorSurfaceContainerHighest">@color/surface2</item>
+        <item name="colorPrimaryContainer">@color/surface2</item>
+        <item name="colorOnPrimaryContainer">@color/text</item>
+        <item name="colorSecondaryContainer">@color/accent</item>
+        <item name="colorOnSecondaryContainer">#FFFFFF</item>
+        <item name="colorTertiary">@color/accent2</item>
+        <item name="colorOutline">@color/line</item>
     </style>
 
     <style name="Theme.Faznet.Player" parent="Theme.Faznet">

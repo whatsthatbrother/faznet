@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#0E1116</color>
-    <color name="surface">#171B22</color>
-    <color name="surface2">#202632</color>
-    <color name="accent">#FF6A3D</color>
-    <color name="accent2">#E8364F</color>
-    <color name="text">#E8EAED</color>
-    <color name="text_dim">#9AA3AE</color>
-    <color name="focus_bg">#33FF6A3D</color>
-    <color name="overlay">#CC0E1116</color>
-    <color name="line">#2A3140</color>
+    <!-- 2.1: blue-violet look in the style of Smart IPTV -->
+    <color name="bg">#0B1030</color>
+    <color name="surface">#141B45</color>
+    <color name="surface2">#1E2766</color>
+    <color name="accent">#4F6BFF</color>
+    <color name="accent2">#8A4DFF</color>
+    <color name="text">#EEF1FF</color>
+    <color name="text_dim">#A0A8D0</color>
+    <color name="focus_bg">#404F6BFF</color>
+    <color name="overlay">#CC0B1030</color>
+    <color name="line">#2A3475</color>
+    <color name="dialog_bg">#1A2257</color>
 </resources>
