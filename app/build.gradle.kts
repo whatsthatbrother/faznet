@@ -22,8 +22,6 @@ android {
         versionCode = 11
         versionName = "1.3.0"
 
-        // ARM only: Android TV sticks, phones and BlueStacks (ARM translation). Keeps the APK about 30 MB with VLC.
-        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
 
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
         val server = (project.findProperty("faznetServer") as String?) ?: "https://faznet.diarfazliu.workers.dev"
@@ -62,6 +60,17 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    // One APK per processor type (VLC is big): armeabi-v7a (~25 MB) for TV sticks such as the Mi TV Stick,
+    // arm64-v8a for newer 64-bit-only devices.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = false
         }
     }
 
