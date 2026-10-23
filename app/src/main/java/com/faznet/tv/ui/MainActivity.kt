@@ -449,6 +449,8 @@ class MainActivity : AppCompatActivity() {
         cbFfmpeg.isChecked = repo.useFfmpeg
         val cbStats = v.findViewById<CheckBox>(R.id.cbStats)
         cbStats.isChecked = repo.showStats
+        val cbVlc = v.findViewById<CheckBox>(R.id.cbVlc)
+        cbVlc.isChecked = repo.useVlc
         val cbSoftSd = v.findViewById<CheckBox>(R.id.cbSoftSd)
         cbSoftSd.isChecked = repo.softwareSd
         ua.setText(repo.customUserAgent)
@@ -466,6 +468,7 @@ class MainActivity : AppCompatActivity() {
                 repo.useFfmpeg = cbFfmpeg.isChecked
                 repo.showStats = cbStats.isChecked
                 repo.softwareSd = cbSoftSd.isChecked
+                repo.useVlc = cbVlc.isChecked
             }
             .setNegativeButton(R.string.cancel, null)
             .show()

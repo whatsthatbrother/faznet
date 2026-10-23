@@ -117,4 +117,7 @@
     <string name="update_no_browser">Kjo pajisje nuk ka shfletues — shkarkoje nga GitHub në një pajisje tjetër.</string>
     <string name="software_sd">Decoder software për kanalet SD — provoje nëse kanalet SD ngrijnë në TV stick</string>
     <string name="made_by">Made by d1@r.f</string>
+    <string name="engine">Motori i player-it</string>
+    <string name="engine_now">Motori i player-it: %1$s</string>
+    <string name="use_vlc">Motori VLC — më tolerant me kanalet që nisin keq ose ngrijnë (provoje nëse ExoPlayer ka probleme)</string>
 </resources>

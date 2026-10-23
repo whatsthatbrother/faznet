@@ -19,8 +19,11 @@ android {
         applicationId = "com.faznet.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.2.2"
+        versionCode = 11
+        versionName = "1.3.0"
+
+        // ARM only: Android TV sticks, phones and BlueStacks (ARM translation). Keeps the APK about 30 MB with VLC.
+        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
 
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
         val server = (project.findProperty("faznetServer") as String?) ?: "https://faznet.diarfazliu.workers.dev"
@@ -104,4 +107,6 @@ dependencies {
     implementation("io.coil-kt:coil:2.7.0")
     // Installs the ahead-of-time (baseline) profiles also for APKs installed outside Google Play
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    // Second player engine (Settings → VLC): tolerant of badly started / damaged IPTV streams
+    implementation("org.videolan.android:libvlc-all:3.7.6")
 }

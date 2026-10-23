@@ -228,6 +228,11 @@ class Repository private constructor(private val ctx: Context) {
         get() = prefs.getBoolean("software_sd", false)
         set(v) = prefs.edit().putBoolean("software_sd", v).apply()
 
+    /** Player engine: false = ExoPlayer (Media3), true = VLC (more tolerant of broken IPTV streams). */
+    var useVlc: Boolean
+        get() = prefs.getBoolean("use_vlc", false)
+        set(v) = prefs.edit().putBoolean("use_vlc", v).apply()
+
     var showStats: Boolean
         get() = prefs.getBoolean(KEY_STATS, false)
         set(v) = prefs.edit().putBoolean(KEY_STATS, v).apply()

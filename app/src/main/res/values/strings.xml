@@ -118,4 +118,7 @@
     <string name="update_no_browser">No browser on this device — download it from GitHub on another device.</string>
     <string name="software_sd">Software video decoder for SD channels — try it if SD channels freeze on a TV stick</string>
     <string name="made_by">Made by d1@r.f</string>
+    <string name="engine">Player engine</string>
+    <string name="engine_now">Player engine: %1$s</string>
+    <string name="use_vlc">VLC player engine — more tolerant of channels that start badly or freeze (try it if ExoPlayer struggles)</string>
 </resources>
