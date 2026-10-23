@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // The release key is NOT in the repository (see signingConfigs below).
@@ -19,8 +20,8 @@ android {
         applicationId = "com.faznet.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.4.0"
+        versionCode = 20
+        versionName = "2.0.0"
 
 
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
@@ -81,6 +82,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 
     compileOptions {
@@ -123,4 +125,12 @@ dependencies {
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     // Second player engine (Settings → VLC): tolerant of badly started / damaged IPTV streams
     implementation("org.videolan.android:libvlc-all:3.7.6")
+    // 2.0: the screens are drawn with Jetpack Compose (made for the TV remote and for touch)
+    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    implementation(composeBom)
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("io.coil-kt:coil-compose:2.7.0")
 }

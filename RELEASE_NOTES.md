@@ -1,3 +1,16 @@
+## Faznet v2.0.0
+
+**Shqip:** Ekrani kryesor i ri, i bërë me Jetpack Compose për telekomandë dhe prekje: karta më të mëdha me logo, kanali i fokusuar zmadhohet me kornizë portokalli, kërkimi hapet në dritare të vogël, fokusi kthehet te kanali i fundit. Përfshin gjithçka nga 1.4.0 (filma, seriale, udhërrëfyes me catch-up, raportet e problemeve).
+
+- New home screen built with Jetpack Compose (TV remote + touch): bigger channel cards, focus zoom and frame, groups open while moving over them
+- Search in a small dialog (no keyboard popping up while moving with the remote)
+- Focus starts on the last watched channel; returning from the player focuses the channel that was playing
+- Includes 1.4.0: movies & series, TV guide with catch-up, resume, problem reports to the developer, crash reports, playlist switch in the player
+
+## Faznet v1.4.0
+
+**Shqip:** Filma dhe seriale (Xtream), udhërrëfyesi TV me catch-up, vazhdo aty ku e le, dërgimi i problemeve te zhvilluesi, ndrrimi i playlistës nga player-i, VLC si motor kryesor në TV.
+
 ## Faznet v1.3.0
 
 **Shqip:** Motori i dytë VLC (Settings ose opsionet në player); dy APK: "TV" (~25 MB, për Mi TV Stick dhe TV stick të tjerë) dhe "arm64" (~28 MB, për pajisje të reja 64-bit). Edhe 1.2.2: hapje më e shpejtë e kanaleve dhe nisje më e shpejtë e aplikacionit.

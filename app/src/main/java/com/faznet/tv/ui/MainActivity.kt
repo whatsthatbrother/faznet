@@ -7,15 +7,17 @@ import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
-import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import com.faznet.tv.ui.compose.EmptyInfo
+import com.faznet.tv.ui.compose.FaznetTheme
+import com.faznet.tv.ui.compose.HomeActions
+import com.faznet.tv.ui.compose.HomeScreen
+import com.faznet.tv.ui.compose.HomeState
 import com.faznet.tv.BuildConfig
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
@@ -33,20 +35,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), HomeActions {
 
     private lateinit var repo: Repository
-    private lateinit var groupAdapter: GroupAdapter
-    private lateinit var channelAdapter: ChannelAdapter
-    private lateinit var tvPlaylist: TextView
-    private lateinit var etSearch: EditText
-    private lateinit var rvGroups: RecyclerView
-    private lateinit var rvChannels: RecyclerView
-    private lateinit var progress: ProgressBar
-    private lateinit var emptyBox: View
-    private lateinit var emptyTitle: TextView
-    private lateinit var emptyText: TextView
-    private lateinit var emptyButton: Button
+    /** Everything the (Compose) home screen shows. */
+    private val ui = HomeState()
 
     private var playlist: Playlist? = null
     private var all: List<Channel> = emptyList()
@@ -61,58 +54,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
         repo = Repository.get(this)
-        findViewById<View>(android.R.id.content).applyTvSafeArea()
-
-        tvPlaylist = findViewById(R.id.tvPlaylist)
-        etSearch = findViewById(R.id.etSearch)
-        rvGroups = findViewById(R.id.rvGroups)
-        rvChannels = findViewById(R.id.rvChannels)
-        progress = findViewById(R.id.progress)
-        emptyBox = findViewById(R.id.emptyBox)
-        emptyTitle = findViewById(R.id.emptyTitle)
-        emptyText = findViewById(R.id.emptyText)
-        emptyButton = findViewById(R.id.emptyButton)
-
         val wide = resources.getBoolean(R.bool.wide)
-        if (!wide) {
-            findViewById<View>(R.id.tvBrand).visibility = View.GONE
-            findViewById<View>(R.id.clock).visibility = View.GONE
-        }
-        groupAdapter = GroupAdapter(
-            horizontal = !wide, selectOnFocus = wide,
-            onSelect = { key, click -> selectGroup(key, click) },
-            onLongSelect = { key -> confirmCheck(key) },
-        )
-        rvGroups.itemAnimator = null
-        rvGroups.layoutManager = LinearLayoutManager(
-            this, if (wide) RecyclerView.VERTICAL else RecyclerView.HORIZONTAL, false
-        )
-        rvGroups.adapter = groupAdapter
-
-        channelAdapter = ChannelAdapter(onClick = { pos -> openPlayer(pos) }, onLongClick = { ch -> toggleFavorite(ch) })
-        rvChannels.layoutManager = GridLayoutManager(this, spanCount(wide))
-        rvChannels.adapter = channelAdapter
-        rvChannels.setHasFixedSize(true)
-        rvChannels.itemAnimator = null
-
-        etSearch.doAfterTextChanged { applyFilter() }
-        tvPlaylist.setOnClickListener { openPlaylists() }
-        findViewById<View>(R.id.btnPlaylists).setOnClickListener { openPlaylists() }
-        findViewById<View>(R.id.btnRefresh).setOnClickListener { refreshAll() }
-        findViewById<View>(R.id.btnDevice).setOnClickListener { openDevice() }
-        if (BuildConfig.DEBUG) findViewById<View>(R.id.btnRefresh).setOnLongClickListener {
-            addDebugTestPlaylist(); true
-        }
-        findViewById<View>(R.id.btnSettings).setOnClickListener { showSettings() }
-        findViewById<View>(R.id.btnMovies).setOnClickListener { LibraryActivity.start(this, series = false) }
-        findViewById<View>(R.id.btnSeries).setOnClickListener { LibraryActivity.start(this, series = true) }
-        findViewById<View>(R.id.btnGuide).setOnClickListener {
-            ChannelStore.playlistId = playlist?.id ?: ""
-            ChannelStore.all = all
-            GuideActivity.start(this)
-        }
+        val tv = isTv()
+        setContent { FaznetTheme { HomeScreen(ui, this, wide, tv) } }
 
         autoPlayPending = savedInstanceState == null && repo.autoPlayLast
         if (savedInstanceState == null) {
@@ -121,6 +66,42 @@ class MainActivity : AppCompatActivity() {
         }
         if (BuildConfig.DEBUG && repo.playlists().none { it.name == "Test2 (debug)" } &&
             runCatching { assets.open("test.m3u").close() }.isSuccess) addDebugTestPlaylist()
+    }
+
+    // ---------- HomeActions (called by the Compose screen) ----------
+    override fun openChannel(index: Int) = openPlayer(index)
+    override fun checkGroup(key: String) = confirmCheck(key)
+    override fun playlists() = openPlaylists()
+    override fun refresh() = refreshAll()
+    override fun debugPlaylist() { if (BuildConfig.DEBUG) addDebugTestPlaylist() }
+    override fun device() = openDevice()
+    override fun settings() = showSettings()
+    override fun movies() = LibraryActivity.start(this, series = false)
+    override fun series() = LibraryActivity.start(this, series = true)
+    override fun guide() {
+        ChannelStore.playlistId = playlist?.id ?: ""
+        ChannelStore.all = all
+        GuideActivity.start(this)
+    }
+
+    /** Search: a small dialog with a text field (works with the TV remote's keyboard); the list filters while typing. */
+    override fun search() {
+        val et = EditText(this).apply {
+            hint = getString(R.string.search_hint)
+            setSingleLine()
+            setText(ui.query)
+            setSelection(text.length)
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            doAfterTextChanged { ui.query = it?.toString() ?: ""; applyFilter() }
+        }
+        val d = MaterialAlertDialogBuilder(this)
+            .setView(padded(et))
+            .setPositiveButton(android.R.string.ok, null)
+            .setNeutralButton(R.string.clear) { _, _ -> ui.query = ""; applyFilter() }
+            .show()
+        et.setOnEditorActionListener { _, _, _ -> d.dismiss(); true }
+        et.requestFocus()
+        d.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
     }
 
     override fun onResume() {
@@ -166,7 +147,7 @@ class MainActivity : AppCompatActivity() {
         syncFromWeb(force = true) {
             repo.activePlaylist()?.let { p ->
                 playlist = p
-                tvPlaylist.text = p.name
+                ui.playlistName = p.name
                 load(p, true)
             }
         }
@@ -198,35 +179,19 @@ class MainActivity : AppCompatActivity() {
         if (p == null) {
             loadedPlaylistId = null
             all = emptyList(); byUrl = emptyMap(); visible = emptyList()
-            groupAdapter.submit(emptyList(), KEY_ALL)
-            channelAdapter.submit(emptyList(), emptySet())
-            tvPlaylist.text = getString(R.string.add_playlist)
+            ui.groups = emptyList(); ui.channels = emptyList(); ui.xtream = false
+            ui.playlistName = ""
             val msg = if (repo.serverUrl.isEmpty()) getString(R.string.welcome_msg)
             else getString(R.string.welcome_msg) + "\n\n" + getString(R.string.welcome_mac, repo.deviceMac)
-            showEmpty(getString(R.string.welcome_title), msg, getString(R.string.add_playlist)) {
-                openPlaylists(add = true)
-            }
-            findViewById<Button>(R.id.emptyButton2).apply {
-                visibility = View.VISIBLE
-                setOnClickListener { openDevice() }
-            }
-            if (BuildConfig.DEBUG) {
-                val demo = findViewById<Button>(R.id.emptyButton3)
-                demo.visibility = View.VISIBLE
-                demo.setOnClickListener {
-                    demo.visibility = View.GONE
-                    addDebugTestPlaylist()
-                }
-            }
+            ui.empty = EmptyInfo(
+                getString(R.string.welcome_title), msg, getString(R.string.add_playlist), { openPlaylists(add = true) },
+                showDevice = true, showDemo = BuildConfig.DEBUG,
+            )
             return
         }
-        findViewById<View>(R.id.emptyButton2).visibility = View.GONE
-        findViewById<View>(R.id.emptyButton3).visibility = View.GONE
-        tvPlaylist.text = p.name
+        ui.playlistName = p.name
         // Movies, series and the TV guide come from the Xtream account behind the playlist.
-        val xtream = com.faznet.tv.data.XtreamAccount.from(p) != null
-        for (id in intArrayOf(R.id.btnMovies, R.id.btnSeries, R.id.btnGuide))
-            findViewById<View>(id).visibility = if (xtream) View.VISIBLE else View.GONE
+        ui.xtream = com.faznet.tv.data.XtreamAccount.from(p) != null
         if (p.id != loadedPlaylistId) {
             load(p, false)
         } else {
@@ -237,26 +202,15 @@ class MainActivity : AppCompatActivity() {
 
     /** Coming back from the player on TV: put the D-pad focus on the channel that was playing. */
     private fun restoreFocusToLastPlayed() {
+        if (!isTv()) return
         val url = ChannelStore.lastPlayedUrl ?: return
-        if (rvChannels.isInTouchMode) return
-        val i = visible.indexOfFirst { it.url == url }
-        if (i < 0) return
-        rvChannels.scrollToPosition(i)
-        rvChannels.post {
-            rvChannels.findViewHolderForAdapterPosition(i)?.itemView?.requestFocus()
-        }
-    }
-
-    private fun spanCount(wide: Boolean): Int {
-        val widthDp = resources.configuration.screenWidthDp - (if (wide) 280 else 0) - (if (isTv()) 64 else 0)
-        // TV cards can be narrower: the remote doesn't need big touch targets, more channels fit on screen.
-        return (widthDp / (if (isTv()) 210 else 320)).coerceIn(1, 4)
+        if (visible.any { it.url == url }) ui.focusUrl = url
     }
 
     private fun load(p: Playlist, force: Boolean) {
         loadJob?.cancel()
-        emptyBox.visibility = View.GONE
-        progress.visibility = View.VISIBLE
+        ui.empty = null
+        ui.loading = true
         loadJob = lifecycleScope.launch {
             try {
                 val list = repo.loadChannels(p, force)
@@ -264,8 +218,10 @@ class MainActivity : AppCompatActivity() {
                 byUrl = list.associateBy { it.url }
                 loadedPlaylistId = p.id
                 selectedGroup = KEY_ALL
-                progress.visibility = View.GONE
+                ui.loading = false
                 rebuild(keepScroll = false)
+                if (isTv()) visible.firstOrNull { it.url == repo.lastChannel(p.id) }?.let { ui.focusUrl = it.url }
+                    ?: visible.firstOrNull()?.let { ui.focusUrl = it.url }
                 if (!hintShown && list.isNotEmpty()) {
                     hintShown = true
                     Toast.makeText(this@MainActivity, R.string.hint_long_press, Toast.LENGTH_LONG).show()
@@ -276,14 +232,11 @@ class MainActivity : AppCompatActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                progress.visibility = View.GONE
+                ui.loading = false
                 loadedPlaylistId = null
-                all = emptyList(); byUrl = emptyMap()
-                groupAdapter.submit(emptyList(), KEY_ALL)
-                channelAdapter.submit(emptyList(), emptySet())
-                showEmpty(p.name, getString(R.string.err_load, e.safeMessage()), getString(R.string.retry)) {
-                    load(p, true)
-                }
+                all = emptyList(); byUrl = emptyMap(); visible = emptyList()
+                ui.groups = emptyList(); ui.channels = emptyList()
+                ui.empty = EmptyInfo(p.name, getString(R.string.err_load, e.safeMessage()), getString(R.string.retry), { load(p, true) })
             }
         }
     }
@@ -319,19 +272,19 @@ class MainActivity : AppCompatActivity() {
         job = lifecycleScope.launch {
             var bad = 0
             list.forEachIndexed { i, ch ->
-                if (!ChannelCheck.check(ch, repo.userAgent)) bad++
+                if (!ChannelCheck.check(ch, repo.userAgent)) { bad++; ui.checkVersion++ }
                 dialog.setMessage(getString(R.string.check_progress, i + 1, list.size, bad))
                 delay(250) // gentle on the provider (connection limits)
             }
             dialog.dismiss()
-            channelAdapter.notifyDataSetChanged()
+            ui.checkVersion++
             MaterialAlertDialogBuilder(this@MainActivity)
                 .setTitle(R.string.check_title)
                 .setMessage(getString(R.string.check_done, list.size - bad, bad))
                 .setPositiveButton(android.R.string.ok, null)
                 .show()
         }
-        job?.invokeOnCompletion { channelAdapter.notifyDataSetChanged() }
+        job?.invokeOnCompletion { ui.checkVersion++ }
     }
 
     private fun refreshInBackground(p: Playlist) {
@@ -349,19 +302,20 @@ class MainActivity : AppCompatActivity() {
         val favs = repo.favorites(p.id)
         val items = groupItems(favs)
         if (items.none { it.key == selectedGroup }) selectedGroup = KEY_ALL
-        groupAdapter.submit(items, selectedGroup)
+        ui.groups = items
+        ui.selectedGroup = selectedGroup
         applyFilter(keepScroll)
     }
 
-    private fun selectGroup(key: String, fromClick: Boolean = true) {
+    override fun selectGroup(key: String, fromClick: Boolean) {
         if (Parental.isLocked(this, key)) {
             // Locked group: only a real click asks for the PIN (not the D-pad passing over it).
-            if (fromClick) askParentalPin { rebuild(keepScroll = false); selectGroup(key) }
+            if (fromClick) askParentalPin { rebuild(keepScroll = false); selectGroup(key, true) }
             return
         }
-        if (key == selectedGroup && groupAdapter.selectedKey == key) return
+        if (key == selectedGroup && ui.selectedGroup == key) return
         selectedGroup = key
-        groupAdapter.select(key)
+        ui.selectedGroup = key
         applyFilter()
     }
 
@@ -369,40 +323,22 @@ class MainActivity : AppCompatActivity() {
         val p = playlist ?: return
         if (loadedPlaylistId == null) return
         val favs = repo.favorites(p.id)
-        if (Parental.isLocked(this, selectedGroup)) selectedGroup = KEY_ALL
+        if (Parental.isLocked(this, selectedGroup)) { selectedGroup = KEY_ALL; ui.selectedGroup = KEY_ALL }
         val base = Parental.visible(this, when (selectedGroup) {
             KEY_ALL -> all
             KEY_FAV -> all.filter { favs.contains(it.url) }
             KEY_RECENT -> repo.recents(p.id).mapNotNull { byUrl[it] }
             else -> all.filter { it.group == selectedGroup }
         })
-        val q = etSearch.text.toString().trim().lowercase()
+        val q = ui.query.trim().lowercase()
         visible = if (q.isEmpty()) base else base.filter { it.name.lowercase().contains(q) }
-        channelAdapter.submit(visible, favs)
-        if (!keepScroll) rvChannels.scrollToPosition(0)
-        if (visible.isEmpty()) {
-            showEmpty("", getString(R.string.no_channels), null, null)
-        } else {
-            emptyBox.visibility = View.GONE
-        }
+        ui.favs = favs
+        ui.channels = visible
+        if (!keepScroll) ui.scrollTop++
+        ui.empty = if (visible.isEmpty()) EmptyInfo("", getString(R.string.no_channels)) else null
     }
 
-    private fun showEmpty(title: String, msg: String, button: String?, action: (() -> Unit)?) {
-        emptyBox.visibility = View.VISIBLE
-        emptyTitle.text = title
-        emptyTitle.visibility = if (title.isEmpty()) View.GONE else View.VISIBLE
-        emptyText.text = msg
-        if (button != null && action != null) {
-            emptyButton.visibility = View.VISIBLE
-            emptyButton.text = button
-            emptyButton.setOnClickListener { action() }
-            emptyButton.requestFocus()
-        } else {
-            emptyButton.visibility = View.GONE
-        }
-    }
-
-    private fun toggleFavorite(ch: Channel) {
+    override fun toggleFavorite(ch: Channel) {
         val p = playlist ?: return
         val added = repo.toggleFavorite(p.id, ch.url)
         Toast.makeText(this, if (added) R.string.fav_added else R.string.fav_removed, Toast.LENGTH_SHORT).show()
@@ -410,8 +346,8 @@ class MainActivity : AppCompatActivity() {
             rebuild(keepScroll = true)
         } else {
             val favs = repo.favorites(p.id)
-            channelAdapter.updateFavorites(favs)
-            groupAdapter.submit(groupItems(favs), selectedGroup)
+            ui.favs = favs
+            ui.groups = groupItems(favs)
         }
     }
 
@@ -434,7 +370,7 @@ class MainActivity : AppCompatActivity() {
         ChannelStore.playlistId = p.id
         ChannelStore.all = all
         ChannelStore.current = visible
-        ChannelStore.groupKey = if (etSearch.text.isNullOrBlank()) selectedGroup else null
+        ChannelStore.groupKey = if (ui.query.isBlank()) selectedGroup else null
         startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_INDEX, position))
     }
 
