@@ -66,7 +66,7 @@ class GroupAdapter(
     override fun onBindViewHolder(h: VH, position: Int) {
         val item = items[position]
         h.name.text = item.title
-        h.count.text = item.count.toString()
+        h.count.text = if (item.count >= 0) item.count.toString() else ""
         h.itemView.isSelected = item.key == selectedKey
         h.itemView.setOnClickListener { onSelect(item.key, true) }
         h.itemView.setOnLongClickListener { onLongSelect(item.key); true }

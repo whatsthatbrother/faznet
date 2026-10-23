@@ -12,4 +12,5 @@
     <dimen name="infobar_logo_w">72dp</dimen>
     <dimen name="infobar_logo_h">48dp</dimen>
     <dimen name="infobar_pad">20dp</dimen>
+    <dimen name="poster_h">150dp</dimen>
 </resources>

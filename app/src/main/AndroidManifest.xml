@@ -41,6 +41,21 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.LibraryActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
+
+        <activity
+            android:name=".ui.GuideActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.VodPlayerActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
+            android:exported="false"
+            android:theme="@style/Theme.Faznet.Player" />
+
+        <activity
             android:name=".ui.PlayerActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="false"

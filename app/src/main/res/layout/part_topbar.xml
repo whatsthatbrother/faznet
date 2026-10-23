@@ -53,6 +53,27 @@
         android:textStyle="bold" />
 
     <ImageButton
+        android:id="@+id/btnGuide"
+        style="@style/IconButton"
+        android:contentDescription="@string/guide"
+        android:src="@drawable/ic_guide"
+        android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/btnMovies"
+        style="@style/IconButton"
+        android:contentDescription="@string/movies"
+        android:src="@drawable/ic_movie"
+        android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/btnSeries"
+        style="@style/IconButton"
+        android:contentDescription="@string/series"
+        android:src="@drawable/ic_series"
+        android:visibility="gone" />
+
+    <ImageButton
         android:id="@+id/btnDevice"
         style="@style/IconButton"
         android:contentDescription="@string/device_title"

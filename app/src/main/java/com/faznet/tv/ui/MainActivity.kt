@@ -106,9 +106,19 @@ class MainActivity : AppCompatActivity() {
             addDebugTestPlaylist(); true
         }
         findViewById<View>(R.id.btnSettings).setOnClickListener { showSettings() }
+        findViewById<View>(R.id.btnMovies).setOnClickListener { LibraryActivity.start(this, series = false) }
+        findViewById<View>(R.id.btnSeries).setOnClickListener { LibraryActivity.start(this, series = true) }
+        findViewById<View>(R.id.btnGuide).setOnClickListener {
+            ChannelStore.playlistId = playlist?.id ?: ""
+            ChannelStore.all = all
+            GuideActivity.start(this)
+        }
 
         autoPlayPending = savedInstanceState == null && repo.autoPlayLast
-        if (savedInstanceState == null) checkForUpdate()
+        if (savedInstanceState == null) {
+            checkForUpdate()
+            lifecycleScope.launch { com.faznet.tv.data.Reports.sendPendingCrash(this@MainActivity, repo) }
+        }
         if (BuildConfig.DEBUG && repo.playlists().none { it.name == "Test2 (debug)" } &&
             runCatching { assets.open("test.m3u").close() }.isSuccess) addDebugTestPlaylist()
     }
@@ -213,6 +223,10 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.emptyButton2).visibility = View.GONE
         findViewById<View>(R.id.emptyButton3).visibility = View.GONE
         tvPlaylist.text = p.name
+        // Movies, series and the TV guide come from the Xtream account behind the playlist.
+        val xtream = com.faznet.tv.data.XtreamAccount.from(p) != null
+        for (id in intArrayOf(R.id.btnMovies, R.id.btnSeries, R.id.btnGuide))
+            findViewById<View>(id).visibility = if (xtream) View.VISIBLE else View.GONE
         if (p.id != loadedPlaylistId) {
             load(p, false)
         } else {
@@ -425,8 +439,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeAutoPlay(p: Playlist) {
-        if (!autoPlayPending) return
+        if (!autoPlayPending && !ChannelStore.autoPlayNext) return
         autoPlayPending = false
+        ChannelStore.autoPlayNext = false
         val last = repo.lastChannel(p.id) ?: return
         val idx = all.indexOfFirst { it.url == last }
         if (idx < 0 || Parental.isLocked(this, all[idx].group)) return
@@ -449,6 +464,8 @@ class MainActivity : AppCompatActivity() {
         cbFfmpeg.isChecked = repo.useFfmpeg
         val cbStats = v.findViewById<CheckBox>(R.id.cbStats)
         cbStats.isChecked = repo.showStats
+        val cbReports = v.findViewById<CheckBox>(R.id.cbReports)
+        cbReports.isChecked = repo.autoReports
         val cbVlc = v.findViewById<CheckBox>(R.id.cbVlc)
         cbVlc.isChecked = repo.useVlc
         val cbSoftSd = v.findViewById<CheckBox>(R.id.cbSoftSd)
@@ -469,6 +486,7 @@ class MainActivity : AppCompatActivity() {
                 repo.showStats = cbStats.isChecked
                 repo.softwareSd = cbSoftSd.isChecked
                 repo.useVlc = cbVlc.isChecked
+                repo.autoReports = cbReports.isChecked
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -482,6 +500,24 @@ class MainActivity : AppCompatActivity() {
             .setMessage(if (lines.isEmpty()) getString(R.string.problem_log_empty) else lines.joinToString("\n"))
             .setPositiveButton(android.R.string.ok, null)
             .setNeutralButton(R.string.clear) { _, _ -> ProblemLog.clear(this) }
+            .setNegativeButton(R.string.report_send) { _, _ -> sendReport() }
+            .show()
+    }
+
+    /** Sends the problem log + device info to the developer (Faznet server). */
+    private fun sendReport() {
+        val et = EditText(this).apply { hint = getString(R.string.report_note_hint) }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.report_send)
+            .setMessage(R.string.report_explain)
+            .setView(padded(et))
+            .setPositiveButton(R.string.report_send) { _, _ ->
+                lifecycleScope.launch {
+                    val ok = com.faznet.tv.data.Reports.sendManual(this@MainActivity, repo, et.text.toString())
+                    Toast.makeText(this@MainActivity, if (ok) R.string.report_sent else R.string.report_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 

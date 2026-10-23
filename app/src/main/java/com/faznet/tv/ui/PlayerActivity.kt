@@ -264,6 +264,7 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnStats).setOnClickListener { toggleStats(); bumpOptions() }
         findViewById<View>(R.id.btnTracks).setOnClickListener { hideOptions(); showTracks() }
         findViewById<View>(R.id.btnSleep).setOnClickListener { hideOptions(); showSleep() }
+        findViewById<View>(R.id.btnPlaylistSwitch).setOnClickListener { hideOptions(); switchPlaylist() }
         findViewById<View>(R.id.btnEngine).setOnClickListener {
             hideOptions()
             repo.useVlc = !repo.useVlc
@@ -551,12 +552,14 @@ class PlayerActivity : AppCompatActivity() {
             tvError.visibility = View.GONE
             // Audio-only channels never get a video output: show them after a moment anyway.
             handler.removeCallbacks(vlcReveal)
-            handler.postDelayed(vlcReveal, 1500)
+            handler.postDelayed(vlcReveal, 2000)
         }
 
         override fun onVlcVideo() {
+            // VLC shows a few damaged frames until the first key frame arrives: keep them behind the
+            // loading circle a little longer so the channel appears clean.
             handler.removeCallbacks(vlcReveal)
-            handler.postDelayed(vlcReveal, 300)
+            handler.postDelayed(vlcReveal, VLC_REVEAL_MS)
         }
 
         override fun onVlcError() = vlcFailed("error")
@@ -1019,6 +1022,25 @@ class PlayerActivity : AppCompatActivity() {
             .show()
     }
 
+    /** Another playlist straight from the player: the main screen loads it and opens its last channel. */
+    private fun switchPlaylist() {
+        val lists = repo.playlists()
+        if (lists.size < 2) { toast(getString(R.string.playlists_only_one)); return }
+        val current = lists.indexOfFirst { it.id == ChannelStore.playlistId }
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.playlists_switch)
+            .setSingleChoiceItems(lists.map { it.name }.toTypedArray(), current) { d, which ->
+                d.dismiss()
+                if (which != current) {
+                    repo.activeId = lists[which].id
+                    ChannelStore.autoPlayNext = true
+                    finish()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     private var sleepAt = 0L
     private val sleepRunnable = Runnable { finishAffinity() }
 
@@ -1285,6 +1307,7 @@ class PlayerActivity : AppCompatActivity() {
         private const val EARLY_FROZEN_MS = 1_000L
         private const val STABLE_FRAMES = 12
         private const val MAX_HIDDEN_MS = 9_000L
+        private const val VLC_REVEAL_MS = 900L
         private const val STUCK_TIMEOUT_MS = 8_000L
         private const val MAX_RECOVERIES = 4
         private const val INFO_MS = 4_000L

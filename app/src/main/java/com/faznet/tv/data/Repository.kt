@@ -16,6 +16,11 @@ class Repository private constructor(private val ctx: Context) {
 
     private val prefs = ctx.getSharedPreferences("faznet", Context.MODE_PRIVATE)
     private val cacheDir = File(ctx.filesDir, "playlists").apply { mkdirs() }
+    private val isTv: Boolean by lazy {
+        (ctx.getSystemService(Context.UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType ==
+            android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
+            ctx.packageManager.hasSystemFeature("android.software.leanback")
+    }
 
     // ---------- playlists ----------
     fun playlists(): List<Playlist> {
@@ -62,10 +67,18 @@ class Repository private constructor(private val ctx: Context) {
             download(url, file)
         }
         if (!file.exists()) throw IOException("Playlist file missing")
-        file.bufferedReader(Charsets.UTF_8).use {
+        // Big lists (thousands of channels) are parsed once and kept in memory while the file is unchanged,
+        // so coming back to the main screen or switching groups never re-parses them.
+        val stamp = file.lastModified() xor file.length()
+        parsed[p.id]?.let { (s, list) -> if (s == stamp) return@withContext list }
+        val list = file.inputStream().buffered(256 * 1024).reader(Charsets.UTF_8).buffered(256 * 1024).use {
             M3uParser.parse(it, ctx.getString(R.string.group_uncategorized))
         }
+        parsed[p.id] = stamp to list
+        list
     }
+
+    private val parsed = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<Channel>>>()
 
     /** How old the cached copy of a downloadable playlist is (Long.MAX_VALUE if there is none). */
     fun cacheAgeMs(p: Playlist): Long {
@@ -230,8 +243,14 @@ class Repository private constructor(private val ctx: Context) {
 
     /** Player engine: false = ExoPlayer (Media3), true = VLC (more tolerant of broken IPTV streams). */
     var useVlc: Boolean
-        get() = prefs.getBoolean("use_vlc", false)
+        // VLC opens IPTV channels faster and cleaner on TV sticks; ExoPlayer stays the default elsewhere.
+        get() = prefs.getBoolean("use_vlc", isTv)
         set(v) = prefs.edit().putBoolean("use_vlc", v).apply()
+
+    /** Send crash reports to the Faznet server automatically (no playlist data). */
+    var autoReports: Boolean
+        get() = prefs.getBoolean("auto_reports", true)
+        set(v) = prefs.edit().putBoolean("auto_reports", v).apply()
 
     var showStats: Boolean
         get() = prefs.getBoolean(KEY_STATS, false)
@@ -269,4 +288,6 @@ object ChannelStore {
     /** Group the player starts in (MainActivity.KEY_* or a group name); null = the `current` list as-is (search). */
     var groupKey: String? = null
     var lastPlayedUrl: String? = null
+    /** Set by the player's "switch playlist": open the new playlist's last channel once it is loaded. */
+    var autoPlayNext = false
 }

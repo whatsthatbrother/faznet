@@ -46,6 +46,12 @@
         android:text="@string/show_stats" />
 
     <CheckBox
+        android:id="@+id/cbReports"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/auto_reports" />
+
+    <CheckBox
         android:id="@+id/cbVlc"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    android:keepScreenOn="true">
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/vodPlayerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:show_buffering="always" />
+
+    <TextView
+        android:id="@+id/vodTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="@drawable/bg_top_scrim"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:paddingStart="@dimen/infobar_pad"
+        android:paddingTop="16dp"
+        android:paddingEnd="@dimen/infobar_pad"
+        android:paddingBottom="32dp"
+        android:textColor="#FFFFFF"
+        android:textSize="@dimen/overlay_title"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/vodError"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_panel"
+        android:padding="16dp"
+        android:textColor="#FFFFFF"
+        android:visibility="gone" />
+</FrameLayout>

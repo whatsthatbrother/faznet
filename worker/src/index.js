@@ -190,6 +190,41 @@ export default {
       return json({ ok: true, playlists: rest.map(forWeb) });
     }
 
+    // ---------- problem reports from the app ----------
+    if (path === "/api/report" && request.method === "POST") {
+      const b = await body(request);
+      const text = String(b.text || "").slice(0, 20000);
+      if (!text) return json({ error: "fields" }, 400);
+      const now = Date.now();
+      const rep = {
+        at: now,
+        kind: String(b.kind || "manual").slice(0, 20),
+        mac: normMac(b.mac).slice(0, 17),
+        version: String(b.version || "").slice(0, 20),
+        device: String(b.device || "").slice(0, 120),
+        text,
+      };
+      // Newest first in KV listings: the key starts with an inverted timestamp. Kept for 30 days.
+      const key = `rep:${String(9999999999999 - now).padStart(13, "0")}-${token(4)}`;
+      await env.FAZNET.put(key, JSON.stringify(rep), { expirationTtl: 30 * 86400 });
+      return json({ ok: true });
+    }
+
+    if (path === "/admin/reports" && request.method === "GET") {
+      if (!env.SECRET || url.searchParams.get("key") !== env.SECRET) return new Response("Forbidden", { status: 403 });
+      const list = await env.FAZNET.list({ prefix: "rep:", limit: 100 });
+      const reps = (await Promise.all(list.keys.map((k) => env.FAZNET.get(k.name, "json")))).filter(Boolean);
+      if (url.searchParams.get("format") === "json") return json({ reports: reps });
+      const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+      const rows = reps.map((r) => `<section><h3>${esc(new Date(r.at).toLocaleString("sq-AL", { timeZone: "Europe/Belgrade" }))} · ${esc(r.kind)} · v${esc(r.version)}</h3>` +
+        `<p>${esc(r.device)} · MAC ${esc(r.mac)}</p><pre>${esc(r.text)}</pre></section>`).join("") || "<p>Asnjë raport.</p>";
+      const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
+        `<title>Faznet reports</title><style>body{font:14px system-ui;background:#0e1116;color:#e8eaed;margin:16px;max-width:900px}` +
+        `section{background:#171b22;border-radius:10px;padding:12px;margin:12px 0}h3{margin:0 0 4px;color:#ff6a3d;font-size:15px}` +
+        `p{margin:0 0 8px;color:#9aa3ae}pre{white-space:pre-wrap;margin:0;font-size:12px}</style><h1>Faznet · raportet (${reps.length})</h1>${rows}`;
+      return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    }
+
     if (path === "/" || path === "/health") return json({ ok: true, service: "faznet" });
     return json({ error: "not_found" }, 404);
   },

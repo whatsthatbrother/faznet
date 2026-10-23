@@ -121,4 +121,23 @@
     <string name="engine">Player engine</string>
     <string name="engine_now">Player engine: %1$s</string>
     <string name="use_vlc">VLC player engine — more tolerant of channels that start badly or freeze (try it if ExoPlayer struggles)</string>
+    <string name="report_send">Send to developer</string>
+    <string name="report_note_hint">What happened? (optional)</string>
+    <string name="report_explain">Sends the problem log, app version and device model to the developer. No playlist addresses or passwords are sent.</string>
+    <string name="report_sent">Report sent — thank you!</string>
+    <string name="report_failed">Could not send the report (no connection?)</string>
+    <string name="auto_reports">Send crash reports to the developer automatically (no playlist data)</string>
+    <string name="movies">Movies</string>
+    <string name="series">Series</string>
+    <string name="guide">TV guide</string>
+    <string name="no_items">Nothing here</string>
+    <string name="guide_none">The TV guide needs an Xtream Codes playlist</string>
+    <string name="guide_empty">No programme information for this channel</string>
+    <string name="catchup_days">catch-up %1$d days</string>
+    <string name="catchup_not_available">This programme is not in the archive</string>
+    <string name="programme_later">This programme has not started yet</string>
+    <string name="badge_live">LIVE</string>
+    <string name="badge_catchup">⏪ Watch</string>
+    <string name="playlists_switch">Switch playlist</string>
+    <string name="playlists_only_one">You have only one playlist</string>
 </resources>

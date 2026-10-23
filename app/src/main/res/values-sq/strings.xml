@@ -120,4 +120,23 @@
     <string name="engine">Motori i player-it</string>
     <string name="engine_now">Motori i player-it: %1$s</string>
     <string name="use_vlc">Motori VLC — më tolerant me kanalet që nisin keq ose ngrijnë (provoje nëse ExoPlayer ka probleme)</string>
+    <string name="report_send">Dërgo te zhvilluesi</string>
+    <string name="report_note_hint">Çfarë ndodhi? (opsionale)</string>
+    <string name="report_explain">Dërgon ditarin e problemeve, versionin e aplikacionit dhe modelin e pajisjes te zhvilluesi. Nuk dërgohen adresat e listave as fjalëkalimet.</string>
+    <string name="report_sent">Raporti u dërgua — faleminderit!</string>
+    <string name="report_failed">Raporti nuk u dërgua (s\'ka internet?)</string>
+    <string name="auto_reports">Dërgo automatikisht raportet e mbylljeve te zhvilluesi (pa të dhëna nga listat)</string>
+    <string name="movies">Filma</string>
+    <string name="series">Seriale</string>
+    <string name="guide">Udhërrëfyesi TV</string>
+    <string name="no_items">Nuk ka asgjë këtu</string>
+    <string name="guide_none">Udhërrëfyesi kërkon një listë Xtream Codes</string>
+    <string name="guide_empty">Nuk ka informacion programi për këtë kanal</string>
+    <string name="catchup_days">arkiv %1$d ditë</string>
+    <string name="catchup_not_available">Ky emision nuk është në arkiv</string>
+    <string name="programme_later">Ky emision ende nuk ka filluar</string>
+    <string name="badge_live">LIVE</string>
+    <string name="badge_catchup">⏪ Shiko</string>
+    <string name="playlists_switch">Ndërro listën</string>
+    <string name="playlists_only_one">Ke vetëm një listë</string>
 </resources>

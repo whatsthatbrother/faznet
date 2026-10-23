@@ -79,6 +79,12 @@
             android:src="@drawable/ic_sleep" />
 
         <ImageButton
+            android:id="@+id/btnPlaylistSwitch"
+            style="@style/IconButton"
+            android:contentDescription="@string/playlists_switch"
+            android:src="@drawable/ic_playlist" />
+
+        <ImageButton
             android:id="@+id/btnEngine"
             style="@style/IconButton"
             android:contentDescription="@string/engine"
