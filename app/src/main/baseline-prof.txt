@@ -1,0 +1,5 @@
+# Faznet baseline profile: compile the app's own code ahead of time on install, so the first screens,
+# the channel list and the player start faster on slow TV sticks. Library profiles (Media3, RecyclerView,
+# AppCompat...) ship inside the libraries; profileinstaller applies them for APKs installed outside Play.
+HSPLcom/faznet/tv/**->**(**)**
+Lcom/faznet/tv/**;

@@ -384,8 +384,25 @@ class PlayerActivity : AppCompatActivity() {
         pbStart.visibility = View.VISIBLE
     }
 
+    /** Channels known to freeze on their first opening are re-opened at once, before any frozen picture. */
+    private var preReopened = false
+
+    private fun maybePreReopen() {
+        val ch = channels.getOrNull(index) ?: return
+        if (preReopened || recoveries > 0 || pendingZap >= 0) return
+        if (ChannelMemory.startFreezes(this, ch.url) < 2) return
+        preReopened = true
+        lastWarning = "quick re-open (known slow start)"
+        handler.post {
+            freshPlayer()
+            startCurrent()
+        }
+    }
+
     private fun reveal() {
         if (revealed) return
+        // Opened cleanly on the first try: this channel needs the quick re-open less and less.
+        if (!preReopened && recoveries == 0) channels.getOrNull(index)?.let { ChannelMemory.cleanStart(this, it.url) }
         revealed = true
         playerView.alpha = 1f
         player?.volume = 1f
@@ -407,6 +424,7 @@ class PlayerActivity : AppCompatActivity() {
                         readySince = now
                         lastPosAt = now
                         lastRenderedAt = now
+                        maybePreReopen()
                     }
                     Player.STATE_BUFFERING -> {
                         stallCount++
@@ -469,6 +487,7 @@ class PlayerActivity : AppCompatActivity() {
         retries = 0
         httpRetried = false
         recoveries = 0
+        preReopened = false
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
         val ch = channels[index]
@@ -584,6 +603,7 @@ class PlayerActivity : AppCompatActivity() {
             // A freeze right at the start comes from the provider (the first seconds of a channel it just
             // started serving); it has nothing to do with the decoder, so don't switch decoders for it.
             if (!reason.endsWith("at start")) ChannelMemory.addFix(this, ch.url)
+            else ChannelMemory.addStartFreeze(this, ch.url)
             p.videoFormat?.let { ChannelMemory.rememberHeight(this, ch.url, it.height) }
             ProblemLog.add(this, ch.name, reason + if (softwareVideo) " (software)" else "")
         }
@@ -1138,7 +1158,8 @@ class PlayerActivity : AppCompatActivity() {
         private const val FIRST_FRAME_TIMEOUT_MS = 2_500L
         private const val FROZEN_TIMEOUT_MS = 2_500L
         private const val EARLY_WINDOW_MS = 6_000L
-        private const val EARLY_FROZEN_MS = 2_000L
+        // The picture is hidden during the start, so reacting quickly costs nothing visible.
+        private const val EARLY_FROZEN_MS = 1_000L
         private const val STABLE_FRAMES = 12
         private const val MAX_HIDDEN_MS = 9_000L
         private const val STUCK_TIMEOUT_MS = 8_000L

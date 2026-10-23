@@ -48,6 +48,22 @@ object ChannelMemory {
         put(c, url, Info(old?.type, old?.height ?: 0, ((old?.fixes ?: 0) + 1).coerceAtMost(99)))
     }
 
+    // ---- channels whose first opening freezes (the provider starts them badly): open them twice at once ----
+    private fun startPrefs(c: Context) = c.applicationContext.getSharedPreferences("start_freeze", Context.MODE_PRIVATE)
+
+    fun startFreezes(c: Context, url: String): Int = startPrefs(c).getInt(key(url), 0)
+
+    fun addStartFreeze(c: Context, url: String) {
+        val sp = startPrefs(c)
+        if (sp.all.size > MAX_ENTRIES) sp.edit().clear().apply()
+        sp.edit().putInt(key(url), (startFreezes(c, url) + 1).coerceAtMost(5)).apply()
+    }
+
+    fun cleanStart(c: Context, url: String) {
+        val n = startFreezes(c, url)
+        if (n > 0) startPrefs(c).edit().putInt(key(url), n - 1).apply()
+    }
+
     /** A channel that played cleanly several times is forgiven. */
     fun clearFixes(c: Context, url: String) {
         val old = get(c, url) ?: return

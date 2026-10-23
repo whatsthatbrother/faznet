@@ -19,8 +19,8 @@ android {
         applicationId = "com.faznet.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.2.1"
+        versionCode = 10
+        versionName = "1.2.2"
 
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
         val server = (project.findProperty("faznetServer") as String?) ?: "https://faznet.diarfazliu.workers.dev"
@@ -102,4 +102,6 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("io.coil-kt:coil:2.7.0")
+    // Installs the ahead-of-time (baseline) profiles also for APKs installed outside Google Play
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 }
