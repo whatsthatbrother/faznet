@@ -1,3 +1,12 @@
+## Faznet v1.3.0
+
+**Shqip:** Motori i dytë VLC (Settings ose opsionet në player); dy APK: "TV" (~25 MB, për Mi TV Stick dhe TV stick të tjerë) dhe "arm64" (~28 MB, për pajisje të reja 64-bit). Edhe 1.2.2: hapje më e shpejtë e kanaleve dhe nisje më e shpejtë e aplikacionit.
+
+- VLC (libVLC 3.7.6) as a second player engine: Settings → VLC engine, or long OK → engine button to switch while watching
+- Clean start, sound/subtitle picker and picture size also work with VLC
+- Per-ABI APKs: armeabi-v7a (TV sticks) and arm64-v8a; native libraries compressed
+- 1.2.2: hidden re-open after 1 s, slow-start channels re-opened right away, baseline profile (faster app start)
+
 ## Faznet v1.2.1
 
 **Shqip:** Nisje e pastër: kanali mbetet i fshehur pas rrethit të ngarkimit derisa figura të ecë normalisht — pa figurë të ngrirë kur ndërron kanal.

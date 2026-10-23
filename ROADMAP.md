@@ -20,6 +20,8 @@ Agreed with Diar on 2026-10-22. All items are in 1.1.4 (EPG: Xtream channels onl
 11. [x] Show the PIN only after pressing a button
 12. [x] Channel check: test the channels of a group in the background and mark dead ones (403/offline)
 
+# 1.3: VLC engine done. Next: EPG grid (XMLTV), Catch-up, VOD & series, Compose for TV UI (2.0)
+
 # Next (1.2) — agreed 2026-10-22, to do in the next session
 
 ## Credit
