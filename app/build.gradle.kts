@@ -65,6 +65,11 @@ android {
         }
     }
 
+    // Compress native libraries (VLC is ~85 MB uncompressed): the APK stays around 40 MB instead of 100 MB.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
+
     buildFeatures {
         buildConfig = true
     }
