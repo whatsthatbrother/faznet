@@ -315,6 +315,11 @@ class Repository private constructor(private val ctx: Context) {
         get() = prefs.getBoolean("auto_reports", true)
         set(v) = prefs.edit().putBoolean("auto_reports", v).apply()
 
+    /** Look for a new Faznet on the website and offer it (downloaded in the background). */
+    var autoUpdate: Boolean
+        get() = prefs.getBoolean("auto_update", true)
+        set(v) = prefs.edit().putBoolean("auto_update", v).apply()
+
     var showStats: Boolean
         get() = prefs.getBoolean(KEY_STATS, false)
         set(v) = prefs.edit().putBoolean(KEY_STATS, v).apply()

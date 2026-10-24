@@ -148,7 +148,6 @@ fun loadLogo(view: ImageView, url: String?) {
         view.load(R.drawable.ic_tv)
     } else {
         view.load(url) {
-            crossfade(true)
             placeholder(R.drawable.ic_tv)
             error(R.drawable.ic_tv)
         }

@@ -143,4 +143,18 @@
     <string name="section_start">Nisja</string>
     <string name="section_reports">Raportet e problemeve</string>
     <string name="section_other">Të tjera</string>
+    <string name="section_updates">Përditësimet</string>
+    <string name="auto_update">Përditësime automatike — versioni i ri shkarkohet në sfond dhe instalohet me një klik</string>
+    <string name="check_updates">Kontrollo për përditësime</string>
+    <string name="update_checking">Po kontrollohet për përditësime…</string>
+    <string name="update_none">Ke versionin më të ri (%1$s)</string>
+    <string name="update_downloading">Po shkarkohet përditësimi…</string>
+    <string name="update_download_failed">Përditësimi nuk u shkarkua (s’ka internet?)</string>
+    <string name="update_ready_title">Përditësimi gati</string>
+    <string name="update_ready_msg">Faznet %1$s u shkarkua (ke %2$s). Ta instaloj tani? Playlistat, të preferuarat dhe cilësimet mbeten.</string>
+    <string name="update_install">Përditëso tani</string>
+    <string name="update_installing">Po instalohet përditësimi…</string>
+    <string name="update_permission">Android kërkon lejen tënde një herë: lejo Faznet të instalojë aplikacione (“Install unknown apps”), pastaj kthehu.</string>
+    <string name="update_permission_manual">Hap Settings → Apps → Faznet → Install unknown apps dhe lejoje.</string>
+    <string name="update_failed">Përditësimi nuk u instalua %1$s</string>
 </resources>

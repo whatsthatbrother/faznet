@@ -26,6 +26,7 @@ class FaznetApp : Application(), ImageLoaderFactory {
         .diskCache { DiskCache.Builder().directory(cacheDir.resolve("logos")).maxSizeBytes(80L * 1024 * 1024).build() }
         // Many IPTV logo servers send no-cache headers; logos rarely change, so keep them anyway.
         .respectCacheHeaders(false)
-        .crossfade(true)
+        // No fade-in: logos appear at once and the TV stick's GPU has less to draw while scrolling.
+        .crossfade(false)
         .build()
 }

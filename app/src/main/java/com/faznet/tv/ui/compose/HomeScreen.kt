@@ -258,7 +258,10 @@ private fun ChannelArea(state: HomeState, actions: HomeActions, wide: Boolean, t
         val gridState = rememberLazyGridState()
         val minCell = if (tv) 230.dp else if (wide) 300.dp else 320.dp
         LaunchedEffect(state.scrollTop) { if (state.scrollTop > 0) gridState.scrollToItem(0) }
-        val target = state.focusUrl
+        val favs = state.favs
+        val check = state.checkVersion
+        val focusUrl = state.focusUrl
+        val target = focusUrl
         LaunchedEffect(target, channels) {
             if (target == null) return@LaunchedEffect
             val i = channels.indexOfFirst { it.url == target }
@@ -274,8 +277,12 @@ private fun ChannelArea(state: HomeState, actions: HomeActions, wide: Boolean, t
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            itemsIndexed(channels, key = { i, ch -> ch.url + "#" + i }) { i, ch ->
-                ChannelCard(ch, i, state, actions)
+            itemsIndexed(channels, key = { i, ch -> ch.url + "#" + i }, contentType = { _, _ -> "ch" }) { i, ch ->
+                // Plain values in, so Compose skips every card whose values did not change.
+                ChannelCard(
+                    ch, i, fav = ch.url in favs, check = check, focusMe = ch.url == focusUrl,
+                    onFocused = { state.focusUrl = null }, actions = actions,
+                )
             }
         }
         if (state.loading) CircularProgressIndicator(color = Fz.accent, modifier = Modifier.align(Alignment.Center).size(48.dp))
@@ -284,16 +291,17 @@ private fun ChannelArea(state: HomeState, actions: HomeActions, wide: Boolean, t
 }
 
 @Composable
-private fun ChannelCard(ch: Channel, index: Int, state: HomeState, actions: HomeActions) {
+private fun ChannelCard(
+    ch: Channel, index: Int, fav: Boolean, check: Int, focusMe: Boolean,
+    onFocused: () -> Unit, actions: HomeActions,
+) {
     val requester = remember { FocusRequester() }
-    val check = state.checkVersion // redraw after a channel check
     val dead = remember(ch.url, check) { ChannelCheck.isDead(ch.url) }
-    val fav = ch.url in state.favs
-    if (state.focusUrl == ch.url) {
+    if (focusMe) {
         LaunchedEffect(ch.url) {
             delay(30)
             runCatching { requester.requestFocus() }
-            state.focusUrl = null
+            onFocused()
         }
     }
     FocusBox(

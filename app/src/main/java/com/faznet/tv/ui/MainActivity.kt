@@ -118,6 +118,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
 
     override fun onResume() {
         super.onResume()
+        UpdateUi.resume(this)
         refreshState()
         syncFromWeb(force = false)
         startWelcomePolling()
@@ -461,32 +462,13 @@ class MainActivity : AppCompatActivity(), HomeActions {
 
     // ---------- update notice ----------
     /** Once a day: if a newer Faznet is published on GitHub, say so. */
+    /** At most every 6 hours: a newer Faznet on the website is downloaded quietly and offered for install. */
     private fun checkForUpdate() {
+        if (!repo.autoUpdate) return
         val prefs = getSharedPreferences("faznet_update", MODE_PRIVATE)
-        if (System.currentTimeMillis() - prefs.getLong("checked", 0) < 24 * 3600_000L) return
-        lifecycleScope.launch {
-            val latest = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    val req = okhttp3.Request.Builder().url(UPDATE_URL).header("Accept", "application/vnd.github+json").build()
-                    com.faznet.tv.net.Http.api.newCall(req).execute().use { r ->
-                        if (!r.isSuccessful) null
-                        else org.json.JSONObject(r.body?.string() ?: "").let { it.optString("tag_name") to it.optString("html_url") }
-                    }
-                }.getOrNull()
-            } ?: return@launch
-            prefs.edit().putLong("checked", System.currentTimeMillis()).apply()
-            val tag = latest.first.trimStart('v', 'V')
-            if (!isNewer(tag, BuildConfig.VERSION_NAME) || prefs.getString("dismissed", "") == tag) return@launch
-            MaterialAlertDialogBuilder(this@MainActivity)
-                .setTitle(R.string.update_title)
-                .setMessage(getString(R.string.update_msg, tag, BuildConfig.VERSION_NAME))
-                .setPositiveButton(R.string.update_open) { _, _ ->
-                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(latest.second))) }
-                        .onFailure { Toast.makeText(this@MainActivity, R.string.update_no_browser, Toast.LENGTH_LONG).show() }
-                }
-                .setNegativeButton(R.string.update_later) { _, _ -> prefs.edit().putString("dismissed", tag).apply() }
-                .show()
-        }
+        if (System.currentTimeMillis() - prefs.getLong("checked", 0) < 6 * 3600_000L) return
+        prefs.edit().putLong("checked", System.currentTimeMillis()).apply()
+        UpdateUi.run(this, interactive = false)
     }
 
     private fun isNewer(a: String, b: String): Boolean {
@@ -500,7 +482,6 @@ class MainActivity : AppCompatActivity(), HomeActions {
     }
 
     companion object {
-        private const val UPDATE_URL = "https://api.github.com/repos/whatsthatbrother/faznet/releases/latest"
         const val KEY_ALL = "\u0000all"
         const val KEY_FAV = "\u0000fav"
         const val KEY_RECENT = "\u0000recent"

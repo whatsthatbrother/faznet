@@ -1,3 +1,11 @@
+## Faznet v3.0.1
+
+**Shqip:** Përditësime nga vetë aplikacioni: versioni i ri shkarkohet në sfond nga faqja dhe instalohet me "Përditëso tani" (TV dhe telefon), pa humbur playlistat. Settings → Përditësimet. Kanalet dhe grupet lëvizin më shpejt.
+
+- In-app updates from the website (version.json + APK per device type), installed in place with Android's package installer
+- Settings: automatic updates on/off, "Check for updates"
+- Faster home grid: cards only redraw when their own data changes; logos without fade-in
+
 ## Faznet v3.0.0
 
 **Shqip:** Settings i ri (ekran i plotë, ndryshimet ruhen menjëherë), grupet ndërrohen më shpejt, ExoPlayer motori kryesor (VLC vetëm si rezervë për kanalet që nuk punojnë), "Hap kanalin e fundit" i fikur, problemet dërgohen vetë te zhvilluesi pa pyetur, dhe pas çinstalimit/instalimit pajisja e mban të njëjtin MAC + PIN (playlistat kthehen vetë nga faqja).

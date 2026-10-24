@@ -83,6 +83,7 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        UpdateUi.resume(this)
         refresh.intValue++
     }
 
@@ -100,6 +101,11 @@ class SettingsActivity : AppCompatActivity() {
             ProblemLog.read(this).size.let { if (it == 0) getString(R.string.problem_log_empty) else "$it" }
         }, R.drawable.ic_stats) { showProblemLog() },
         Item.Action(getString(R.string.report_send), { getString(R.string.report_explain) }, R.drawable.ic_check) { sendReport() },
+        Item.Header(getString(R.string.section_updates)),
+        Item.Toggle(getString(R.string.auto_update), { repo.autoUpdate }, { repo.autoUpdate = it }),
+        Item.Action(getString(R.string.check_updates), { "Faznet ${BuildConfig.VERSION_NAME}" }, R.drawable.ic_refresh) {
+            UpdateUi.run(this, interactive = true)
+        },
         Item.Header(getString(R.string.section_other)),
         Item.Action(getString(R.string.playlists), { repo.activePlaylist()?.name ?: "" }, R.drawable.ic_playlist) {
             startActivity(Intent(this, PlaylistsActivity::class.java))

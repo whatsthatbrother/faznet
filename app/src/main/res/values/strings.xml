@@ -144,4 +144,18 @@
     <string name="section_start">Start</string>
     <string name="section_reports">Problem reports</string>
     <string name="section_other">Other</string>
+    <string name="section_updates">Updates</string>
+    <string name="auto_update">Automatic updates — new versions download in the background and install with one click</string>
+    <string name="check_updates">Check for updates</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_none">You have the newest version (%1$s)</string>
+    <string name="update_downloading">Downloading the update…</string>
+    <string name="update_download_failed">Could not download the update (no connection?)</string>
+    <string name="update_ready_title">Update ready</string>
+    <string name="update_ready_msg">Faznet %1$s is downloaded (you have %2$s). Install it now? Your playlists, favourites and settings stay.</string>
+    <string name="update_install">Update now</string>
+    <string name="update_installing">Installing the update…</string>
+    <string name="update_permission">Android needs your OK once: allow Faznet to install apps (“Install unknown apps”), then come back.</string>
+    <string name="update_permission_manual">Open Settings → Apps → Faznet → Install unknown apps and allow it.</string>
+    <string name="update_failed">Update not installed %1$s</string>
 </resources>
