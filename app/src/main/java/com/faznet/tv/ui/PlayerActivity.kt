@@ -556,6 +556,8 @@ class PlayerActivity : AppCompatActivity() {
             retries = 0
             if (vlcPlayingAt == 0L) vlcPlayingAt = SystemClock.elapsedRealtime()
             tvError.visibility = View.GONE
+            // Channels known to start badly at the provider: re-open once right away, like with ExoPlayer.
+            maybePreReopen()
             // Audio-only channels never get a video output: show them after a moment anyway.
             handler.removeCallbacks(vlcReveal)
             handler.postDelayed(vlcReveal, 2000)
@@ -597,6 +599,7 @@ class PlayerActivity : AppCompatActivity() {
     private var vlcAudioAt = 0L
     private var vlcTimeAt = 0L
     private var vlcHealthySince = 0L
+    private var vlcOpenAt = 0L
 
     private fun resetVlcWatch() {
         val now = SystemClock.elapsedRealtime()
@@ -608,17 +611,28 @@ class PlayerActivity : AppCompatActivity() {
         vlcAudioAt = now
         vlcTimeAt = now
         vlcHealthySince = now
+        vlcOpenAt = now
     }
 
     private fun checkVlc() {
         val v = vlc ?: return
         val now = SystemClock.elapsedRealtime()
         if (!revealed && now - hiddenSince > MAX_HIDDEN_MS) reveal()
-        if (vlcPlayingAt == 0L || pendingZap >= 0) return
+        if (pendingZap >= 0) return
+        val ch0 = channels.getOrNull(index) ?: return
+        if (vlcPlayingAt == 0L) {
+            // Never started: the server accepted the connection but sends nothing usable. Re-open.
+            if (now - vlcOpenAt > VLC_OPEN_TIMEOUT_MS) vlcRecover(ch0, "no start")
+            return
+        }
         val pr = v.progress() ?: return
         val last = vlcLast
         vlcLast = pr
-        if (last == null) return
+        if (last == null) {
+            // Counting starts now, not when the channel was requested (opening can take a while).
+            vlcPicAt = now; vlcAudioAt = now; vlcTimeAt = now
+            return
+        }
         if (pr.pictures != last.pictures) {
             vlcPicAt = now
             if (pr.pictures > 0) vlcPicturesSeen = true
@@ -638,6 +652,11 @@ class PlayerActivity : AppCompatActivity() {
             }
             vlcPicturesSeen && audioRuns && now - vlcPicAt > (if (early) VLC_EARLY_FROZEN_MS else VLC_FROZEN_MS) ->
                 if (early) "picture frozen at start" else "picture frozen"
+            // Still behind the loading circle: the provider's first seconds are bad, re-open quickly (it fixes it).
+            !revealed && now - vlcTimeAt > VLC_EARLY_STUCK_MS && now - vlcAudioAt > VLC_EARLY_STUCK_MS -> {
+                ChannelMemory.addStartFreeze(this, ch.url)
+                "stuck at start"
+            }
             now - vlcTimeAt > VLC_STUCK_MS && now - vlcAudioAt > VLC_STUCK_MS -> "playback stuck"
             else -> {
                 // Healthy for a while: forgive earlier recoveries on this channel.
@@ -645,6 +664,10 @@ class PlayerActivity : AppCompatActivity() {
                 return
             }
         }
+        vlcRecover(ch, reason)
+    }
+
+    private fun vlcRecover(ch: Channel, reason: String) {
         if (recoveries >= MAX_RECOVERIES) {
             tryOtherEngine("VLC: $reason")
             return
@@ -1431,6 +1454,8 @@ class PlayerActivity : AppCompatActivity() {
         private const val VLC_FROZEN_MS = 4_000L
         private const val VLC_EARLY_FROZEN_MS = 2_000L
         private const val VLC_STUCK_MS = 12_000L
+        private const val VLC_EARLY_STUCK_MS = 3_000L
+        private const val VLC_OPEN_TIMEOUT_MS = 8_000L
         private const val STUCK_TIMEOUT_MS = 8_000L
         private const val MAX_RECOVERIES = 4
         private const val INFO_MS = 4_000L

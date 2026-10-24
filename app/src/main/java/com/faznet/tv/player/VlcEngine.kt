@@ -133,7 +133,7 @@ class VlcEngine(context: Context, private val layout: VLCVideoLayout, private va
 
         /** Create it in the background before the first channel opens. */
         fun warmUp(context: Context) {
-            Thread { runCatching { shared(context) } }.apply { priority = Thread.MIN_PRIORITY }.start()
+            Thread { runCatching { shared(context) } }.start()
         }
     }
 }
