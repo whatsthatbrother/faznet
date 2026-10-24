@@ -3,55 +3,222 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Faznet · Ngarko playlist</title>
-<meta name="description" content="Dërgo playlist-ën M3U ose Xtream në Faznet me MAC dhe PIN.">
+<title>Faznet · IPTV player falas për Android TV</title>
+<meta name="description" content="Faznet — player IPTV falas për Android TV dhe telefon. Shkarko APK-në dhe ngarko playlist-ën me MAC dhe PIN.">
+<meta name="theme-color" content="#0b1030">
 <link rel="icon" href="icon.png">
 <style>
-  :root{--bg:#0e1116;--surface:#171b22;--surface2:#202632;--line:#2a3140;--text:#e8eaed;--dim:#9aa3ae;--accent:#ff6a3d;--accent2:#e8364f;--ok:#2ec27e;--err:#ff5d6c}
+  :root{--bg:#0b1030;--surface:#141b45;--surface2:#1e2766;--line:#2a3475;--text:#eef1ff;--dim:#a0a8d0;--accent:#4f6bff;--accent2:#8a4dff;--ok:#2ec27e;--err:#ff5d6c;--gold:#ffc94d}
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-  .wrap{max-width:560px;margin:0 auto;padding:28px 16px 48px}
-  header{display:flex;align-items:center;gap:12px;margin-bottom:24px}
-  header img{width:44px;height:44px;border-radius:12px}
-  header h1{font-size:22px;margin:0}
-  header p{margin:0;color:var(--dim);font-size:13px}
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px}
-  h2{font-size:16px;margin:0 0 14px}
-  label{display:block;font-size:13px;color:var(--dim);margin:12px 0 6px}
-  input[type=text],input[type=password],input[type=url],input[type=file]{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px}
-  input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
-  .mac{font-family:ui-monospace,Consolas,monospace;letter-spacing:.06em;text-transform:uppercase}
-  button{display:inline-block;border:0;border-radius:10px;padding:12px 18px;font-weight:600;font-size:15px;cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;width:100%;margin-top:18px}
-  button:disabled{opacity:.6;cursor:wait}
-  .ghost{background:transparent;border:1px solid var(--line);color:var(--dim);width:auto;margin:0;padding:8px 12px;font-size:13px}
-  .msg{border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:14px;display:none}
-  .msg.err{display:block;background:rgba(255,93,108,.12);color:var(--err);border:1px solid rgba(255,93,108,.35)}
-  .msg.ok{display:block;background:rgba(46,194,126,.12);color:var(--ok);border:1px solid rgba(46,194,126,.35)}
-  .tabs{display:flex;gap:6px;background:var(--bg);padding:4px;border-radius:12px;border:1px solid var(--line)}
-  .tabs button{flex:1;margin:0;padding:9px 6px;border-radius:9px;background:transparent;color:var(--dim);font-weight:500;font-size:14px;width:auto}
-  .tabs button.on{background:var(--surface2);color:#fff}
-  .pane{display:none}.pane.on{display:block}
-  ul{list-style:none;margin:0;padding:0}
-  li{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
-  li:first-child{border-top:0}
-  li .n{flex:1;min-width:0}
-  li .n b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  li .n small{color:var(--dim)}
-  .steps{color:var(--dim);font-size:14px;margin:0;padding-left:18px}
-  .devline{display:flex;justify-content:space-between;align-items:center;color:var(--dim);font-size:13px;margin-bottom:16px;gap:8px}
-  .devline .mac{color:var(--text);font-size:15px}
-  .hidden{display:none}
-  footer{color:var(--dim);font-size:12px;text-align:center;margin-top:28px}
-  footer a{color:var(--dim)}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#2a2f8a 0%,transparent 60%),radial-gradient(900px 500px at -10% 10%,#3a1f7a 0%,transparent 55%),var(--bg);background-attachment:fixed;color:var(--text);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  a{color:inherit}
+  .container{max-width:1080px;margin:0 auto;padding:0 20px}
+  /* nav */
+  nav{position:sticky;top:0;z-index:10;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(11,16,48,.72);border-bottom:1px solid rgba(255,255,255,.06)}
+  nav .container{display:flex;align-items:center;gap:12px;height:64px}
+  nav .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;text-decoration:none}
+  nav .brand img{width:34px;height:34px;border-radius:10px}
+  nav .links{margin-left:auto;display:flex;gap:4px}
+  nav .links a{text-decoration:none;color:var(--dim);font-size:14px;padding:8px 12px;border-radius:999px}
+  nav .links a:hover{color:#fff;background:rgba(255,255,255,.06)}
+  nav .links a.cta{color:#fff;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  @media (max-width:640px){nav .links a:not(.cta){display:none}}
+  /* hero */
+  .hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:40px;align-items:center;padding-top:64px;padding-bottom:40px}
+  @media (max-width:880px){.hero{grid-template-columns:minmax(0,1fr);padding-top:36px}}
+  .badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--dim);background:rgba(255,255,255,.05);border:1px solid var(--line);padding:6px 12px;border-radius:999px}
+  .badge b{color:#fff}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(46,194,126,.18)}
+  .hero h1{font-size:clamp(34px,5.2vw,56px);line-height:1.05;margin:18px 0 14px;letter-spacing:-.02em}
+  .grad{background:linear-gradient(90deg,#7f95ff,#b38bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p.lead{color:var(--dim);font-size:17px;max-width:520px;margin:0 0 26px}
+  .dl{display:flex;flex-wrap:wrap;gap:12px}
+  .btn{display:inline-flex;align-items:center;gap:12px;text-decoration:none;border-radius:14px;padding:13px 18px;font-weight:700;transition:transform .15s,box-shadow .15s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn small{display:block;font-weight:500;font-size:12px;opacity:.85}
+  .btn svg{width:26px;height:26px;flex:none}
+  .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 10px 30px -10px rgba(110,90,255,.8)}
+  .btn.secondary{background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff}
+  .note{color:var(--dim);font-size:13px;margin-top:14px}
+  /* TV mockup */
+  .tv{position:relative;aspect-ratio:16/10;border-radius:18px;padding:10px;background:#05071a;border:1px solid #2b3370;box-shadow:0 40px 80px -30px rgba(0,0,0,.8),0 0 0 6px rgba(255,255,255,.03)}
+  .tv:after{content:"";position:absolute;left:38%;right:38%;bottom:-18px;height:8px;border-radius:0 0 8px 8px;background:#1a1f45}
+  .screen{height:100%;border-radius:10px;overflow:hidden;background:linear-gradient(135deg,#1b2266,#0b1030 60%,#070a20);display:grid;grid-template-rows:auto 1fr;font-size:10px}
+  .s-top{display:flex;align-items:center;gap:6px;padding:8px 10px}
+  .s-top i{display:block;width:14px;height:14px;border-radius:4px;background:url(icon.png) center/cover}
+  .s-top .pill{flex:1;height:14px;border-radius:7px;background:#141b45}
+  .s-top .clock{color:#fff;font-weight:700}
+  .s-body{display:grid;grid-template-columns:28% 1fr;gap:6px;padding:0 8px 8px;min-height:0}
+  .s-groups div{padding:5px 8px;border-radius:6px;color:#c9cff0;margin-bottom:3px;white-space:nowrap;overflow:hidden}
+  .s-groups div.on{background:rgba(79,107,255,.25);color:#fff;border-left:2px solid var(--accent)}
+  .s-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}
+  .s-card{display:flex;align-items:center;gap:6px;background:#141b45;border-radius:7px;padding:6px}
+  .s-card .logo{width:26px;height:18px;border-radius:4px;background:#0b0e13;flex:none;display:grid;place-items:center;color:#7f95ff;font-weight:800;font-size:8px}
+  .s-card .t{flex:1;min-width:0}
+  .s-card b{display:block;color:#fff;font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .s-card small{color:#a0a8d0;font-size:8px}
+  .s-card.focus{background:linear-gradient(90deg,var(--accent),var(--accent2));transform:scale(1.05);box-shadow:0 8px 20px -6px rgba(110,90,255,.9)}
+  .s-card.focus small{color:#e8e6ff}
+  .s-card .star{color:var(--gold)}
+  @media (max-width:480px){.s-grid{grid-template-columns:1fr}.s-grid .s-card:nth-child(n+6){display:none}}
+  /* sections */
+  section.block{padding:56px 0}
+  .head{text-align:center;max-width:640px;margin:0 auto 32px}
+  .head h2{font-size:clamp(26px,3.4vw,36px);margin:0 0 10px;letter-spacing:-.01em}
+  .head p{color:var(--dim);margin:0}
+  .features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media (max-width:880px){.features{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:560px){.features{grid-template-columns:1fr}}
+  .feat{background:rgba(20,27,69,.75);border:1px solid var(--line);border-radius:16px;padding:20px}
+  .feat .ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(79,107,255,.3),rgba(138,77,255,.3));margin-bottom:12px;font-size:20px}
+  .feat h3{margin:0 0 6px;font-size:16px}
+  .feat p{margin:0;color:var(--dim);font-size:14px}
+  .install{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;counter-reset:step}
+  @media (max-width:880px){.install{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:560px){.install{grid-template-columns:1fr}}
+  .step{position:relative;background:rgba(20,27,69,.75);border:1px solid var(--line);border-radius:16px;padding:20px 18px 18px}
+  .step:before{counter-increment:step;content:counter(step);position:absolute;top:-12px;left:18px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .step h3{margin:6px 0 6px;font-size:15px}
+  .step p{margin:0;color:var(--dim);font-size:13.5px}
+  code{font-family:ui-monospace,Consolas,monospace;background:rgba(255,255,255,.07);padding:2px 6px;border-radius:6px;font-size:12.5px;word-break:break-all}
+  /* upload (the playlist tool: same markup and behaviour as before) */
+  #upload .wrap{max-width:560px;margin:0 auto}
+  #upload .upload-head{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  #upload .upload-head img{width:44px;height:44px;border-radius:12px}
+  #upload .upload-head h2{margin:0;font-size:22px}
+  #upload .upload-head p{margin:0;color:var(--dim);font-size:13px}
+  #upload .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px}
+  #upload h2{font-size:16px;margin:0 0 14px}
+  #upload label{display:block;font-size:13px;color:var(--dim);margin:12px 0 6px}
+  #upload input[type=text],#upload input[type=password],#upload input[type=url],#upload input[type=file]{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px}
+  #upload input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
+  #upload .mac{font-family:ui-monospace,Consolas,monospace;letter-spacing:.06em;text-transform:uppercase}
+  #upload button{display:inline-block;border:0;border-radius:10px;padding:12px 18px;font-weight:600;font-size:15px;cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;width:100%;margin-top:18px}
+  #upload button:disabled{opacity:.6;cursor:wait}
+  #upload .ghost{background:transparent;border:1px solid var(--line);color:var(--dim);width:auto;margin:0;padding:8px 12px;font-size:13px}
+  #upload .msg{border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:14px;display:none}
+  #upload .msg.err{display:block;background:rgba(255,93,108,.12);color:var(--err);border:1px solid rgba(255,93,108,.35)}
+  #upload .msg.ok{display:block;background:rgba(46,194,126,.12);color:var(--ok);border:1px solid rgba(46,194,126,.35)}
+  #upload .tabs{display:flex;gap:6px;background:var(--bg);padding:4px;border-radius:12px;border:1px solid var(--line)}
+  #upload .tabs button{flex:1;margin:0;padding:9px 6px;border-radius:9px;background:transparent;color:var(--dim);font-weight:500;font-size:14px;width:auto}
+  #upload .tabs button.on{background:var(--surface2);color:#fff}
+  #upload .pane{display:none}#upload .pane.on{display:block}
+  #upload ul{list-style:none;margin:0;padding:0}
+  #upload li{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+  #upload li:first-child{border-top:0}
+  #upload li .n{flex:1;min-width:0}
+  #upload li .n b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #upload li .n small{color:var(--dim)}
+  #upload .steps{color:var(--dim);font-size:14px;margin:0;padding-left:18px}
+  #upload .devline{display:flex;justify-content:space-between;align-items:center;color:var(--dim);font-size:13px;margin-bottom:16px;gap:8px}
+  #upload .devline .mac{color:var(--text);font-size:15px}
+  #upload .hidden{display:none}
+  #upload .steps li{display:list-item;border:0;padding:3px 0}
+  footer.site{border-top:1px solid rgba(255,255,255,.06);padding:28px 0 40px;color:var(--dim);font-size:13px}
+  footer.site .container{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
+  footer.site a{color:var(--dim)}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <img src="icon.png" alt="">
-    <div><h1>Faznet</h1><p>Ngarko playlist-ën në TV ose telefon</p></div>
-  </header>
 
+<nav>
+  <div class="container">
+    <a class="brand" href="#top"><img src="icon.png" alt="">Faznet</a>
+    <div class="links">
+      <a href="#features">Veçoritë</a>
+      <a href="#install">Instalimi</a>
+      <a href="#upload">Ngarko playlist</a>
+      <a class="cta" href="#download">Shkarko</a>
+    </div>
+  </div>
+</nav>
+
+<header class="container hero" id="top">
+  <div id="download">
+    <span class="badge"><span class="dot"></span> Versioni <b>3.0.0</b> · falas · pa reklama</span>
+    <h1>IPTV player <span class="grad">i shpejtë</span> për Android TV dhe telefon</h1>
+    <p class="lead">Shiko playlist-ën tënde M3U ose Xtream me një pamje të pastër, kanale që hapen shpejt dhe rregullim automatik kur një kanal ngec. E ngarkon playlist-ën nga kjo faqe me MAC dhe PIN.</p>
+    <div class="dl">
+      <a class="btn primary" href="download/Faznet-TV.apk" download>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5v2h8v-2h5a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 14H3V5h18v12z"/></svg>
+        <span>Shkarko për TV<small>Android TV · Mi TV Stick · Fire TV (~25 MB)</small></span>
+      </a>
+      <a class="btn secondary" href="download/Faznet-arm64.apk" download>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 1H7a2 2 0 0 0-2 2v18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2zm0 18H7V5h10v14z"/></svg>
+        <span>Shkarko për telefon<small>Android 64-bit · tablet (~29 MB)</small></span>
+      </a>
+    </div>
+    <p class="note">Nuk e di cilin? Për TV stick merr <b>TV</b>. Nëse në telefon nuk instalohet, provo versionin TV — punon kudo.</p>
+  </div>
+
+  <div class="tv" aria-hidden="true">
+    <div class="screen">
+      <div class="s-top"><i></i><div class="pill"></div><span class="clock">20:45</span></div>
+      <div class="s-body">
+        <div class="s-groups">
+          <div>Të gjitha kanalet</div>
+          <div>★ Të preferuarat</div>
+          <div class="on">Lajme</div>
+          <div>Sport</div>
+          <div>Filma</div>
+          <div>Fëmijë</div>
+          <div>Muzikë</div>
+        </div>
+        <div class="s-grid">
+          <div class="s-card"><div class="logo">TV1</div><div class="t"><b>Kanali Lajme 1</b><small>Lajme</small></div></div>
+          <div class="s-card focus"><div class="logo">TV2</div><div class="t"><b>Kanali Lajme 2 HD</b><small>Lajme</small></div><span class="star">★</span></div>
+          <div class="s-card"><div class="logo">TV3</div><div class="t"><b>Kanali Lajme 3</b><small>Lajme</small></div></div>
+          <div class="s-card"><div class="logo">TV4</div><div class="t"><b>Info 24</b><small>Lajme</small></div></div>
+          <div class="s-card"><div class="logo">TV5</div><div class="t"><b>Kanali Lajme 5 FHD</b><small>Lajme</small></div></div>
+          <div class="s-card"><div class="logo">TV6</div><div class="t"><b>News Plus</b><small>Lajme</small></div></div>
+          <div class="s-card"><div class="logo">TV7</div><div class="t"><b>Kanali Lajme 7</b><small>Lajme</small></div></div>
+          <div class="s-card"><div class="logo">TV8</div><div class="t"><b>Rajoni TV</b><small>Lajme</small></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="block" id="features">
+  <div class="container">
+    <div class="head">
+      <h2>Gjithçka që të duhet, asgjë tepër</h2>
+      <p>Bërë për telekomandën e TV-së dhe për prekje në telefon.</p>
+    </div>
+    <div class="features">
+      <div class="feat"><div class="ico">⚡</div><h3>Kanale që hapen shpejt</h3><p>Lista hapet menjëherë nga kopja në pajisje; grupet ndërrohen pa pritur edhe me mijëra kanale.</p></div>
+      <div class="feat"><div class="ico">🛠️</div><h3>Rregullim automatik</h3><p>Kur figura ngrin ose kanali ngec, Faznet e rihap vetë — dhe e mban mend mënyrën që punon.</p></div>
+      <div class="feat"><div class="ico">🎬</div><h3>Filma, seriale, EPG</h3><p>Për llogari Xtream: filma, seriale, udhërrëfyesi TV dhe catch-up i programeve të kaluara.</p></div>
+      <div class="feat"><div class="ico">📲</div><h3>Ngarko me MAC + PIN</h3><p>Shto playlist-ën nga kjo faqe; TV-ja e merr vetë. Lidhjet e listave nuk shfaqen kurrë në aplikacion.</p></div>
+      <div class="feat"><div class="ico">🔒</div><h3>Kyçje prindërore</h3><p>PIN me 4 shifra për grupet që zgjedh ti, të preferuarat dhe kanalet e fundit të shikuara.</p></div>
+      <div class="feat"><div class="ico">🎧</div><h3>Zë dhe titra</h3><p>Dekoder software për zërin (AC3, MP2…), zgjedhja e gjuhës, titrat dhe kohëmatësi i gjumit.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="install">
+  <div class="container">
+    <div class="head">
+      <h2>Instalimi në Android TV</h2>
+      <p>Disa hapa, vetëm herën e parë.</p>
+    </div>
+    <div class="install">
+      <div class="step"><h3>Lejo instalimin</h3><p>Settings → Device Preferences → Security → lejo <b>Unknown sources</b> për aplikacionin me të cilin e hap APK-në.</p></div>
+      <div class="step"><h3>Shkarko APK-në</h3><p>Me aplikacionin <b>Downloader</b> në TV shkruaj:<br><code>whatsthatbrother.github.io/faznet/download/Faznet-TV.apk</code></p></div>
+      <div class="step"><h3>Instalo</h3><p>Hape file-in dhe shtyp <b>Install</b>. Versionet e reja instalohen sipër të vjetrit, pa humbur asgjë.</p></div>
+      <div class="step"><h3>Shto playlist-ën</h3><p>Hap Faznet, shiko <b>MAC</b> dhe <b>PIN</b> te “Upload from the web” dhe shkruaji <a href="#upload">më poshtë</a>.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="upload">
+  <div class="container">
+   <div class="wrap">
+    <div class="upload-head">
+      <img src="icon.png" alt="">
+      <div><h2>Ngarko playlist</h2><p>Dërgoje në TV ose telefon me MAC dhe PIN</p></div>
+    </div>
   <div id="msg" class="msg" role="status"></div>
 
   <section id="login" class="card">
@@ -108,10 +275,16 @@
     </div>
   </section>
 
-  <footer>Faznet është player falas dhe nuk ofron kanale. Të dhënat përdoren vetëm për t'i dërguar në pajisjen tënde.<br>
-    <a href="https://github.com/whatsthatbrother/faznet/releases/latest">Shkarko Faznet për Android / Android TV</a><br>
-    Made by d1@r.f</footer>
-</div>
+   </div>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="container">
+    <span>Faznet është player falas dhe nuk ofron kanale. Të dhënat përdoren vetëm për t'i dërguar në pajisjen tënde.</span>
+    <span>Made by <b>d1@r.f</b></span>
+  </div>
+</footer>
 <script src="config.js"></script>
 <script>
 (function () {
