@@ -199,10 +199,29 @@ class Repository private constructor(private val ctx: Context) {
 
     // ---------- device identity for web upload ----------
     val deviceMac: String
-        get() = prefs.getString(KEY_MAC, null) ?: newDeviceIdentity().first
+        get() = prefs.getString(KEY_MAC, null) ?: stableIdentity().first
 
     val devicePin: String
-        get() = prefs.getString(KEY_PIN, null) ?: newDeviceIdentity().second
+        get() = prefs.getString(KEY_PIN, null) ?: stableIdentity().second
+
+    /**
+     * First start: MAC + PIN are derived from this device's Android id, so after uninstalling and installing
+     * again the device keeps the same MAC + PIN and gets its playlists back from the website by itself.
+     * (The Android id is per device and per app signing key; no other app can compute it.)
+     */
+    private fun stableIdentity(): Pair<String, String> {
+        val aid = runCatching {
+            android.provider.Settings.Secure.getString(ctx.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+        }.getOrNull()
+        if (aid.isNullOrEmpty() || aid == "9774d56d682e549c") return newDeviceIdentity()
+        val h = java.security.MessageDigest.getInstance("SHA-256").digest("faznet|$aid".toByteArray())
+        h[0] = (h[0].toInt() and 0xFE).toByte() // unicast
+        val mac = (0 until 6).joinToString(":") { "%02X".format(h[it].toInt() and 0xFF) }
+        val pinNum = ((h[6].toInt() and 0xFF) shl 16 or ((h[7].toInt() and 0xFF) shl 8) or (h[8].toInt() and 0xFF)) % 10000
+        val pin = "%04d".format(pinNum)
+        prefs.edit().putString(KEY_MAC, mac).putString(KEY_PIN, pin).apply()
+        return mac to pin
+    }
 
     /** Creates a random MAC-style id (Android no longer exposes the real MAC) and a 4-digit PIN. */
     fun newDeviceIdentity(): Pair<String, String> {
@@ -267,7 +286,7 @@ class Repository private constructor(private val ctx: Context) {
     val userAgent: String get() = customUserAgent.ifEmpty { DEFAULT_UA }
 
     var autoPlayLast: Boolean
-        get() = prefs.getBoolean(KEY_AUTOPLAY, true)
+        get() = prefs.getBoolean(KEY_AUTOPLAY, false)
         set(v) = prefs.edit().putBoolean(KEY_AUTOPLAY, v).apply()
 
     var useFfmpeg: Boolean
@@ -286,8 +305,9 @@ class Repository private constructor(private val ctx: Context) {
 
     /** Player engine: false = ExoPlayer (Media3), true = VLC (more tolerant of broken IPTV streams). */
     var useVlc: Boolean
-        // VLC opens IPTV channels faster and cleaner on TV sticks; ExoPlayer stays the default elsewhere.
-        get() = prefs.getBoolean("use_vlc", isTv)
+        // ExoPlayer is the default everywhere (it proved the most reliable on the Mi TV Stick); VLC is optional
+        // and is also used by itself for single channels that ExoPlayer cannot play.
+        get() = prefs.getBoolean("use_vlc", false)
         set(v) = prefs.edit().putBoolean("use_vlc", v).apply()
 
     /** Send crash reports to the Faznet server automatically (no playlist data). */

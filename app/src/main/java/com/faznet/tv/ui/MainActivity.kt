@@ -59,12 +59,19 @@ class MainActivity : AppCompatActivity(), HomeActions {
         val tv = isTv()
         setContent { FaznetTheme { HomeScreen(ui, this, wide, tv) } }
 
+        // 3.0: "open the last channel on start" is off unless the user turns it on again in Settings.
+        getSharedPreferences("faznet_migrate", MODE_PRIVATE).let { m ->
+            if (!m.getBoolean("v30", false)) {
+                repo.autoPlayLast = false
+                m.edit().putBoolean("v30", true).apply()
+            }
+        }
         autoPlayPending = savedInstanceState == null && repo.autoPlayLast
         if (savedInstanceState == null) {
             checkForUpdate()
             lifecycleScope.launch {
                 com.faznet.tv.data.Reports.sendPendingCrash(this@MainActivity, repo)
-                com.faznet.tv.data.Reports.sendDailyIfNeeded(this@MainActivity, repo)
+                com.faznet.tv.data.Reports.sendNewProblems(this@MainActivity, repo)
             }
             // The VLC engine is prepared in the background, so the first channel opens sooner.
             if (repo.useVlc) com.faznet.tv.player.VlcEngine.warmUp(applicationContext)
@@ -183,7 +190,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
         playlist = p
         if (p == null) {
             loadedPlaylistId = null
-            all = emptyList(); byUrl = emptyMap(); visible = emptyList()
+            setChannels(emptyList()); visible = emptyList()
             ui.groups = emptyList(); ui.channels = emptyList(); ui.xtream = false
             ui.playlistName = ""
             val msg = if (repo.serverUrl.isEmpty()) getString(R.string.welcome_msg)
@@ -219,8 +226,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
         loadJob = lifecycleScope.launch {
             try {
                 val list = repo.loadChannels(p, force)
-                all = list
-                byUrl = list.associateBy { it.url }
+                setChannels(list)
                 loadedPlaylistId = p.id
                 selectedGroup = KEY_ALL
                 ui.loading = false
@@ -239,7 +245,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
             } catch (e: Exception) {
                 ui.loading = false
                 loadedPlaylistId = null
-                all = emptyList(); byUrl = emptyMap(); visible = emptyList()
+                setChannels(emptyList()); visible = emptyList()
                 ui.groups = emptyList(); ui.channels = emptyList()
                 ui.empty = EmptyInfo(p.name, getString(R.string.err_load, e.safeMessage()), getString(R.string.retry), { load(p, true) })
             }
@@ -296,8 +302,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
         lifecycleScope.launch {
             val fresh = try { repo.loadChannels(p, forceRefresh = true) } catch (e: CancellationException) { throw e } catch (e: Exception) { return@launch }
             if (playlist?.id != p.id || loadedPlaylistId != p.id || fresh.isEmpty()) return@launch
-            all = fresh
-            byUrl = fresh.associateBy { it.url }
+            setChannels(fresh)
             rebuild(keepScroll = true)
         }
     }
@@ -321,8 +326,19 @@ class MainActivity : AppCompatActivity(), HomeActions {
         if (key == selectedGroup && ui.selectedGroup == key) return
         selectedGroup = key
         ui.selectedGroup = key
-        applyFilter()
+        groupJob?.cancel()
+        if (fromClick) applyFilter()
+        else {
+            // Remote moving over the groups: show the channels of the group it stops on, not of every group
+            // it passes (keeps the D-pad smooth on slow TV sticks).
+            groupJob = lifecycleScope.launch {
+                delay(GROUP_DELAY_MS)
+                applyFilter()
+            }
+        }
     }
+
+    private var groupJob: Job? = null
 
     private fun applyFilter(keepScroll: Boolean = false) {
         val p = playlist ?: return
@@ -333,7 +349,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
             KEY_ALL -> all
             KEY_FAV -> all.filter { favs.contains(it.url) }
             KEY_RECENT -> repo.recents(p.id).mapNotNull { byUrl[it] }
-            else -> all.filter { it.group == selectedGroup }
+            else -> byGroup[selectedGroup] ?: emptyList()
         })
         val q = ui.query.trim().lowercase()
         visible = if (q.isEmpty()) base else base.filter { it.name.lowercase().contains(q) }
@@ -356,10 +372,22 @@ class MainActivity : AppCompatActivity(), HomeActions {
         }
     }
 
+    /** Channels by group, built once per loaded list: switching groups is then instant even with 20 000 channels. */
+    private var byGroup: Map<String, List<Channel>> = emptyMap()
+
+    private fun setChannels(list: List<Channel>) {
+        all = list
+        byUrl = list.associateBy { it.url }
+        val m = LinkedHashMap<String, ArrayList<Channel>>()
+        for (c in list) m.getOrPut(c.group) { ArrayList() }.add(c)
+        byGroup = m
+        ChannelStore.all = list
+    }
+
     private fun groupItems(favs: Set<String>): List<GroupItem> {
         val p = playlist ?: return emptyList()
         val counts = LinkedHashMap<String, Int>()
-        for (c in all) counts[c.group] = (counts[c.group] ?: 0) + 1
+        for ((g, l) in byGroup) counts[g] = l.size
         val shown = Parental.visible(this, all)
         val shownUrls = shown.mapTo(HashSet()) { it.url }
         val items = ArrayList<GroupItem>(counts.size + 3)
@@ -398,68 +426,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
     }
 
     private fun showSettings() {
-        val v = LayoutInflater.from(this).inflate(R.layout.dialog_settings, null)
-        val ua = v.findViewById<EditText>(R.id.etUserAgent)
-        val cb = v.findViewById<CheckBox>(R.id.cbAutoplay)
-        val cbFfmpeg = v.findViewById<CheckBox>(R.id.cbFfmpeg)
-        cbFfmpeg.isChecked = repo.useFfmpeg
-        val cbStats = v.findViewById<CheckBox>(R.id.cbStats)
-        cbStats.isChecked = repo.showStats
-        val cbReports = v.findViewById<CheckBox>(R.id.cbReports)
-        cbReports.isChecked = repo.autoReports
-        val cbVlc = v.findViewById<CheckBox>(R.id.cbVlc)
-        cbVlc.isChecked = repo.useVlc
-        val cbSoftSd = v.findViewById<CheckBox>(R.id.cbSoftSd)
-        cbSoftSd.isChecked = repo.softwareSd
-        ua.setText(repo.customUserAgent)
-        cb.isChecked = repo.autoPlayLast
-        v.findViewById<TextView>(R.id.tvAbout).text = getString(R.string.about, BuildConfig.VERSION_NAME)
-        var dialog: androidx.appcompat.app.AlertDialog? = null
-        v.findViewById<Button>(R.id.btnLog).setOnClickListener { showProblemLog() }
-        v.findViewById<Button>(R.id.btnParental).setOnClickListener { dialog?.dismiss(); setupParental() }
-        dialog = MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.settings)
-            .setView(v)
-            .setPositiveButton(R.string.save) { _, _ ->
-                repo.customUserAgent = ua.text.toString()
-                repo.autoPlayLast = cb.isChecked
-                repo.useFfmpeg = cbFfmpeg.isChecked
-                repo.showStats = cbStats.isChecked
-                repo.softwareSd = cbSoftSd.isChecked
-                repo.useVlc = cbVlc.isChecked
-                repo.autoReports = cbReports.isChecked
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    // ---------- problem log ----------
-    private fun showProblemLog() {
-        val lines = ProblemLog.read(this)
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.problem_log)
-            .setMessage(if (lines.isEmpty()) getString(R.string.problem_log_empty) else lines.joinToString("\n"))
-            .setPositiveButton(android.R.string.ok, null)
-            .setNeutralButton(R.string.clear) { _, _ -> ProblemLog.clear(this) }
-            .setNegativeButton(R.string.report_send) { _, _ -> sendReport() }
-            .show()
-    }
-
-    /** Sends the problem log + device info to the developer (Faznet server). */
-    private fun sendReport() {
-        val et = EditText(this).apply { hint = getString(R.string.report_note_hint) }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.report_send)
-            .setMessage(R.string.report_explain)
-            .setView(padded(et))
-            .setPositiveButton(R.string.report_send) { _, _ ->
-                lifecycleScope.launch {
-                    val ok = com.faznet.tv.data.Reports.sendManual(this@MainActivity, repo, et.text.toString())
-                    Toast.makeText(this@MainActivity, if (ok) R.string.report_sent else R.string.report_failed, Toast.LENGTH_LONG).show()
-                }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        startActivity(Intent(this, SettingsActivity::class.java))
     }
 
     // ---------- parental lock ----------
@@ -490,49 +457,6 @@ class MainActivity : AppCompatActivity(), HomeActions {
             .setNegativeButton(R.string.cancel, null)
             .show()
         et.requestFocus()
-    }
-
-    private fun setupParental() {
-        if (Parental.pin(this).length == 4 && !Parental.unlocked) {
-            askParentalPin { setupParental() }
-            return
-        }
-        val et = pinField().apply { setText(Parental.pin(this@MainActivity)) }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.parental_title)
-            .setMessage(R.string.parental_set_pin)
-            .setView(padded(et))
-            .setPositiveButton(R.string.next) { _, _ ->
-                val pin = et.text.toString()
-                if (pin.isEmpty()) {
-                    Parental.setPin(this, ""); Parental.setLockedGroups(this, emptySet())
-                    Toast.makeText(this, R.string.parental_off, Toast.LENGTH_SHORT).show()
-                    rebuild(keepScroll = true)
-                } else if (pin.length != 4) {
-                    Toast.makeText(this, R.string.parental_pin_4, Toast.LENGTH_SHORT).show()
-                } else chooseLockedGroups(pin)
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private fun chooseLockedGroups(pin: String) {
-        val groups = all.map { it.group }.distinct()
-        if (groups.isEmpty()) return
-        val locked = Parental.lockedGroups(this)
-        val checked = BooleanArray(groups.size) { groups[it] in locked }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.parental_groups)
-            .setMultiChoiceItems(groups.toTypedArray(), checked) { _, which, on -> checked[which] = on }
-            .setPositiveButton(R.string.save) { _, _ ->
-                Parental.setPin(this, pin)
-                Parental.setLockedGroups(this, groups.filterIndexed { i, _ -> checked[i] }.toSet())
-                Parental.unlocked = false
-                Toast.makeText(this, R.string.parental_saved, Toast.LENGTH_SHORT).show()
-                rebuild(keepScroll = false)
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
     }
 
     // ---------- update notice ----------
@@ -581,5 +505,6 @@ class MainActivity : AppCompatActivity(), HomeActions {
         const val KEY_FAV = "\u0000fav"
         const val KEY_RECENT = "\u0000recent"
         private const val BACKGROUND_REFRESH_MS = 3 * 60 * 60 * 1000L
+        private const val GROUP_DELAY_MS = 220L
     }
 }

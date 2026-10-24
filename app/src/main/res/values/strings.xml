@@ -126,7 +126,7 @@
     <string name="report_explain">Sends the problem log, app version and device model to the developer. No playlist addresses or passwords are sent.</string>
     <string name="report_sent">Report sent — thank you!</string>
     <string name="report_failed">Could not send the report (no connection?)</string>
-    <string name="auto_reports">Send crash reports and the problem log (once a day) to the developer automatically (no playlist data)</string>
+    <string name="auto_reports">Send problems and crashes to the developer automatically, without asking (no playlist data)</string>
     <string name="movies">Movies</string>
     <string name="series">Series</string>
     <string name="guide">TV guide</string>
@@ -140,4 +140,8 @@
     <string name="badge_catchup">⏪ Watch</string>
     <string name="playlists_switch">Switch playlist</string>
     <string name="playlists_only_one">You have only one playlist</string>
+    <string name="section_player">Player</string>
+    <string name="section_start">Start</string>
+    <string name="section_reports">Problem reports</string>
+    <string name="section_other">Other</string>
 </resources>

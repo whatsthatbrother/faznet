@@ -4,7 +4,12 @@ import android.content.Context
 import android.os.Build
 import com.faznet.tv.BuildConfig
 import com.faznet.tv.net.Http
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -74,17 +79,36 @@ object Reports {
         if (post(repo, "crash", "Crash:\n$crash\n\n" + summary(c, repo))) f.delete()
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var pending: Job? = null
+
     /**
-     * Once a day at most: if the problem log has new entries since the last report, send it by itself
-     * (only when automatic reports are on), so problems reach the developer without anyone pressing a button.
+     * A new line in the problem log: send the log to the developer by itself, without asking
+     * (only when automatic reports are on). Problems that come in a burst are sent together:
+     * one minute after the last one, and at most every 10 minutes.
      */
-    suspend fun sendDailyIfNeeded(c: Context, repo: Repository) {
+    fun problemAdded(c: Context) {
+        val app = c.applicationContext
+        val repo = Repository.get(app)
+        if (!repo.autoReports) return
+        pending?.cancel()
+        pending = scope.launch {
+            delay(60_000)
+            val sp = app.getSharedPreferences("reports", Context.MODE_PRIVATE)
+            val wait = 10 * 60_000L - (System.currentTimeMillis() - sp.getLong("auto_at", 0))
+            if (wait > 0) delay(wait)
+            sendNewProblems(app, repo)
+        }
+    }
+
+    /** Sends the problem log if it has entries that were not sent yet (at app start and after new problems). */
+    suspend fun sendNewProblems(c: Context, repo: Repository) {
         if (!repo.autoReports) return
         val sp = c.applicationContext.getSharedPreferences("reports", Context.MODE_PRIVATE)
-        val now = System.currentTimeMillis()
-        if (now - sp.getLong("auto_at", 0) < 24 * 3600_000L) return
-        val top = ProblemLog.read(c).firstOrNull() ?: return
+        val top = withContext(Dispatchers.IO) { ProblemLog.read(c).firstOrNull() } ?: return
         if (top == sp.getString("auto_top", null)) return
-        if (post(repo, "auto", summary(c, repo))) sp.edit().putLong("auto_at", now).putString("auto_top", top).apply()
+        if (post(repo, "auto", summary(c, repo))) {
+            sp.edit().putLong("auto_at", System.currentTimeMillis()).putString("auto_top", top).apply()
+        }
     }
 }

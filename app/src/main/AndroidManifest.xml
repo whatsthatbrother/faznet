@@ -50,6 +50,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.VodPlayerActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="false"

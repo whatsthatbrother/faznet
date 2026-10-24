@@ -1,3 +1,15 @@
+## Faznet v3.0.0
+
+**Shqip:** Settings i ri (ekran i plotë, ndryshimet ruhen menjëherë), grupet ndërrohen më shpejt, ExoPlayer motori kryesor (VLC vetëm si rezervë për kanalet që nuk punojnë), "Hap kanalin e fundit" i fikur, problemet dërgohen vetë te zhvilluesi pa pyetur, dhe pas çinstalimit/instalimit pajisja e mban të njëjtin MAC + PIN (playlistat kthehen vetë nga faqja).
+
+- New full-screen Settings made for the remote; every change is saved at once
+- Faster group switching (channels grouped once; the remote passing over groups no longer rebuilds every list)
+- ExoPlayer is the default engine; VLC stays as an option and as automatic per-channel fallback
+- "Open last channel on start" is off by default
+- Problems are reported to the developer automatically, without asking (bursts sent together, at most every 10 min)
+- Stable device identity: the same MAC + PIN after a clean reinstall, so website playlists come back by themselves
+- 2.1.1: VLC start watchdog
+
 ## Faznet v2.1.0
 
 **Shqip:** Pamje blu-vjollcë në stilin e Smart IPTV; VLC tani rihap vetë kanalin kur figura ngrin ose ndalet, provon decoder-in software kur figura mbetet e zezë, dhe kalon te ExoPlayer kur një kanal nuk punon me VLC (dhe anasjelltas). Ndërrim më i shpejtë i kanaleve me VLC, playlistat hapen më shpejt pas rinisjes, ditari i problemeve dërgohet vetë një herë në ditë.

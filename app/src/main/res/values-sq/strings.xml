@@ -125,7 +125,7 @@
     <string name="report_explain">Dërgon ditarin e problemeve, versionin e aplikacionit dhe modelin e pajisjes te zhvilluesi. Nuk dërgohen adresat e listave as fjalëkalimet.</string>
     <string name="report_sent">Raporti u dërgua — faleminderit!</string>
     <string name="report_failed">Raporti nuk u dërgua (s\'ka internet?)</string>
-    <string name="auto_reports">Dërgo automatikisht te zhvilluesi crash-et dhe ditarin e problemeve (një herë në ditë), pa të dhëna të playlistës</string>
+    <string name="auto_reports">Dërgo problemet dhe crash-et te zhvilluesi automatikisht, pa pyetur (pa të dhëna të playlistës)</string>
     <string name="movies">Filma</string>
     <string name="series">Seriale</string>
     <string name="guide">Udhërrëfyesi TV</string>
@@ -139,4 +139,8 @@
     <string name="badge_catchup">⏪ Shiko</string>
     <string name="playlists_switch">Ndërro listën</string>
     <string name="playlists_only_one">Ke vetëm një listë</string>
+    <string name="section_player">Player-i</string>
+    <string name="section_start">Nisja</string>
+    <string name="section_reports">Raportet e problemeve</string>
+    <string name="section_other">Të tjera</string>
 </resources>

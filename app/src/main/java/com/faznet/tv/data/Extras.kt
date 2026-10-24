@@ -84,6 +84,7 @@ object ProblemLog {
         val lines = (if (f.exists()) f.readLines() else emptyList()).takeLast(MAX - 1)
         val line = "${fmt.format(Date())}  ${channel.take(40)}  —  $what".replace('\n', ' ')
         f.writeText((lines + line).joinToString("\n"))
+        Reports.problemAdded(c)
     }
 
     @Synchronized
