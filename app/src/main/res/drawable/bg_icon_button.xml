@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
-        <shape android:shape="oval"><solid android:color="@color/focus_bg" /><stroke android:width="2dp" android:color="@color/accent" /></shape>
+        <shape android:shape="oval"><gradient android:angle="0" android:startColor="@color/accent" android:endColor="@color/accent2" /><stroke android:width="2dp" android:color="#FFFFFF" /></shape>
     </item>
     <item android:state_pressed="true">
-        <shape android:shape="oval"><solid android:color="@color/surface2" /></shape>
+        <shape android:shape="oval"><solid android:color="@color/accent" /></shape>
     </item>
-    <item><shape android:shape="oval"><solid android:color="@android:color/transparent" /></shape></item>
+    <item><shape android:shape="oval"><solid android:color="#B3262F75" /><stroke android:width="1dp" android:color="#4D6B7BD0" /></shape></item>
 </selector>

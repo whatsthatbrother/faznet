@@ -369,11 +369,13 @@ fun WideButton(text: String, primary: Boolean, onClick: () -> Unit, modifier: Mo
         onClick = onClick,
         modifier = modifier.padding(top = 8.dp).height(46.dp).widthIn(min = 220.dp),
         shape = RoundedCornerShape(23.dp),
-        color = if (primary) Fz.accent else Fz.surface2,
-        focusedColor = if (primary) Fz.accent2 else Fz.accent,
+        color = if (primary) Fz.accent else Color(0xFF2A3580),
+        // Buttons turn white under the remote, like the other buttons of the app
+        focusedColor = Color.White,
+        focusedBrush = null,
         focusScale = 1.06f,
-    ) {
-        Text(text, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+    ) { focused ->
+        Text(text, color = if (focused) Fz.bg else Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.align(Alignment.Center).padding(horizontal = 22.dp))
     }
 }

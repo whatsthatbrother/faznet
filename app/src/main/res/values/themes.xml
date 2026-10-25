@@ -27,6 +27,46 @@
         <item name="colorOnSecondaryContainer">#FFFFFF</item>
         <item name="colorTertiary">@color/accent2</item>
         <item name="colorOutline">@color/line</item>
+        <!-- Clickable things stand out: filled blue buttons, white when focused with the remote -->
+        <item name="materialButtonStyle">@style/Faznet.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Faznet.Button.Secondary</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Faznet.Dialog</item>
+        <item name="colorControlHighlight">#554F6BFF</item>
+    </style>
+
+    <style name="Faznet.Button" parent="Widget.Material3.Button">
+        <item name="backgroundTint">@color/btn_bg</item>
+        <item name="android:textColor">@color/btn_text</item>
+        <item name="iconTint">@color/btn_text</item>
+        <item name="rippleColor">#33FFFFFF</item>
+    </style>
+
+    <style name="Faznet.Button.Secondary" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="backgroundTint">@color/btn2_bg</item>
+        <item name="android:textColor">@color/btn2_text</item>
+        <item name="iconTint">@color/btn2_text</item>
+        <item name="strokeColor">@color/btn2_stroke</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="Faznet.DialogButton" parent="Widget.Material3.Button">
+        <item name="backgroundTint">@color/btn_bg</item>
+        <item name="android:textColor">@color/btn_text</item>
+        <item name="android:layout_marginStart">8dp</item>
+    </style>
+
+    <style name="Faznet.DialogButton.Secondary" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="backgroundTint">@color/btn2_bg</item>
+        <item name="android:textColor">@color/btn2_text</item>
+        <item name="strokeColor">@color/btn2_stroke</item>
+        <item name="android:layout_marginStart">8dp</item>
+    </style>
+
+    <style name="ThemeOverlay.Faznet.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="buttonBarPositiveButtonStyle">@style/Faznet.DialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Faznet.DialogButton.Secondary</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Faznet.DialogButton.Secondary</item>
+        <item name="colorControlHighlight">#664F6BFF</item>
     </style>
 
     <style name="Theme.Faznet.Player" parent="Theme.Faznet">

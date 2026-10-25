@@ -85,6 +85,8 @@ fun FocusBox(
     selectedColor: Color = Fz.selected,
     focusedBrush: Brush? = Fz.focusBrush,
     focusScale: Float = 1.04f,
+    /** Thin frame while not focused, so clickable things stand out from the background. */
+    outline: Boolean = color != Color.Transparent,
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -103,7 +105,11 @@ fun FocusBox(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(shape)
             .then(if (focused && focusedBrush != null) Modifier.background(focusedBrush) else Modifier.background(bg))
-            .border(if (focused) 1.dp else 0.dp, if (focused) Color.White.copy(alpha = 0.35f) else Color.Transparent, shape)
+            .border(
+                if (focused) 2.dp else if (outline) 1.dp else 0.dp,
+                if (focused) Color.White else if (outline) Fz.line else Color.Transparent,
+                shape,
+            )
             .onFocusChanged {
                 if (focused != it.isFocused) {
                     focused = it.isFocused
@@ -138,7 +144,7 @@ fun FocusBox(
 fun IconAction(icon: Int, label: String, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, size: Dp = 46.dp) {
     FocusBox(
         onClick = onClick, onLongClick = onLongClick, modifier = Modifier.padding(horizontal = 3.dp).size(size),
-        shape = RoundedCornerShape(50), color = Color.Transparent, focusedColor = Fz.accent, focusScale = 1.1f,
+        shape = RoundedCornerShape(50), color = Color(0xB3262F75), outline = true, focusScale = 1.1f,
     ) {
         Icon(
             painterResource(icon), contentDescription = label, tint = Fz.text,

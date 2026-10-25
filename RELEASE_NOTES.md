@@ -1,3 +1,12 @@
+## Faznet v3.0.2
+
+**Shqip:** Butonat dallohen qartë: blu të mbushur, dhe të bardhë kur je mbi to me telekomandë (edhe në dritaret e dialogut); butonat e ikonave kanë rreth të dukshëm. Kanalet Full HD që ngrijnë në fillim rihapen menjëherë; ndërrimi i kanaleve me lart/poshtë është më i shpejtë.
+
+- Clearly visible buttons: filled blue, white with dark text when focused (Views, dialogs, Compose); icon buttons have a visible circle
+- Clickable cards have a thin frame; the focused one a white frame
+- Channels that froze at start once (or Full HD channels after several such freezes this session) are re-opened right away
+- Zapping delay 350 ms (was 450 ms)
+
 ## Faznet v3.0.1
 
 **Shqip:** Përditësime nga vetë aplikacioni: versioni i ri shkarkohet në sfond nga faqja dhe instalohet me "Përditëso tani" (TV dhe telefon), pa humbur playlistat. Settings → Përditësimet. Kanalet dhe grupet lëvizin më shpejt.

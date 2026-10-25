@@ -410,10 +410,17 @@ class PlayerActivity : AppCompatActivity() {
     /** Channels known to freeze on their first opening are re-opened at once, before any frozen picture. */
     private var preReopened = false
 
+    private fun isFullHd(ch: Channel): Boolean =
+        (ChannelMemory.get(this, ch.url)?.height ?: 0) >= 1000 || FHD_NAME.containsMatchIn(ch.name)
+
     private fun maybePreReopen() {
         val ch = channels.getOrNull(index) ?: return
         if (preReopened || recoveries > 0 || pendingZap >= 0) return
-        if (ChannelMemory.startFreezes(this, ch.url) < 2) return
+        // This channel froze at its start before, or several channels did this session and this is a
+        // Full HD one (they all start badly at this provider): re-open at once instead of showing a freeze.
+        val known = ChannelMemory.startFreezes(this, ch.url) >= 1
+        val likely = sessionStartFreezes >= 3 && isFullHd(ch)
+        if (!known && !likely) return
         preReopened = true
         lastWarning = "quick re-open (known slow start)"
         handler.post {
@@ -655,6 +662,7 @@ class PlayerActivity : AppCompatActivity() {
             // Still behind the loading circle: the provider's first seconds are bad, re-open quickly (it fixes it).
             !revealed && now - vlcTimeAt > VLC_EARLY_STUCK_MS && now - vlcAudioAt > VLC_EARLY_STUCK_MS -> {
                 ChannelMemory.addStartFreeze(this, ch.url)
+                sessionStartFreezes++
                 "stuck at start"
             }
             now - vlcTimeAt > VLC_STUCK_MS && now - vlcAudioAt > VLC_STUCK_MS -> "playback stuck"
@@ -831,7 +839,7 @@ class PlayerActivity : AppCompatActivity() {
             // A freeze right at the start comes from the provider (the first seconds of a channel it just
             // started serving); it has nothing to do with the decoder, so don't switch decoders for it.
             if (!reason.endsWith("at start")) ChannelMemory.addFix(this, ch.url)
-            else ChannelMemory.addStartFreeze(this, ch.url)
+            else { ChannelMemory.addStartFreeze(this, ch.url); sessionStartFreezes++ }
             p.videoFormat?.let { ChannelMemory.rememberHeight(this, ch.url, it.height) }
             ProblemLog.add(this, ch.name, reason + if (softwareVideo) " (software)" else "")
         }
@@ -1461,7 +1469,10 @@ class PlayerActivity : AppCompatActivity() {
         private const val INFO_MS = 4_000L
         private const val OPTIONS_MS = 8_000L
         private const val LIST_MS = 12_000L
-        private const val ZAP_DELAY_MS = 450L
+        private const val ZAP_DELAY_MS = 350L
+        private val FHD_NAME = Regex("(?i)\\b(FHD|1080[pi]?|UHD|4K)\\b")
+        /** Channels that froze right at their start in this app session (provider-side cold starts). */
+        private var sessionStartFreezes = 0
     }
 }
 
