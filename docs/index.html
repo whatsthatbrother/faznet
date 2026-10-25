@@ -118,6 +118,26 @@
   footer.site{border-top:1px solid rgba(255,255,255,.06);padding:28px 0 40px;color:var(--dim);font-size:13px}
   footer.site .container{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
   footer.site a{color:var(--dim)}
+  /* language switch + donate */
+  .lang{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-left:6px}
+  .lang button{background:transparent;border:0;color:var(--dim);font:600 12px system-ui;padding:7px 10px;cursor:pointer}
+  .lang button.on{background:rgba(255,255,255,.12);color:#fff}
+  nav .links a.donate{color:#ffd6e0;border:1px solid rgba(255,120,160,.45)}
+  nav .links a.donate:hover{background:rgba(255,120,160,.12)}
+  nav .links a{white-space:nowrap}
+  .lang{flex:none}
+  @media (max-width:640px){nav .links a.donate{display:inline-block;padding:7px 10px}nav .links a.cta{display:none}}
+  .support{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:24px;align-items:center;background:linear-gradient(135deg,rgba(79,107,255,.18),rgba(138,77,255,.18));border:1px solid var(--line);border-radius:22px;padding:32px}
+  @media (max-width:760px){.support{grid-template-columns:minmax(0,1fr);padding:24px}}
+  .support h2{margin:0 0 10px;font-size:clamp(24px,3vw,32px)}
+  .support p{margin:0 0 8px;color:var(--dim)}
+  .support small{color:var(--dim);font-size:12.5px}
+  .pp{display:flex;flex-direction:column;gap:10px;align-items:stretch}
+  .btn.paypal{justify-content:center;background:#ffc439;color:#111;box-shadow:0 10px 30px -12px rgba(255,196,57,.7)}
+  .btn.paypal svg{width:22px;height:22px}
+  .amounts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .amounts a{text-decoration:none;color:#fff;border:1px solid var(--line);background:rgba(255,255,255,.06);border-radius:999px;padding:7px 14px;font-weight:600;font-size:14px}
+  .amounts a:hover{background:rgba(255,255,255,.12)}
 </style>
 </head>
 <body>
@@ -126,30 +146,35 @@
   <div class="container">
     <a class="brand" href="#top"><img src="icon.png" alt="">Faznet</a>
     <div class="links">
-      <a href="#features">Veçoritë</a>
-      <a href="#install">Instalimi</a>
-      <a href="#upload">Ngarko playlist</a>
-      <a class="cta" href="#download">Shkarko</a>
+      <a href="#features" data-i18n="nav_features"></a>
+      <a href="#install" data-i18n="nav_install"></a>
+      <a href="#upload" data-i18n="nav_upload"></a>
+      <a class="donate" href="#support" data-i18n="nav_donate"></a>
+      <a class="cta" href="#download" data-i18n="nav_download"></a>
+    </div>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en">EN</button>
+      <button type="button" data-lang="sq">SQ</button>
     </div>
   </div>
 </nav>
 
 <header class="container hero" id="top">
   <div id="download">
-    <span class="badge"><span class="dot"></span> Versioni <b>3.0.2</b> · falas · pa reklama</span>
-    <h1>IPTV player <span class="grad">i shpejtë</span> për Android TV dhe telefon</h1>
-    <p class="lead">Shiko playlist-ën tënde M3U ose Xtream me një pamje të pastër, kanale që hapen shpejt dhe rregullim automatik kur një kanal ngec. E ngarkon playlist-ën nga kjo faqe me MAC dhe PIN.</p>
+    <span class="badge"><span class="dot"></span> <span data-i18n="badge"></span></span>
+    <h1 data-i18n="h1"></h1>
+    <p class="lead" data-i18n="lead"></p>
     <div class="dl">
       <a class="btn primary" href="download/Faznet-TV.apk" download>
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5v2h8v-2h5a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 14H3V5h18v12z"/></svg>
-        <span>Shkarko për TV<small>Android TV · Mi TV Stick · Fire TV (~25 MB)</small></span>
+        <span><span data-i18n="dl_tv"></span><small data-i18n="dl_tv_sub"></small></span>
       </a>
       <a class="btn secondary" href="download/Faznet-arm64.apk" download>
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 1H7a2 2 0 0 0-2 2v18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2zm0 18H7V5h10v14z"/></svg>
-        <span>Shkarko për telefon<small>Android 64-bit · tablet (~29 MB)</small></span>
+        <span><span data-i18n="dl_phone"></span><small data-i18n="dl_phone_sub"></small></span>
       </a>
     </div>
-    <p class="note">Nuk e di cilin? Për TV stick merr <b>TV</b>. Nëse në telefon nuk instalohet, provo versionin TV — punon kudo.</p>
+    <p class="note" data-i18n="dl_note"></p>
   </div>
 
   <div class="tv" aria-hidden="true">
@@ -157,23 +182,23 @@
       <div class="s-top"><i></i><div class="pill"></div><span class="clock">20:45</span></div>
       <div class="s-body">
         <div class="s-groups">
-          <div>Të gjitha kanalet</div>
-          <div>★ Të preferuarat</div>
-          <div class="on">Lajme</div>
-          <div>Sport</div>
-          <div>Filma</div>
-          <div>Fëmijë</div>
-          <div>Muzikë</div>
+          <div data-i18n="m_all"></div>
+          <div data-i18n="m_fav"></div>
+          <div class="on" data-i18n="m_news"></div>
+          <div data-i18n="m_sport"></div>
+          <div data-i18n="m_movies"></div>
+          <div data-i18n="m_kids"></div>
+          <div data-i18n="m_music"></div>
         </div>
         <div class="s-grid">
-          <div class="s-card"><div class="logo">TV1</div><div class="t"><b>Kanali Lajme 1</b><small>Lajme</small></div></div>
-          <div class="s-card focus"><div class="logo">TV2</div><div class="t"><b>Kanali Lajme 2 HD</b><small>Lajme</small></div><span class="star">★</span></div>
-          <div class="s-card"><div class="logo">TV3</div><div class="t"><b>Kanali Lajme 3</b><small>Lajme</small></div></div>
-          <div class="s-card"><div class="logo">TV4</div><div class="t"><b>Info 24</b><small>Lajme</small></div></div>
-          <div class="s-card"><div class="logo">TV5</div><div class="t"><b>Kanali Lajme 5 FHD</b><small>Lajme</small></div></div>
-          <div class="s-card"><div class="logo">TV6</div><div class="t"><b>News Plus</b><small>Lajme</small></div></div>
-          <div class="s-card"><div class="logo">TV7</div><div class="t"><b>Kanali Lajme 7</b><small>Lajme</small></div></div>
-          <div class="s-card"><div class="logo">TV8</div><div class="t"><b>Rajoni TV</b><small>Lajme</small></div></div>
+          <div class="s-card"><div class="logo">TV1</div><div class="t"><b>News One</b><small data-i18n="m_news"></small></div></div>
+          <div class="s-card focus"><div class="logo">TV2</div><div class="t"><b>News Two HD</b><small data-i18n="m_news"></small></div><span class="star">★</span></div>
+          <div class="s-card"><div class="logo">TV3</div><div class="t"><b>Channel 3</b><small data-i18n="m_news"></small></div></div>
+          <div class="s-card"><div class="logo">TV4</div><div class="t"><b>Info 24</b><small data-i18n="m_news"></small></div></div>
+          <div class="s-card"><div class="logo">TV5</div><div class="t"><b>Channel 5 FHD</b><small data-i18n="m_news"></small></div></div>
+          <div class="s-card"><div class="logo">TV6</div><div class="t"><b>News Plus</b><small data-i18n="m_news"></small></div></div>
+          <div class="s-card"><div class="logo">TV7</div><div class="t"><b>Channel 7</b><small data-i18n="m_news"></small></div></div>
+          <div class="s-card"><div class="logo">TV8</div><div class="t"><b>Region TV</b><small data-i18n="m_news"></small></div></div>
         </div>
       </div>
     </div>
@@ -183,16 +208,16 @@
 <section class="block" id="features">
   <div class="container">
     <div class="head">
-      <h2>Gjithçka që të duhet, asgjë tepër</h2>
-      <p>Bërë për telekomandën e TV-së dhe për prekje në telefon.</p>
+      <h2 data-i18n="f_title"></h2>
+      <p data-i18n="f_sub"></p>
     </div>
     <div class="features">
-      <div class="feat"><div class="ico">⚡</div><h3>Kanale që hapen shpejt</h3><p>Lista hapet menjëherë nga kopja në pajisje; grupet ndërrohen pa pritur edhe me mijëra kanale.</p></div>
-      <div class="feat"><div class="ico">🛠️</div><h3>Rregullim automatik</h3><p>Kur figura ngrin ose kanali ngec, Faznet e rihap vetë — dhe e mban mend mënyrën që punon.</p></div>
-      <div class="feat"><div class="ico">🎬</div><h3>Filma, seriale, EPG</h3><p>Për llogari Xtream: filma, seriale, udhërrëfyesi TV dhe catch-up i programeve të kaluara.</p></div>
-      <div class="feat"><div class="ico">📲</div><h3>Ngarko me MAC + PIN</h3><p>Shto playlist-ën nga kjo faqe; TV-ja e merr vetë. Lidhjet e listave nuk shfaqen kurrë në aplikacion.</p></div>
-      <div class="feat"><div class="ico">🔒</div><h3>Kyçje prindërore</h3><p>PIN me 4 shifra për grupet që zgjedh ti, të preferuarat dhe kanalet e fundit të shikuara.</p></div>
-      <div class="feat"><div class="ico">🎧</div><h3>Zë dhe titra</h3><p>Dekoder software për zërin (AC3, MP2…), zgjedhja e gjuhës, titrat dhe kohëmatësi i gjumit.</p></div>
+      <div class="feat"><div class="ico">⚡</div><h3 data-i18n="f1_t"></h3><p data-i18n="f1_p"></p></div>
+      <div class="feat"><div class="ico">🛠️</div><h3 data-i18n="f2_t"></h3><p data-i18n="f2_p"></p></div>
+      <div class="feat"><div class="ico">🎬</div><h3 data-i18n="f3_t"></h3><p data-i18n="f3_p"></p></div>
+      <div class="feat"><div class="ico">📲</div><h3 data-i18n="f4_t"></h3><p data-i18n="f4_p"></p></div>
+      <div class="feat"><div class="ico">🔄</div><h3 data-i18n="f5_t"></h3><p data-i18n="f5_p"></p></div>
+      <div class="feat"><div class="ico">🔒</div><h3 data-i18n="f6_t"></h3><p data-i18n="f6_p"></p></div>
     </div>
   </div>
 </section>
@@ -200,14 +225,14 @@
 <section class="block" id="install">
   <div class="container">
     <div class="head">
-      <h2>Instalimi në Android TV</h2>
-      <p>Disa hapa, vetëm herën e parë.</p>
+      <h2 data-i18n="i_title"></h2>
+      <p data-i18n="i_sub"></p>
     </div>
     <div class="install">
-      <div class="step"><h3>Lejo instalimin</h3><p>Settings → Device Preferences → Security → lejo <b>Unknown sources</b> për aplikacionin me të cilin e hap APK-në.</p></div>
-      <div class="step"><h3>Shkarko APK-në</h3><p>Me aplikacionin <b>Downloader</b> në TV shkruaj:<br><code>whatsthatbrother.github.io/faznet/download/Faznet-TV.apk</code></p></div>
-      <div class="step"><h3>Instalo</h3><p>Hape file-in dhe shtyp <b>Install</b>. Versionet e reja instalohen sipër të vjetrit, pa humbur asgjë.</p></div>
-      <div class="step"><h3>Shto playlist-ën</h3><p>Hap Faznet, shiko <b>MAC</b> dhe <b>PIN</b> te “Upload from the web” dhe shkruaji <a href="#upload">më poshtë</a>.</p></div>
+      <div class="step"><h3 data-i18n="i1_t"></h3><p data-i18n="i1_p"></p></div>
+      <div class="step"><h3 data-i18n="i2_t"></h3><p><span data-i18n="i2_p"></span><br><code>whatsthatbrother.github.io/faznet/download/Faznet-TV.apk</code></p></div>
+      <div class="step"><h3 data-i18n="i3_t"></h3><p data-i18n="i3_p"></p></div>
+      <div class="step"><h3 data-i18n="i4_t"></h3><p data-i18n="i4_p"></p></div>
     </div>
   </div>
 </section>
@@ -217,91 +242,225 @@
    <div class="wrap">
     <div class="upload-head">
       <img src="icon.png" alt="">
-      <div><h2>Ngarko playlist</h2><p>Dërgoje në TV ose telefon me MAC dhe PIN</p></div>
+      <div><h2 data-i18n="u_title"></h2><p data-i18n="u_sub"></p></div>
     </div>
   <div id="msg" class="msg" role="status"></div>
 
   <section id="login" class="card">
-    <h2>Lidhu me pajisjen</h2>
+    <h2 data-i18n="u_connect"></h2>
     <ol class="steps">
-      <li>Hap Faznet në TV / telefon.</li>
-      <li>Shko te ikona <b>Pajisja</b> (ose ekrani i mirëseardhjes) dhe shiko MAC dhe PIN.</li>
-      <li>Shkruaji këtu poshtë.</li>
+      <li data-i18n="u_s1"></li>
+      <li data-i18n="u_s2"></li>
+      <li data-i18n="u_s3"></li>
     </ol>
     <form id="loginForm" autocomplete="off">
-      <label for="mac">MAC adresa</label>
+      <label for="mac" data-i18n="u_mac"></label>
       <input class="mac" id="mac" type="text" placeholder="AA:BB:CC:DD:EE:FF" maxlength="17" required>
       <label for="pin">PIN</label>
       <input id="pin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" placeholder="••••" required>
-      <button type="submit">Vazhdo</button>
+      <button type="submit" data-i18n="u_continue"></button>
     </form>
   </section>
 
   <section id="device" class="hidden">
     <div class="devline">
-      <span>Pajisja: <span class="mac" id="devMac"></span> <span id="devModel"></span></span>
-      <button class="ghost" id="logout" type="button">Dil</button>
+      <span><span data-i18n="u_device"></span> <span class="mac" id="devMac"></span> <span id="devModel"></span></span>
+      <button class="ghost" id="logout" type="button" data-i18n="u_logout"></button>
     </div>
     <div class="card">
-      <h2>Shto playlist</h2>
+      <h2 data-i18n="u_add"></h2>
       <form id="addForm" autocomplete="off">
         <div class="tabs" role="tablist">
-          <button type="button" class="on" data-type="url">URL M3U</button>
+          <button type="button" class="on" data-type="url">M3U URL</button>
           <button type="button" data-type="xtream">Xtream</button>
-          <button type="button" data-type="file">File</button>
+          <button type="button" data-type="file" data-i18n="u_file_tab"></button>
         </div>
-        <label for="name">Emri (opsional)</label>
-        <input id="name" type="text" maxlength="60" placeholder="p.sh. Kanalet e mia">
+        <label for="name" data-i18n="u_name"></label>
+        <input id="name" type="text" maxlength="60" data-i18n-ph="u_name_ph">
         <div class="pane on" data-pane="url">
-          <label for="url">URL e playlist-ës</label>
+          <label for="url" data-i18n="u_url"></label>
           <input id="url" type="url" placeholder="http://server.com/get.php?...">
         </div>
         <div class="pane" data-pane="xtream">
-          <label for="xserver">Serveri</label><input id="xserver" type="text" placeholder="http://host:port">
-          <label for="xuser">Përdoruesi</label><input id="xuser" type="text">
-          <label for="xpass">Fjalëkalimi</label><input id="xpass" type="password">
+          <label for="xserver" data-i18n="u_server"></label><input id="xserver" type="text" placeholder="http://host:port">
+          <label for="xuser" data-i18n="u_user"></label><input id="xuser" type="text">
+          <label for="xpass" data-i18n="u_pass"></label><input id="xpass" type="password">
         </div>
         <div class="pane" data-pane="file">
-          <label for="file">File .m3u / .m3u8</label>
+          <label for="file" data-i18n="u_file"></label>
           <input id="file" type="file" accept=".m3u,.m3u8,.txt,audio/x-mpegurl">
         </div>
-        <button type="submit" id="addBtn">Dërgo në pajisje</button>
+        <button type="submit" id="addBtn" data-i18n="u_send"></button>
       </form>
     </div>
     <div class="card">
-      <h2 id="listTitle">Playlist-at në këtë pajisje</h2>
+      <h2 id="listTitle"></h2>
       <ul id="list"></ul>
-      <p id="empty" style="color:var(--dim);margin:0">Ende asnjë playlist. Shto të parën më lart.</p>
+      <p id="empty" style="color:var(--dim);margin:0" data-i18n="u_empty"></p>
     </div>
   </section>
-
    </div>
+  </div>
+</section>
+
+<section class="block" id="support">
+  <div class="container">
+    <div class="support">
+      <div>
+        <h2 data-i18n="s_title"></h2>
+        <p data-i18n="s_p1"></p>
+        <p data-i18n="s_p2"></p>
+        <small data-i18n="s_note"></small>
+      </div>
+      <div class="pp">
+        <a class="btn paypal" href="https://paypal.me/EgzonFazliu" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="#003087"><path d="M7.1 21.5H3.6c-.3 0-.5-.3-.5-.6L5.9 2.9c.1-.4.4-.7.8-.7h6.4c3.6 0 5.9 1.8 5.3 5.1-.7 3.9-3.3 5.5-6.9 5.5H9.6c-.4 0-.7.3-.8.7l-1.1 7.3c-.1.4-.3.7-.6.7z"/><path fill="#009cde" d="M20.1 8.2c-.7 3.9-3.3 5.9-7 5.9h-1.7c-.4 0-.7.3-.8.7l-1 6.3-.3 1.6c0 .3.2.6.5.6h3c.4 0 .7-.3.7-.6l.6-3.8c.1-.4.4-.7.8-.7h.5c3.2 0 5.6-1.3 6.3-5 .3-1.6.1-2.9-.6-3.8-.3-.4-.6-.8-1-1.2z"/></svg>
+          <span data-i18n="s_btn"></span>
+        </a>
+        <div class="amounts">
+          <a href="https://paypal.me/EgzonFazliu/3EUR" target="_blank" rel="noopener">€3</a>
+          <a href="https://paypal.me/EgzonFazliu/5EUR" target="_blank" rel="noopener">€5</a>
+          <a href="https://paypal.me/EgzonFazliu/10EUR" target="_blank" rel="noopener">€10</a>
+          <a href="https://paypal.me/EgzonFazliu/20EUR" target="_blank" rel="noopener">€20</a>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
 <footer class="site">
   <div class="container">
-    <span>Faznet është player falas dhe nuk ofron kanale. Të dhënat përdoren vetëm për t'i dërguar në pajisjen tënde.</span>
+    <span data-i18n="footer"></span>
     <span>Made by <b>d1@r.f</b></span>
   </div>
 </footer>
+<script>
+/* Website texts: English by default, Albanian as the second language (?lang=sq or the EN/SQ switch). */
+window.FZ_I18N = {
+  en: {
+    nav_features: "Features", nav_install: "Install", nav_upload: "Upload playlist", nav_donate: "Donate ❤", nav_download: "Download",
+    badge: "Version <b>3.0.2</b> · free · no ads",
+    h1: 'A <span class="grad">fast</span> IPTV player for Android TV and phones',
+    lead: "Watch your own M3U or Xtream playlist with a clean look, channels that open fast and automatic recovery when a channel stalls. Send your playlist to the TV from this page with MAC and PIN.",
+    dl_tv: "Download for TV", dl_tv_sub: "Android TV · Mi TV Stick · Fire TV (~25 MB)",
+    dl_phone: "Download for phone", dl_phone_sub: "Android 64-bit · tablet (~29 MB)",
+    dl_note: "Not sure which one? For TV sticks take <b>TV</b>. If it doesn't install on your phone, try the TV version — it runs everywhere.",
+    m_all: "All channels", m_fav: "★ Favorites", m_news: "News", m_sport: "Sport", m_movies: "Movies", m_kids: "Kids", m_music: "Music",
+    f_title: "Everything you need, nothing you don't", f_sub: "Made for the TV remote and for touch on phones.",
+    f1_t: "Channels open fast", f1_p: "Your list opens instantly from the copy on the device; switching groups is instant even with thousands of channels.",
+    f2_t: "Automatic recovery", f2_p: "When the picture freezes or a channel stalls, Faznet reopens it by itself — and remembers what works for that channel.",
+    f3_t: "Movies, series, EPG", f3_p: "For Xtream accounts: movies, series, a TV guide and catch-up of past programmes.",
+    f4_t: "Upload with MAC + PIN", f4_p: "Add your playlist on this page and the TV picks it up. Playlist links are never shown in the app.",
+    f5_t: "Updates inside the app", f5_p: "New versions download in the background and install with one click — on TV and phone. Your lists stay.",
+    f6_t: "Parental lock", f6_p: "A 4-digit PIN for the groups you choose, plus favorites and recently watched channels.",
+    i_title: "Install on Android TV", i_sub: "A few steps, only the first time.",
+    i1_t: "Allow installing", i1_p: "Settings → Device Preferences → Security → allow <b>Unknown sources</b> for the app you open the APK with.",
+    i2_t: "Download the APK", i2_p: "In the <b>Downloader</b> app on your TV enter:",
+    i3_t: "Install", i3_p: "Open the file and press <b>Install</b>. Later versions update from inside Faznet.",
+    i4_t: "Add your playlist", i4_p: 'Open Faznet, find <b>MAC</b> and <b>PIN</b> under “Upload from the web” and enter them <a href="#upload">below</a>.',
+    u_title: "Upload playlist", u_sub: "Send it to your TV or phone with MAC and PIN",
+    u_connect: "Connect to your device", u_s1: "Open Faznet on your TV / phone.",
+    u_s2: "Go to <b>Upload from the web</b> (or the welcome screen) and look up MAC and PIN.", u_s3: "Enter them below.",
+    u_mac: "MAC address", u_continue: "Continue", u_device: "Device:", u_logout: "Log out",
+    u_add: "Add playlist", u_file_tab: "File", u_name: "Name (optional)", u_name_ph: "e.g. My channels",
+    u_url: "Playlist URL", u_server: "Server", u_user: "Username", u_pass: "Password", u_file: ".m3u / .m3u8 file",
+    u_send: "Send to device", u_empty: "No playlists yet. Add the first one above.",
+    u_list: "Playlists on this device", u_t_url: "M3U list", u_t_xtream: "Xtream Codes", u_t_file: "M3U file",
+    u_delete: "Delete", u_confirm_del: "Delete “{name}”?", u_deleted: "Playlist deleted.",
+    u_added: "Added. Press Refresh in Faznet — or wait a moment, the device picks it up by itself.",
+    u_too_big: "The file is too big (max. 20 MB).", u_default_xtream: "Xtream ", u_default_list: "List ",
+    e_invalid: "MAC or PIN is not in the right format.",
+    e_unknown: "This MAC is not registered. Open Faznet on the device with internet and try again.",
+    e_wrong: "Wrong PIN. Check the PIN on the Faznet screen.",
+    e_locked: "Too many wrong attempts. Try again in 15 minutes.",
+    e_limit: "You reached the maximum number of playlists for this device.",
+    e_fields: "Fill in the required fields.", e_badurl: "The URL must start with http:// or https://",
+    e_badfile: "The file doesn't look like an M3U playlist.", e_network: "The server could not be reached. Check your internet and try again.",
+    s_title: "Support Faznet ❤", s_p1: "Faznet is free, with no ads and no tracking. If it makes your TV nights better, a small donation helps keep it going and growing.",
+    s_p2: "Every coffee goes into new features, more devices tested and the server that sends playlists to your TV.",
+    s_note: "Payments go securely through PayPal to the developer's family account (Egzon Fazliu). You can pay with PayPal or a card.",
+    s_btn: "Donate with PayPal",
+    footer: "Faznet is a free player and does not provide any channels. Your data is only used to send it to your own device."
+  },
+  sq: {
+    nav_features: "Veçoritë", nav_install: "Instalimi", nav_upload: "Ngarko playlist", nav_donate: "Dhuro ❤", nav_download: "Shkarko",
+    badge: "Versioni <b>3.0.2</b> · falas · pa reklama",
+    h1: 'IPTV player <span class="grad">i shpejtë</span> për Android TV dhe telefon',
+    lead: "Shiko playlist-ën tënde M3U ose Xtream me një pamje të pastër, kanale që hapen shpejt dhe rregullim automatik kur një kanal ngec. E ngarkon playlist-ën nga kjo faqe me MAC dhe PIN.",
+    dl_tv: "Shkarko për TV", dl_tv_sub: "Android TV · Mi TV Stick · Fire TV (~25 MB)",
+    dl_phone: "Shkarko për telefon", dl_phone_sub: "Android 64-bit · tablet (~29 MB)",
+    dl_note: "Nuk e di cilin? Për TV stick merr <b>TV</b>. Nëse në telefon nuk instalohet, provo versionin TV — punon kudo.",
+    m_all: "Të gjitha kanalet", m_fav: "★ Të preferuarat", m_news: "Lajme", m_sport: "Sport", m_movies: "Filma", m_kids: "Fëmijë", m_music: "Muzikë",
+    f_title: "Gjithçka që të duhet, asgjë tepër", f_sub: "Bërë për telekomandën e TV-së dhe për prekje në telefon.",
+    f1_t: "Kanale që hapen shpejt", f1_p: "Lista hapet menjëherë nga kopja në pajisje; grupet ndërrohen pa pritur edhe me mijëra kanale.",
+    f2_t: "Rregullim automatik", f2_p: "Kur figura ngrin ose kanali ngec, Faznet e rihap vetë — dhe e mban mend mënyrën që punon.",
+    f3_t: "Filma, seriale, EPG", f3_p: "Për llogari Xtream: filma, seriale, udhërrëfyesi TV dhe catch-up i programeve të kaluara.",
+    f4_t: "Ngarko me MAC + PIN", f4_p: "Shto playlist-ën nga kjo faqe; TV-ja e merr vetë. Lidhjet e listave nuk shfaqen kurrë në aplikacion.",
+    f5_t: "Përditësime në aplikacion", f5_p: "Versionet e reja shkarkohen në sfond dhe instalohen me një klik — në TV dhe telefon. Listat mbeten.",
+    f6_t: "Kyçje prindërore", f6_p: "PIN me 4 shifra për grupet që zgjedh ti, të preferuarat dhe kanalet e fundit të shikuara.",
+    i_title: "Instalimi në Android TV", i_sub: "Disa hapa, vetëm herën e parë.",
+    i1_t: "Lejo instalimin", i1_p: "Settings → Device Preferences → Security → lejo <b>Unknown sources</b> për aplikacionin me të cilin e hap APK-në.",
+    i2_t: "Shkarko APK-në", i2_p: "Me aplikacionin <b>Downloader</b> në TV shkruaj:",
+    i3_t: "Instalo", i3_p: "Hape file-in dhe shtyp <b>Install</b>. Versionet e reja përditësohen nga vetë Faznet.",
+    i4_t: "Shto playlist-ën", i4_p: 'Hap Faznet, shiko <b>MAC</b> dhe <b>PIN</b> te “Upload from the web” dhe shkruaji <a href="#upload">më poshtë</a>.',
+    u_title: "Ngarko playlist", u_sub: "Dërgoje në TV ose telefon me MAC dhe PIN",
+    u_connect: "Lidhu me pajisjen", u_s1: "Hap Faznet në TV / telefon.",
+    u_s2: "Shko te <b>Upload from the web</b> (ose ekrani i mirëseardhjes) dhe shiko MAC dhe PIN.", u_s3: "Shkruaji këtu poshtë.",
+    u_mac: "MAC adresa", u_continue: "Vazhdo", u_device: "Pajisja:", u_logout: "Dil",
+    u_add: "Shto playlist", u_file_tab: "File", u_name: "Emri (opsional)", u_name_ph: "p.sh. Kanalet e mia",
+    u_url: "URL e playlist-ës", u_server: "Serveri", u_user: "Përdoruesi", u_pass: "Fjalëkalimi", u_file: "File .m3u / .m3u8",
+    u_send: "Dërgo në pajisje", u_empty: "Ende asnjë playlist. Shto të parën më lart.",
+    u_list: "Playlist-at në këtë pajisje", u_t_url: "Lista M3U", u_t_xtream: "Xtream Codes", u_t_file: "File M3U",
+    u_delete: "Fshij", u_confirm_del: "Ta fshij “{name}”?", u_deleted: "Playlist-a u fshi.",
+    u_added: "U shtua. Në Faznet shtyp Rifresko — ose prit pak, pajisja e merr vetë.",
+    u_too_big: "File-i është shumë i madh (maks. 20 MB).", u_default_xtream: "Xtream ", u_default_list: "Lista ",
+    e_invalid: "MAC ose PIN nuk është në formatin e duhur.",
+    e_unknown: "Ky MAC nuk është regjistruar. Hape Faznet në pajisje me internet dhe provo sërish.",
+    e_wrong: "PIN-i është gabim. Shiko PIN-in në ekranin e Faznet.",
+    e_locked: "Shumë tentime të gabuara. Provo sërish pas 15 minutash.",
+    e_limit: "Ke arritur maksimumin e playlist-ave për këtë pajisje.",
+    e_fields: "Plotëso fushat e nevojshme.", e_badurl: "URL-ja duhet të fillojë me http:// ose https://",
+    e_badfile: "File-i nuk duket si playlist M3U.", e_network: "Serveri nuk u arrit. Kontrollo internetin dhe provo sërish.",
+    s_title: "Mbështet Faznet ❤", s_p1: "Faznet është falas, pa reklama dhe pa gjurmim. Nëse ta bën TV-në më të mirë, një dhuratë e vogël e mban gjallë dhe e rrit.",
+    s_p2: "Çdo kafe shkon te veçori të reja, testim në më shumë pajisje dhe serveri që dërgon playlistat në TV.",
+    s_note: "Pagesat kalojnë të sigurta përmes PayPal në llogarinë e familjes së zhvilluesit (Egzon Fazliu). Mund të paguash me PayPal ose me kartë.",
+    s_btn: "Dhuro me PayPal",
+    footer: "Faznet është player falas dhe nuk ofron kanale. Të dhënat përdoren vetëm për t'i dërguar në pajisjen tënde."
+  }
+};
+(function () {
+  var L = "en";
+  try { var q = new URLSearchParams(location.search).get("lang"); var s = localStorage.getItem("fz_lang");
+        L = (q === "sq" || q === "en") ? q : (s === "sq" || s === "en") ? s : "en"; } catch (e) {}
+  window.FZ_LANG = L;
+  window.T = function (k, vars) {
+    var d = window.FZ_I18N[window.FZ_LANG] || window.FZ_I18N.en, t = d[k] != null ? d[k] : (window.FZ_I18N.en[k] || k);
+    if (vars) Object.keys(vars).forEach(function (n) { t = t.replace("{" + n + "}", vars[n]); });
+    return t;
+  };
+  window.applyLang = function (l) {
+    window.FZ_LANG = l;
+    try { localStorage.setItem("fz_lang", l); } catch (e) {}
+    document.documentElement.lang = l;
+    document.title = l === "sq" ? "Faznet · IPTV player falas për Android TV" : "Faznet · Free IPTV player for Android TV";
+    document.querySelectorAll("[data-i18n]").forEach(function (el) { el.innerHTML = T(el.getAttribute("data-i18n")); });
+    document.querySelectorAll("[data-i18n-ph]").forEach(function (el) { el.placeholder = T(el.getAttribute("data-i18n-ph")); });
+    document.querySelectorAll(".lang button").forEach(function (b) { b.classList.toggle("on", b.dataset.lang === l); });
+    if (window.FZ_onLang) window.FZ_onLang();
+  };
+  document.querySelectorAll(".lang button").forEach(function (b) { b.onclick = function () { applyLang(b.dataset.lang); }; });
+  applyLang(L);
+})();
+</script>
 <script src="config.js"></script>
 <script>
 (function () {
   var API = (window.FAZNET_API || "").replace(/\/+$/, "");
-  var MSG = {
-    invalid: "MAC ose PIN nuk është në formatin e duhur.",
-    unknown: "Ky MAC nuk është regjistruar. Hape Faznet në pajisje me internet dhe provo sërish.",
-    wrong: "PIN-i është gabim. Shiko PIN-in në ekranin e Faznet.",
-    locked: "Shumë tentime të gabuara. Provo sërish pas 15 minutash.",
-    limit: "Ke arritur maksimumin e playlist-ave për këtë pajisje.",
-    fields: "Plotëso fushat e nevojshme.",
-    badurl: "URL-ja duhet të fillojë me http:// ose https://",
-    badfile: "File-i nuk duket si playlist M3U.",
-    network: "Serveri nuk u arrit. Kontrollo internetin dhe provo sërish."
-  };
+  // Error texts in the page language (see FZ_I18N above).
+  var MSG = new Proxy({}, { get: function (_, k) { var t = T("e_" + String(k)); return t === "e_" + String(k) ? undefined : t; } });
   var $ = function (id) { return document.getElementById(id); };
-  var state = { mac: "", pin: "", type: "url" };
+  var state = { mac: "", pin: "", type: "url", list: null };
+  window.FZ_onLang = function () { if (state.list) render(state.list, state.max); };
 
   function show(text, ok) { var m = $("msg"); m.textContent = text; m.className = "msg " + (ok ? "ok" : "err"); }
   function clearMsg() { $("msg").className = "msg"; }
@@ -315,19 +474,20 @@
   function render(list, max) {
     var ul = $("list"); ul.innerHTML = "";
     $("empty").style.display = list.length ? "none" : "block";
-    $("listTitle").textContent = "Playlist-at në këtë pajisje (" + list.length + "/" + (max || 20) + ")";
+    state.list = list;
+    $("listTitle").textContent = T("u_list") + " (" + list.length + "/" + (max || 20) + ")";
     list.forEach(function (p) {
       var li = document.createElement("li");
       var n = document.createElement("div"); n.className = "n";
       var b = document.createElement("b"); b.textContent = p.name;
-      var s = document.createElement("small"); s.textContent = { url: "Lista M3U", xtream: "Xtream Codes", file: "File M3U" }[p.type] || "";
+      var s = document.createElement("small"); s.textContent = { url: T("u_t_url"), xtream: T("u_t_xtream"), file: T("u_t_file") }[p.type] || "";
       n.appendChild(b); n.appendChild(s);
-      var del = document.createElement("button"); del.className = "ghost"; del.type = "button"; del.textContent = "Fshij";
+      var del = document.createElement("button"); del.className = "ghost"; del.type = "button"; del.textContent = T("u_delete");
       del.onclick = function () {
-        if (!confirm("Ta fshij “" + p.name + "”?")) return;
+        if (!confirm(T("u_confirm_del", { name: p.name }))) return;
         api("/api/web/delete", { mac: state.mac, pin: state.pin, id: p.id }).then(function (r) {
           if (r.error) return show(MSG[r.error] || r.error);
-          render(r.playlists, state.max); show("Playlist-a u fshi.", true);
+          render(r.playlists, state.max); show(T("u_deleted"), true);
         });
       };
       li.appendChild(n); li.appendChild(del); ul.appendChild(li);
@@ -371,7 +531,7 @@
       btn.disabled = false;
       if (r.error) return show(MSG[r.error] || r.error);
       render(r.playlists, state.max);
-      show("U shtua. Në Faznet shtyp Rifresko — ose prit pak, pajisja e merr vetë.", true);
+      show(T("u_added"), true);
       $("addForm").reset();
       document.querySelector('.tabs button[data-type="' + state.type + '"]').click();
     });
@@ -381,7 +541,7 @@
     e.preventDefault(); clearMsg();
     var base = { mac: state.mac, pin: state.pin, type: state.type, name: $("name").value.trim() };
     // Never name a playlist after its server address: the TV shows the name.
-    if (!base.name && state.type !== "file") base.name = (state.type === "xtream" ? "Xtream " : "Lista ") + (($("list").children.length || 0) + 1);
+    if (!base.name && state.type !== "file") base.name = (state.type === "xtream" ? T("u_default_xtream") : T("u_default_list")) + (($("list").children.length || 0) + 1);
     if (state.type === "url") { base.url = $("url").value.trim(); return send(base); }
     if (state.type === "xtream") {
       base.server = $("xserver").value.trim(); base.username = $("xuser").value.trim(); base.password = $("xpass").value;
@@ -389,7 +549,7 @@
     }
     var f = $("file").files[0];
     if (!f) return show(MSG.fields);
-    if (f.size > 20 * 1024 * 1024) return show("File-i është shumë i madh (maks. 20 MB).");
+    if (f.size > 20 * 1024 * 1024) return show(T("u_too_big"));
     var rd = new FileReader();
     rd.onload = function () { base.content = rd.result; if (!base.name) base.name = f.name.replace(/\.[^.]+$/, ""); send(base); };
     rd.readAsText(f);
