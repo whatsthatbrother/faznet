@@ -1,7 +1,7 @@
 package com.faznet.tv.ui.compose
 
 import android.view.KeyEvent
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -91,14 +91,13 @@ fun FocusBox(
 ) {
     var focused by remember { mutableStateOf(false) }
     var longFired by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) focusScale else 1f, label = "scale")
-    val bg by animateColorAsState(
-        when {
+    val scale by animateFloatAsState(if (focused) focusScale else 1f, tween(90), label = "scale")
+    // Colour changes at once (no fade): the remote feels quicker on slow TV sticks.
+    val bg = when {
             focused -> focusedColor
             selected -> selectedColor
             else -> color
-        }, label = "bg"
-    )
+        }
     Box(
         modifier
             .zIndex(if (focused) 1f else 0f)

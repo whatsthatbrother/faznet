@@ -256,7 +256,7 @@ private fun ChannelArea(state: HomeState, actions: HomeActions, wide: Boolean, t
     Box(modifier) {
         val channels = state.channels
         val gridState = rememberLazyGridState()
-        val minCell = if (tv) 200.dp else if (wide) 260.dp else 280.dp
+        val minCell = if (tv) 190.dp else if (wide) 250.dp else 270.dp
         LaunchedEffect(state.scrollTop) { if (state.scrollTop > 0) gridState.scrollToItem(0) }
         val favs = state.favs
         val check = state.checkVersion
@@ -307,17 +307,17 @@ private fun ChannelCard(
     FocusBox(
         onClick = { actions.openChannel(index) },
         onLongClick = { actions.toggleFavorite(ch) },
-        modifier = Modifier.fillMaxWidth().height(60.dp).focusRequester(requester),
+        modifier = Modifier.fillMaxWidth().height(52.dp).focusRequester(requester),
         shape = RoundedCornerShape(12.dp),
     ) { focused ->
         Row(
             Modifier.fillMaxSize().padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(ch.number.toString(), color = if (focused) Color.White else Fz.dim, fontSize = 13.sp,
-                textAlign = TextAlign.Center, modifier = Modifier.width(32.dp))
+            Text(ch.number.toString(), color = if (focused) Color.White else Fz.dim, fontSize = 12.sp,
+                textAlign = TextAlign.Center, modifier = Modifier.width(30.dp))
             Box(
-                Modifier.size(width = 56.dp, height = 38.dp).background(Color(0xFF0B0E13), RoundedCornerShape(7.dp)),
+                Modifier.size(width = 44.dp, height = 30.dp).background(Color(0xFF0B0E13), RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 AsyncImage(
@@ -326,12 +326,12 @@ private fun ChannelCard(
                     placeholder = painterResource(R.drawable.ic_tv),
                     error = painterResource(R.drawable.ic_tv),
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().padding(4.dp),
+                    modifier = Modifier.fillMaxSize().padding(3.dp),
                 )
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(ch.name, color = Fz.text.copy(alpha = if (dead) 0.45f else 1f), fontSize = 14.sp,
+                Text(ch.name, color = Fz.text.copy(alpha = if (dead) 0.45f else 1f), fontSize = 13.sp,
                     fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(

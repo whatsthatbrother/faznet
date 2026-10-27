@@ -419,11 +419,12 @@ class PlayerActivity : AppCompatActivity() {
     private fun maybePreReopen() {
         val ch = channels.getOrNull(index) ?: return
         if (preReopened || recoveries > 0 || pendingZap >= 0) return
-        // This channel froze at its start before, or several channels did this session and this is a
-        // Full HD one (they all start badly at this provider): re-open at once instead of showing a freeze.
-        val known = ChannelMemory.startFreezes(this, ch.url) >= 1
-        val likely = sessionStartFreezes >= 3 && isFullHd(ch)
-        if (!known && !likely) return
+        // Only channels that froze at their start at least twice are re-opened at once (each one costs a second
+        // connection, which made opening slower in 3.0.2/3.0.3 when it was done for every Full HD channel).
+        // Every quick re-open uses one count up, so a channel that got better goes back to a normal single
+        // opening; a freeze that still happens is fixed by the hidden 1-second re-open anyway.
+        if (ChannelMemory.startFreezes(this, ch.url) < 2) return
+        ChannelMemory.cleanStart(this, ch.url)
         preReopened = true
         lastWarning = "quick re-open (known slow start)"
         handler.post {

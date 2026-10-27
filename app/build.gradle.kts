@@ -20,8 +20,8 @@ android {
         applicationId = "com.faznet.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 33
-        versionName = "3.0.3"
+        versionCode = 34
+        versionName = "3.0.4"
 
 
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
