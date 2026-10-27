@@ -227,7 +227,7 @@ private fun GroupChip(g: GroupItem, state: HomeState, actions: HomeActions, vert
         // TV: moving over a category opens it, like a TV guide
         onFocus = { f -> if (f && vertical && g.key != state.selectedGroup) actions.selectGroup(g.key, false) },
         selected = selected,
-        modifier = if (vertical) Modifier.fillMaxWidth().height(46.dp) else Modifier.height(40.dp),
+        modifier = if (vertical) Modifier.fillMaxWidth().height(42.dp) else Modifier.height(38.dp),
         shape = RoundedCornerShape(10.dp),
         color = if (vertical) Color.Transparent else Fz.surface,
         focusScale = 1.02f,
@@ -238,7 +238,7 @@ private fun GroupChip(g: GroupItem, state: HomeState, actions: HomeActions, vert
                 Spacer(Modifier.width(8.dp))
             }
             Text(
-                g.title, color = if (selected) Fz.text else Fz.text.copy(alpha = 0.85f), fontSize = 15.sp,
+                g.title, color = if (selected) Fz.text else Fz.text.copy(alpha = 0.85f), fontSize = 14.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = if (vertical) Modifier.weight(1f) else Modifier,
@@ -256,7 +256,7 @@ private fun ChannelArea(state: HomeState, actions: HomeActions, wide: Boolean, t
     Box(modifier) {
         val channels = state.channels
         val gridState = rememberLazyGridState()
-        val minCell = if (tv) 230.dp else if (wide) 300.dp else 320.dp
+        val minCell = if (tv) 200.dp else if (wide) 260.dp else 280.dp
         LaunchedEffect(state.scrollTop) { if (state.scrollTop > 0) gridState.scrollToItem(0) }
         val favs = state.favs
         val check = state.checkVersion
@@ -307,17 +307,17 @@ private fun ChannelCard(
     FocusBox(
         onClick = { actions.openChannel(index) },
         onLongClick = { actions.toggleFavorite(ch) },
-        modifier = Modifier.fillMaxWidth().height(74.dp).focusRequester(requester),
-        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().height(60.dp).focusRequester(requester),
+        shape = RoundedCornerShape(12.dp),
     ) { focused ->
         Row(
             Modifier.fillMaxSize().padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(ch.number.toString(), color = if (focused) Color.White else Fz.dim, fontSize = 13.sp,
-                textAlign = TextAlign.Center, modifier = Modifier.width(38.dp))
+                textAlign = TextAlign.Center, modifier = Modifier.width(32.dp))
             Box(
-                Modifier.size(width = 70.dp, height = 48.dp).background(Color(0xFF0B0E13), RoundedCornerShape(8.dp)),
+                Modifier.size(width = 56.dp, height = 38.dp).background(Color(0xFF0B0E13), RoundedCornerShape(7.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 AsyncImage(
@@ -329,17 +329,17 @@ private fun ChannelCard(
                     modifier = Modifier.fillMaxSize().padding(4.dp),
                 )
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(ch.name, color = Fz.text.copy(alpha = if (dead) 0.45f else 1f), fontSize = 15.sp,
+                Text(ch.name, color = Fz.text.copy(alpha = if (dead) 0.45f else 1f), fontSize = 14.sp,
                     fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     if (dead) stringResource(R.string.channel_dead) else ch.group,
-                    color = if (dead) Color(0xFFFF6B81) else if (focused) Color.White.copy(alpha = 0.8f) else Fz.dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = if (dead) Color(0xFFFF6B81) else if (focused) Color.White.copy(alpha = 0.8f) else Fz.dim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (fav) Icon(painterResource(R.drawable.ic_star), null, tint = Color(0xFFFFC94D), modifier = Modifier.size(20.dp))
+            if (fav) Icon(painterResource(R.drawable.ic_star), null, tint = Color(0xFFFFC94D), modifier = Modifier.size(18.dp))
         }
     }
 }

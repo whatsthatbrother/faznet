@@ -141,6 +141,14 @@ object EnginePrefs {
         if (engine == null) s.edit().remove("e_" + key(url)).apply() else s.edit().putString("e_" + key(url), engine).apply()
     }
 
+    /** Forget every per-channel engine choice (3.0.3: some were saved after network errors). */
+    fun clearOverrides(c: Context) {
+        val s = sp(c)
+        val e = s.edit()
+        s.all.keys.filter { it.startsWith("e_") }.forEach { e.remove(it) }
+        e.apply()
+    }
+
     fun vlcSoftware(c: Context, url: String): Boolean = sp(c).getBoolean("s_" + key(url), false)
 
     fun setVlcSoftware(c: Context, url: String, on: Boolean) = sp(c).edit().putBoolean("s_" + key(url), on).apply()

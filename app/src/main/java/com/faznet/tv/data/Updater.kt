@@ -95,12 +95,23 @@ object Updater {
         val id = pi.createSession(params)
         pi.openSession(id).use { s ->
             apk.inputStream().use { i -> s.openWrite("faznet.apk", 0, apk.length()).use { o -> i.copyTo(o, 256 * 1024); s.fsync(o) } }
-            val intent = Intent(c, InstallReceiver::class.java)
+            val intent = Intent(c, InstallReceiver::class.java).putExtra(EXTRA_APK, apk.absolutePath)
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
             s.commit(PendingIntent.getBroadcast(c, id, intent, flags).intentSender)
         }
         prefs(c).edit().putInt("installing", BuildConfig.VERSION_CODE).apply()
     }
+
+    private const val EXTRA_APK = "faznet_apk"
+
+    /** Opens the APK in Android's own installer (the classic "Install" screen). */
+    fun openWithSystemInstaller(c: Context, apk: File): Boolean = runCatching {
+        val uri = androidx.core.content.FileProvider.getUriForFile(c, c.packageName + ".files", apk)
+        val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        c.startActivity(i)
+        true
+    }.getOrDefault(false)
 
     /** Result of the install: shows Android's confirmation screen when the system asks for it. */
     class InstallReceiver : BroadcastReceiver() {
@@ -112,9 +123,14 @@ object Updater {
                     runCatching { c.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 }
                 PackageInstaller.STATUS_SUCCESS -> Unit // the app restarts as the new version
+                PackageInstaller.STATUS_FAILURE_ABORTED -> Unit // the user said no
                 else -> {
                     val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: ""
                     ProblemLog.add(c, "Update", "install failed: $msg")
+                    // Some phones (Play Protect verification, vendor installers) refuse the quiet install:
+                    // hand the same file to Android's normal installer screen, which can ask the user instead.
+                    val apk = intent.getStringExtra(EXTRA_APK)?.let { File(it) }
+                    if (apk != null && apk.exists() && openWithSystemInstaller(c, apk)) return
                     Toast.makeText(c, c.getString(R.string.update_failed, msg), Toast.LENGTH_LONG).show()
                 }
             }

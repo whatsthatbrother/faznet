@@ -1,3 +1,13 @@
+## Faznet v3.0.3
+
+**Shqip:** Testi i internetit te Settings (vonesa, jitter, humbje, shpejtësi dhe sinjali Wi-Fi, me vlerësim Stabil / I përdorshëm / Jo stabil); kartat e kanaleve më të vogla; gabimet e rrjetit nuk e ndërrojnë më motorin e player-it; motori rezervë mbahet mend vetëm kur kanali luan vërtet; 403 provohet dy herë; përditësimi kalon te instaluesi i Android kur telefoni e refuzon instalimin e qetë.
+
+- Settings → Internet test: delay/jitter/loss to the user's IPTV server, download speed, Wi-Fi signal, verdict with reasons
+- Smaller channel cards (more channels on screen), smaller groups
+- ExoPlayer: network errors no longer switch to VLC; engine fallback saved only once the other engine really plays; old saved engine choices cleared once
+- HTTP 403 (provider connection limit while zapping): two retries (2 s, 4 s)
+- Updater: if the quiet install is refused (e.g. INSTALL_FAILED_VERIFICATION_FAILURE), Android's installer screen opens instead
+
 ## Faznet v3.0.2
 
 **Shqip:** Butonat dallohen qartë: blu të mbushur, dhe të bardhë kur je mbi to me telekomandë (edhe në dritaret e dialogut); butonat e ikonave kanë rreth të dukshëm. Kanalet Full HD që ngrijnë në fillim rihapen menjëherë; ndërrimi i kanaleve me lart/poshtë është më i shpejtë.

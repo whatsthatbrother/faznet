@@ -120,6 +120,9 @@ class PlayerActivity : AppCompatActivity() {
     private var lastPosAt = 0L
     private var recoveries = 0
     private var httpRetried = false
+    private var httpRetries = 0
+    /** Engine chosen for this channel only after the other one gave up; remembered once it really plays. */
+    private var forcedEngine: String? = null
     private var okLong = false
     private var totalRecoveries = 0
 
@@ -161,7 +164,7 @@ class PlayerActivity : AppCompatActivity() {
                         p.playbackState == Player.STATE_IDLE || tvError.visibility == View.VISIBLE)
                 ) {
                     retries = 0
-                    httpRetried = false
+                    httpRetried = false; httpRetries = 0
                     freshPlayer()
                     startCurrent()
                 }
@@ -434,6 +437,8 @@ class PlayerActivity : AppCompatActivity() {
         // Opened cleanly on the first try: this channel needs the quick re-open less and less.
         if (!preReopened && recoveries == 0) channels.getOrNull(index)?.let { ChannelMemory.cleanStart(this, it.url) }
         revealed = true
+        // The other engine plays this channel: use it for this channel from now on.
+        forcedEngine?.let { e -> channels.getOrNull(index)?.let { EnginePrefs.setOverride(this, it.url, e) } }
         playerView.alpha = 1f
         vlcLayout.alpha = 1f
         player?.volume = 1f
@@ -517,10 +522,12 @@ class PlayerActivity : AppCompatActivity() {
         index = i
         forceHls = false
         retries = 0
-        httpRetried = false
+        httpRetried = false; httpRetries = 0
         recoveries = 0
         preReopened = false
         enginesTried.clear()
+        forcedEngine = null
+        httpRetries = 0
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
         val ch = channels[index]
@@ -690,7 +697,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /** Which engine opens this channel: the one that worked for it before, otherwise the one in Settings. */
-    private fun useVlcFor(ch: Channel?): Boolean = when (ch?.let { EnginePrefs.override(this, it.url) }) {
+    private fun useVlcFor(ch: Channel?): Boolean = when (forcedEngine ?: ch?.let { EnginePrefs.override(this, it.url) }) {
         EnginePrefs.VLC -> true
         EnginePrefs.EXO -> false
         else -> repo.useVlc
@@ -709,12 +716,13 @@ class PlayerActivity : AppCompatActivity() {
         enginesTried.add(current)
         if (other in enginesTried) return false
         enginesTried.add(other)
-        EnginePrefs.setOverride(this, ch.url, other)
+        // Only for this opening; it is remembered for the channel when the picture really comes (reveal()).
+        forcedEngine = other
         ProblemLog.add(this, ch.name, "$why → ${if (other == EnginePrefs.VLC) "VLC" else "ExoPlayer"}")
         lastWarning = "switched engine: $why"
         retries = 0
         recoveries = 0
-        httpRetried = false
+        httpRetried = false; httpRetries = 0
         showReconnecting()
         // Posted: this can be called from inside the old engine's own callbacks.
         handler.post {
@@ -878,11 +886,13 @@ class PlayerActivity : AppCompatActivity() {
         val http = generateSequence<Throwable>(error) { it.cause }
             .filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
         if (http != null && http in 400..499) {
-            if (!httpRetried) {
+            // Two retries (2 s, then 4 s): the provider often still counts the previous channel's connection.
+            if (httpRetries < 2) {
+                httpRetries++
                 httpRetried = true
                 showReconnecting()
                 handler.removeCallbacks(retry)
-                handler.postDelayed(retry, 2000)
+                handler.postDelayed(retry, 2000L * httpRetries)
             } else {
                 tvError.text = getString(R.string.err_refused, http)
                 pbStart.visibility = View.GONE
@@ -899,7 +909,10 @@ class PlayerActivity : AppCompatActivity() {
             handler.postDelayed(retry, (1500L * retries).coerceAtMost(6000L))
             return
         }
-        if (tryOtherEngine("ExoPlayer: ${error.errorCodeName}")) return
+        // Network errors (no connection, timeout, HTTP) are the server or the line, not the engine:
+        // switching engines then only adds more failed attempts.
+        val network = error.errorCode in 2000..2999
+        if (!network && tryOtherEngine("ExoPlayer: ${error.errorCodeName}")) return
         tvError.text = getString(R.string.err_stream, error.errorCodeName)
         pbStart.visibility = View.GONE
         channels.getOrNull(index)?.let { ProblemLog.add(this, it.name, "error ${error.errorCodeName}") }

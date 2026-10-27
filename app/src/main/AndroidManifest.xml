@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Updates from the Faznet website, installed in place -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Internet test in Settings: Wi-Fi signal strength -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -56,6 +58,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.NetTestActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.VodPlayerActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="false"
@@ -67,6 +73,16 @@
             android:exported="false"
             android:launchMode="singleTop"
             android:theme="@style/Theme.Faznet.Player" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <receiver
             android:name=".data.Updater$InstallReceiver"
             android:exported="false" />

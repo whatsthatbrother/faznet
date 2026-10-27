@@ -66,6 +66,12 @@ class MainActivity : AppCompatActivity(), HomeActions {
                 m.edit().putBoolean("v30", true).apply()
             }
         }
+        getSharedPreferences("faznet_migrate", MODE_PRIVATE).let { m ->
+            if (!m.getBoolean("v303", false)) {
+                com.faznet.tv.data.EnginePrefs.clearOverrides(this)
+                m.edit().putBoolean("v303", true).apply()
+            }
+        }
         autoPlayPending = savedInstanceState == null && repo.autoPlayLast
         if (savedInstanceState == null) {
             checkForUpdate()

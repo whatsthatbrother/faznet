@@ -107,6 +107,9 @@ class SettingsActivity : AppCompatActivity() {
             UpdateUi.run(this, interactive = true)
         },
         Item.Header(getString(R.string.section_other)),
+        Item.Action(getString(R.string.net_title), { getString(R.string.net_sub) }, R.drawable.ic_stats) {
+            startActivity(Intent(this, NetTestActivity::class.java))
+        },
         Item.Action(getString(R.string.playlists), { repo.activePlaylist()?.name ?: "" }, R.drawable.ic_playlist) {
             startActivity(Intent(this, PlaylistsActivity::class.java))
         },
