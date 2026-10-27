@@ -1,3 +1,11 @@
+## Faznet v3.0.4
+
+**Shqip:** Kanalet hapen prapë shpejt: rihapja paraprake bëhet vetëm për kanalet që kanë ngrirë të paktën 2 herë dhe zbret me kohën (jo më për çdo kanal FHD). Logot dhe kartat e kanaleve më të vogla, ngjyra e fokusit ndërrohet menjëherë.
+
+- Pre-reopen only for channels with 2+ start freezes, decays on every use; no more "likely FHD" guess (made opening slower)
+- Smaller channel logos and cards, more columns on TV
+- Instant focus colour, shorter focus zoom
+
 ## Faznet v3.0.3
 
 **Shqip:** Testi i internetit te Settings (vonesa, jitter, humbje, shpejtësi dhe sinjali Wi-Fi, me vlerësim Stabil / I përdorshëm / Jo stabil); kartat e kanaleve më të vogla; gabimet e rrjetit nuk e ndërrojnë më motorin e player-it; motori rezervë mbahet mend vetëm kur kanali luan vërtet; 403 provohet dy herë; përditësimi kalon te instaluesi i Android kur telefoni e refuzon instalimin e qetë.
