@@ -1,3 +1,9 @@
+## Faznet v3.0.5 (planned: Saturday 31.10)
+
+**Shqip:** Roja e fundit e kanalit: nëse figura dhe ora e kanalit qëndrojnë 15 sekonda pa lëvizur (për çfarëdo arsye — gabim, buffering pa fund, ose kur rregullimet e tjera janë përdorur të gjitha), kanali rihapet vetë: pas 15 s, pastaj 30, 60, 120 s, derisa të punojë prapë.
+
+- Last-resort watchdog for ExoPlayer and VLC: no progress (position/time and frames) for 15 s → re-open, backing off to 30/60/120 s; also leaves the error screen by itself when the channel comes back
+
 ## Faznet v3.0.4
 
 **Shqip:** Kanalet hapen prapë shpejt: rihapja paraprake bëhet vetëm për kanalet që kanë ngrirë të paktën 2 herë dhe zbret me kohën (jo më për çdo kanal FHD). Logot dhe kartat e kanaleve më të vogla, ngjyra e fokusit ndërrohet menjëherë.

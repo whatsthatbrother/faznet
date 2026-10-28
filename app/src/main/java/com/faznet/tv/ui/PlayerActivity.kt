@@ -529,6 +529,7 @@ class PlayerActivity : AppCompatActivity() {
         enginesTried.clear()
         forcedEngine = null
         httpRetries = 0
+        resetHardWatch()
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
         val ch = channels[index]
@@ -795,12 +796,57 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    // ---- last-resort watchdog: whatever the reason (error screen, endless buffering, every other fix used up),
+    // a channel whose picture and clock stand still is opened again: after 15 s, then 30, 60, 120 s… ----
+    private var hardPos = -1L
+    private var hardFrames = -1L
+    private var hardAt = 0L
+    private var hardDelay = HARD_STUCK_MS
+
+    private fun resetHardWatch() {
+        hardPos = -1L
+        hardFrames = -1L
+        hardAt = SystemClock.elapsedRealtime()
+        hardDelay = HARD_STUCK_MS
+    }
+
+    /** @return true if it re-opened the channel. */
+    private fun hardWatch(pos: Long, frames: Long): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (pendingZap >= 0) { hardAt = now; return false }
+        if (pos != hardPos || frames != hardFrames) {
+            if (hardPos >= 0 && revealed) hardDelay = HARD_STUCK_MS // playing again: start counting from 15 s
+            hardPos = pos; hardFrames = frames; hardAt = now
+            return false
+        }
+        if (now - hardAt < hardDelay) return false
+        val ch = channels.getOrNull(index) ?: return false
+        ProblemLog.add(this, ch.name, "no progress for ${hardDelay / 1000} s → re-open")
+        lastWarning = "watchdog re-open"
+        hardAt = now
+        hardDelay = (hardDelay * 2).coerceAtMost(HARD_STUCK_MAX_MS)
+        retries = 0
+        recoveries = 0
+        httpRetried = false; httpRetries = 0
+        handler.removeCallbacks(retry)
+        handler.removeCallbacks(stallWatchdog)
+        showReconnecting()
+        freshPlayer()
+        startCurrent()
+        return true
+    }
+
     private fun checkFrames() {
         if (vlc != null) {
+            vlc?.progress()?.let { if (hardWatch(it.time, it.pictures)) return }
             checkVlc()
             return
         }
         val p = player ?: return
+        if (p.playWhenReady) {
+            val frames = p.videoDecoderCounters?.let { it.ensureUpdated(); it.renderedOutputBufferCount.toLong() } ?: 0L
+            if (hardWatch(p.currentPosition, frames)) return
+        }
         // Never keep a channel hidden for long: if it can't settle, show it anyway.
         if (!revealed && SystemClock.elapsedRealtime() - hiddenSince > MAX_HIDDEN_MS) reveal()
         if (p.playbackState != Player.STATE_READY || !p.playWhenReady ||
@@ -1476,6 +1522,8 @@ class PlayerActivity : AppCompatActivity() {
         private const val VLC_FROZEN_MS = 4_000L
         private const val VLC_EARLY_FROZEN_MS = 2_000L
         private const val VLC_STUCK_MS = 12_000L
+        private const val HARD_STUCK_MS = 15_000L
+        private const val HARD_STUCK_MAX_MS = 120_000L
         private const val VLC_EARLY_STUCK_MS = 3_000L
         private const val VLC_OPEN_TIMEOUT_MS = 8_000L
         private const val STUCK_TIMEOUT_MS = 8_000L
