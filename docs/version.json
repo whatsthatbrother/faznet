@@ -1,1 +1,1 @@
-{"version":"3.0.4","code":34,"tv":"download/Faznet-TV.apk","arm64":"download/Faznet-arm64.apk","notes":"Kanalet hapen prapë shpejt (rihapja paraprake vetëm kur duhet); logot dhe kartat e kanaleve më të vogla; lëvizje më e shpejtë me telekomandë."}
+{"version":"3.0.5","code":35,"tv":"download/Faznet-TV.apk","arm64":"download/Faznet-arm64.apk","notes":"Kur një kanal ngrin ose ngec për çfarëdo arsye, Faznet e rihap vetë pas 15 sekondash (pastaj 30, 60, 120 s) derisa të punojë prapë — edhe nga ekrani i gabimit."}

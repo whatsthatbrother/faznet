@@ -1,4 +1,4 @@
-## Faznet v3.0.5 (planned: Saturday 31.10)
+## Faznet v3.0.5
 
 **Shqip:** Roja e fundit e kanalit: nëse figura dhe ora e kanalit qëndrojnë 15 sekonda pa lëvizur (për çfarëdo arsye — gabim, buffering pa fund, ose kur rregullimet e tjera janë përdorur të gjitha), kanali rihapet vetë: pas 15 s, pastaj 30, 60, 120 s, derisa të punojë prapë.
 
