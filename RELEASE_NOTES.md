@@ -6,6 +6,7 @@
 - tvOS-style pivot scrolling (smooth, focused row stays near the upper third) on the home screen and Settings
 - Spring focus animation + soft shadow under the focused item
 - Short cross-fade between screens instead of the slow default slide
+- Update notice on screen: an "Update · Update now" button on the home screen when a new version is ready (checked every start, at most every 30 min), release notes in English (Albanian on Albanian devices)
 
 ## Faznet v3.0.5
 

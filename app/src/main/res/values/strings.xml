@@ -188,4 +188,5 @@
     <string name="net_r_nospeed">The speed could not be measured.</string>
     <string name="net_r_slow">Only %1$.1f Mbps — too little for Full HD.</string>
     <string name="net_r_wifi">The Wi-Fi signal is weak: move the router closer or use a cable.</string>
+    <string name="update_banner">Update %1$s · Update now</string>
 </resources>

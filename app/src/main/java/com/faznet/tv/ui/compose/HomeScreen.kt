@@ -88,6 +88,8 @@ class HomeState {
     var scrollTop by mutableIntStateOf(0)
     /** Increase after a channel check so "not working" labels are redrawn. */
     var checkVersion by mutableIntStateOf(0)
+    /** A newer Faznet is downloaded and ready: the top bar shows an "Update" button. */
+    var updateVersion by mutableStateOf<String?>(null)
 }
 
 interface HomeActions {
@@ -104,6 +106,7 @@ interface HomeActions {
     fun movies()
     fun series()
     fun guide()
+    fun update()
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -176,6 +179,21 @@ private fun TopBar(state: HomeState, actions: HomeActions, wide: Boolean) {
                     state.query.ifEmpty { stringResource(R.string.search_hint) },
                     color = if (state.query.isEmpty()) Fz.dim else Fz.text, fontSize = 14.sp, maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        state.updateVersion?.let { v ->
+            Spacer(Modifier.width(8.dp))
+            FocusBox(
+                onClick = { actions.update() },
+                modifier = Modifier.height(42.dp),
+                shape = RoundedCornerShape(21.dp),
+                color = Color(0xFF2EC27E),
+                focusScale = 1.08f,
+            ) {
+                Text(
+                    stringResource(R.string.update_banner, v), color = Color.White, fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
         }

@@ -32,7 +32,11 @@ object Updater {
     const val VERSION_URL = "https://whatsthatbrother.github.io/faznet/version.json"
     private const val BASE = "https://whatsthatbrother.github.io/faznet/"
 
-    class Info(val version: String, val code: Int, val url: String, val notes: String)
+    class Info(val version: String, val code: Int, val url: String, val notes: String, val notesEn: String = "") {
+        /** Release notes in the device language: Albanian on Albanian devices, English everywhere else. */
+        fun localNotes(): String =
+            if (java.util.Locale.getDefault().language == "sq") notes.ifBlank { notesEn } else notesEn.ifBlank { notes }
+    }
 
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences("faznet_update", Context.MODE_PRIVATE)
 
@@ -51,7 +55,7 @@ object Updater {
                 if (code <= BuildConfig.VERSION_CODE) return@use null
                 val path = if (isArm64(c)) o.optString("arm64") else o.optString("tv")
                 if (path.isEmpty()) return@use null
-                Info(o.optString("version"), code, if (path.startsWith("http")) path else BASE + path, o.optString("notes"))
+                Info(o.optString("version"), code, if (path.startsWith("http")) path else BASE + path, o.optString("notes"), o.optString("notes_en"))
             }
         }.getOrNull()
     }

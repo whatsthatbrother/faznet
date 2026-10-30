@@ -187,4 +187,5 @@
     <string name="net_r_nospeed">Shpejtësia nuk u mat dot.</string>
     <string name="net_r_slow">Vetëm %1$.1f Mbps — pak për Full HD.</string>
     <string name="net_r_wifi">Sinjali Wi-Fi është i dobët: afroje ruterin ose përdor kabllo.</string>
+    <string name="update_banner">Përditësimi %1$s · Përditëso</string>
 </resources>

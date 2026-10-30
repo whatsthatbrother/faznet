@@ -96,6 +96,8 @@ class MainActivity : AppCompatActivity(), HomeActions {
     override fun settings() = showSettings()
     override fun movies() = LibraryActivity.start(this, series = false)
     override fun series() = LibraryActivity.start(this, series = true)
+    override fun update() = UpdateUi.run(this, interactive = true) { info -> ui.updateVersion = info.version }
+
     override fun guide() {
         ChannelStore.playlistId = playlist?.id ?: ""
         ChannelStore.all = all
@@ -125,6 +127,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
     override fun onResume() {
         super.onResume()
         UpdateUi.resume(this)
+        checkForUpdate()
         refreshState()
         syncFromWeb(force = false)
         startWelcomePolling()
@@ -472,9 +475,10 @@ class MainActivity : AppCompatActivity(), HomeActions {
     private fun checkForUpdate() {
         if (!repo.autoUpdate) return
         val prefs = getSharedPreferences("faznet_update", MODE_PRIVATE)
-        if (System.currentTimeMillis() - prefs.getLong("checked", 0) < 6 * 3600_000L) return
+        // Every start and every return to the home screen, at most every 30 minutes (version.json is tiny).
+        if (System.currentTimeMillis() - prefs.getLong("checked", 0) < 30 * 60_000L) return
         prefs.edit().putLong("checked", System.currentTimeMillis()).apply()
-        UpdateUi.run(this, interactive = false)
+        UpdateUi.run(this, interactive = false) { info -> ui.updateVersion = info.version }
     }
 
     private fun isNewer(a: String, b: String): Boolean {

@@ -22,7 +22,7 @@ object UpdateUi {
      * Looks for a newer Faznet, downloads it quietly and offers to install it.
      * [interactive] = started from Settings: say what is happening (checking, newest already, no connection).
      */
-    fun run(a: AppCompatActivity, interactive: Boolean) {
+    fun run(a: AppCompatActivity, interactive: Boolean, onReady: (Updater.Info) -> Unit = {}) {
         a.lifecycleScope.launch {
             if (interactive) toast(a, R.string.update_checking)
             val info = Updater.check(a)
@@ -37,8 +37,17 @@ object UpdateUi {
                 return@launch
             }
             if (a.isFinishing || a.isDestroyed) return@launch
+            onReady(info)
+            // Automatic check: the window comes once a day per version; the home screen keeps an "Update" button.
+            if (!interactive) {
+                val sp = a.getSharedPreferences("faznet_update", android.content.Context.MODE_PRIVATE)
+                val key = "asked_${info.code}"
+                if (System.currentTimeMillis() - sp.getLong(key, 0) < 20 * 3600_000L) return@launch
+                sp.edit().putLong(key, System.currentTimeMillis()).apply()
+            }
+            val notes = info.localNotes()
             val msg = a.getString(R.string.update_ready_msg, info.version, BuildConfig.VERSION_NAME) +
-                if (info.notes.isNotBlank()) "\n\n" + info.notes else ""
+                if (notes.isNotBlank()) "\n\n" + notes else ""
             MaterialAlertDialogBuilder(a)
                 .setTitle(R.string.update_ready_title)
                 .setMessage(msg)
