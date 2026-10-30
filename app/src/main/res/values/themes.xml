@@ -31,6 +31,8 @@
         <item name="materialButtonStyle">@style/Faznet.Button</item>
         <item name="materialButtonOutlinedStyle">@style/Faznet.Button.Secondary</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Faznet.Dialog</item>
+        <!-- Short cross-fades between screens instead of the slow default slide -->
+        <item name="android:windowAnimationStyle">@style/Faznet.WindowAnim</item>
         <item name="colorControlHighlight">#554F6BFF</item>
     </style>
 
@@ -67,6 +69,13 @@
         <item name="buttonBarNegativeButtonStyle">@style/Faznet.DialogButton.Secondary</item>
         <item name="buttonBarNeutralButtonStyle">@style/Faznet.DialogButton.Secondary</item>
         <item name="colorControlHighlight">#664F6BFF</item>
+    </style>
+
+    <style name="Faznet.WindowAnim" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/fz_fade_in</item>
+        <item name="android:activityOpenExitAnimation">@anim/fz_hold</item>
+        <item name="android:activityCloseEnterAnimation">@anim/fz_hold</item>
+        <item name="android:activityCloseExitAnimation">@anim/fz_fade_out</item>
     </style>
 
     <style name="Theme.Faznet.Player" parent="Theme.Faznet">

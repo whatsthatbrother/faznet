@@ -1,3 +1,12 @@
+## Faznet v4.0.0
+
+**Shqip:** Kanali që ngrin rihapet vetë edhe kur zëri vazhdon dhe të gjitha rregullimet e tjera janë përdorur (pas 15 s, pastaj 30/60/120 s). Pamje më e butë si në iOS/tvOS: lista rrëshqet butë dhe kanali i zgjedhur qëndron afër mesit, karta e fokusuar ngrihet me hije dhe lëvizje "spring", kalim i shpejtë mes ekraneve.
+
+- Last-resort watchdog now also covers a frozen picture while the sound keeps playing (counts new pictures, not only the clock)
+- tvOS-style pivot scrolling (smooth, focused row stays near the upper third) on the home screen and Settings
+- Spring focus animation + soft shadow under the focused item
+- Short cross-fade between screens instead of the slow default slide
+
 ## Faznet v3.0.5
 
 **Shqip:** Roja e fundit e kanalit: nëse figura dhe ora e kanalit qëndrojnë 15 sekonda pa lëvizur (për çfarëdo arsye — gabim, buffering pa fund, ose kur rregullimet e tjera janë përdorur të gjitha), kanali rihapet vetë: pas 15 s, pastaj 30, 60, 120 s, derisa të punojë prapë.

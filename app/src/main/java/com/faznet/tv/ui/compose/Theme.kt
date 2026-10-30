@@ -1,7 +1,11 @@
 package com.faznet.tv.ui.compose
 
 import android.view.KeyEvent
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -91,7 +95,8 @@ fun FocusBox(
 ) {
     var focused by remember { mutableStateOf(false) }
     var longFired by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) focusScale else 1f, tween(90), label = "scale")
+    // A light spring like on iOS / tvOS: quick, with a hint of bounce.
+    val scale by animateFloatAsState(if (focused) focusScale else 1f, spring(dampingRatio = 0.72f, stiffness = 900f), label = "scale")
     // Colour changes at once (no fade): the remote feels quicker on slow TV sticks.
     val bg = when {
             focused -> focusedColor
@@ -101,7 +106,11 @@ fun FocusBox(
     Box(
         modifier
             .zIndex(if (focused) 1f else 0f)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .graphicsLayer {
+                scaleX = scale; scaleY = scale
+                // Soft shadow under the focused item lifts it from the screen.
+                if (focused) { this.shape = shape; shadowElevation = 14.dp.toPx() }
+            }
             .clip(shape)
             .then(if (focused && focusedBrush != null) Modifier.background(focusedBrush) else Modifier.background(bg))
             .border(
@@ -149,5 +158,19 @@ fun IconAction(icon: Int, label: String, onClick: () -> Unit, onLongClick: (() -
             painterResource(icon), contentDescription = label, tint = Fz.text,
             modifier = Modifier.align(Alignment.Center).size(size * 0.5f)
         )
+    }
+}
+
+/**
+ * TV "pivot" scrolling (as on tvOS / Google TV): the focused row stays about a third from the top and the
+ * list glides there smoothly, instead of jumping when the focus reaches the edge.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+val PivotScroll: BringIntoViewSpec = object : BringIntoViewSpec {
+    override val scrollAnimationSpec: AnimationSpec<Float> = tween(240, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
+
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        if (size >= containerSize) return offset
+        return offset - (containerSize * 0.3f - size / 2f).coerceAtLeast(0f)
     }
 }

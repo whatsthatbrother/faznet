@@ -810,15 +810,21 @@ class PlayerActivity : AppCompatActivity() {
         hardDelay = HARD_STUCK_MS
     }
 
-    /** @return true if it re-opened the channel. */
+    /**
+     * @return true if it re-opened the channel.
+     * Channels with a picture count as moving only while new pictures come (a frozen picture with the sound
+     * still playing is caught here too, even after the other fixes were used up); radio uses the clock.
+     */
     private fun hardWatch(pos: Long, frames: Long): Boolean {
         val now = SystemClock.elapsedRealtime()
         if (pendingZap >= 0) { hardAt = now; return false }
-        if (pos != hardPos || frames != hardFrames) {
-            if (hardPos >= 0 && revealed) hardDelay = HARD_STUCK_MS // playing again: start counting from 15 s
+        val moving = if (frames > 0 || hardFrames > 0) frames != hardFrames else pos != hardPos
+        if (moving) {
+            if (hardAt != 0L && revealed) hardDelay = HARD_STUCK_MS // playing again: start counting from 15 s
             hardPos = pos; hardFrames = frames; hardAt = now
             return false
         }
+        hardPos = pos
         if (now - hardAt < hardDelay) return false
         val ch = channels.getOrNull(index) ?: return false
         ProblemLog.add(this, ch.name, "no progress for ${hardDelay / 1000} s → re-open")

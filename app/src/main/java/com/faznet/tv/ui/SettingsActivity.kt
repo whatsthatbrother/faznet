@@ -74,11 +74,19 @@ class SettingsActivity : AppCompatActivity() {
     /** Increased after a dialog changes something, so the screen shows the new values. */
     private val refresh = mutableIntStateOf(0)
 
+    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repo = Repository.get(this)
         val tv = isTv()
-        setContent { FaznetTheme { Screen(buildItems(), tv) } }
+        setContent {
+            FaznetTheme {
+                if (tv) androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.faznet.tv.ui.compose.PivotScroll
+                ) { Screen(buildItems(), tv) }
+                else Screen(buildItems(), tv)
+            }
+        }
     }
 
     override fun onResume() {

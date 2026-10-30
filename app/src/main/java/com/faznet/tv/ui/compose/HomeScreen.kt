@@ -106,8 +106,18 @@ interface HomeActions {
     fun guide()
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(state: HomeState, actions: HomeActions, wide: Boolean, tv: Boolean) {
+    if (tv) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides PivotScroll
+        ) { HomeContent(state, actions, wide, tv) }
+    } else HomeContent(state, actions, wide, tv)
+}
+
+@Composable
+private fun HomeContent(state: HomeState, actions: HomeActions, wide: Boolean, tv: Boolean) {
     Column(
         Modifier
             .fillMaxSize()
