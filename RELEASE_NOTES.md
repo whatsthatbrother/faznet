@@ -1,3 +1,10 @@
+## Faznet v4.0.3
+
+**Shqip:** Kanali nuk mbetet më i ngrirë kur sinjali HDMI i TV-së ndërpritet për një çast (ndërrim input-i, standby, lidhje e lirshme). TV live tani vazhdon të luajë, dhe nëse sistemi e pauzon prapë, kanali rihapet vetë.
+
+### Fix
+- Live player: Android sends "audio becoming noisy" when the HDMI signal drops for a moment; ExoPlayer paused on it, and the watchdogs only watch a player that is meant to play, so the channel stayed frozen until the user left it (seen on the Mi TV Stick: HDMI gone for 0.6 s, channel paused for good). Live TV has no pause button, so it no longer pauses on that signal; any other pause by the system re-opens the channel at the live edge and is written to the problem log
+
 ## Faznet v4.0.2
 
 **Shqip:** Testi i internetit nuk thotë më "Unstable" kur serveri IPTV punon mirë. Refresh pa internet e mban listën e kanaleve. Një rresht i prishur nuk e ndal më gjithë playlist-ën. Filmat dhe serialet ngarkojnë vetëm kategorinë ku ndalesh, dhe përditësimi i shkarkuar përgjysmë vërehet e shkarkohet sërish.
