@@ -1,3 +1,16 @@
+## Faznet v4.0.2
+
+**Shqip:** Testi i internetit nuk thotë më "Unstable" kur serveri IPTV punon mirë. Refresh pa internet e mban listën e kanaleve. Një rresht i prishur nuk e ndal më gjithë playlist-ën. Filmat dhe serialet ngarkojnë vetëm kategorinë ku ndalesh, dhe përditësimi i shkarkuar përgjysmë vërehet e shkarkohet sërish.
+
+### Fixes
+- Internet test: delay, jitter and loss are measured with plain TCP connections to the IPTV server. Many panels drop HTTP requests to their root page, so a healthy server showed 100% loss and "Unstable" (on the Mi TV Stick: now 43 ms, 3 ms jitter, 0% loss)
+- Refresh with no internet or a server that is down keeps the copy on the device and shows the error, instead of emptying the home screen
+- A stray "%" in Kodi-style options (`url|User-Agent=...`) no longer makes the whole playlist fail to load
+- Movies / series: moving over the categories loads only the one the remote stops on (350 ms), and leaving a category cancels its download instead of letting it finish in the background
+- Updates: a downloaded APK is used only if Android can read it and it is the expected version; a download cut off half way is fetched again instead of failing to install on every start
+- Playlists removed on the website no longer leave their parsed copy, favourites and recent channels behind
+- First unit tests (playlist parser)
+
 ## Faznet v4.0.1
 
 **Shqip:** Ekran kryesor i ri me logo të mëdha të kanaleve (si Apple TV) dhe emra të plotë. Lëvizja me telekomandë është rreth dy herë më e butë në TV stick. Fotoja e ngrirë në VLC tani vërehet edhe kur zëri vazhdon, dhe kanali që mbaron vazhdimisht nuk provohet pafund.
