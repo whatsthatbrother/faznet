@@ -1,3 +1,19 @@
+## Faznet v4.0.1
+
+**Shqip:** Ekran kryesor i ri me logo të mëdha të kanaleve (si Apple TV) dhe emra të plotë. Lëvizja me telekomandë është rreth dy herë më e butë në TV stick. Fotoja e ngrirë në VLC tani vërehet edhe kur zëri vazhdon, dhe kanali që mbaron vazhdimisht nuk provohet pafund.
+
+### Home screen
+- New tiles look: a big logo on a dark tile with the channel name under it; the focused tile grows slightly
+- Full channel names are easier to read (the old three-column cards cut them short)
+- Smoother on TV sticks (measured on the Mi TV Stick): janky frames down from 15–21% to about 8%, worst stall from 150 ms to 65 ms
+  - no shadow under the focused item (it cost the stick's GPU more than the rest of the card)
+  - the focus zoom redraws only its layer, not the card's content, on every frame
+  - the window no longer paints a second full-screen background under the screen
+
+### Player
+- VLC: the freeze watchdog counts pictures shown, not decoded + shown, so a picture stuck on screen while the sound plays is noticed
+- A channel that keeps reaching its end is retried a few times with a growing pause (1–5 s), then shows an error and is logged in the problem log
+
 ## Faznet v4.0.0
 
 **Shqip:** Kanali që ngrin rihapet vetë edhe kur zëri vazhdon dhe të gjitha rregullimet e tjera janë përdorur (pas 15 s, pastaj 30/60/120 s). Pamje më e butë si në iOS/tvOS: lista rrëshqet butë dhe kanali i zgjedhur qëndron afër mesit, karta e fokusuar ngrihet me hije dhe lëvizje "spring", kalim i shpejtë mes ekraneve.
