@@ -62,18 +62,32 @@ object Updater {
 
     private fun apkFile(c: Context, code: Int) = File(c.cacheDir, "update-$code.apk")
 
+    /**
+     * True if [f] is a whole, readable Faznet APK of version [code]. A download cut off half way used to be
+     * kept (it was over 1 MB) and offered again on every start, failing to install each time.
+     */
+    private fun isComplete(c: Context, f: File, code: Int): Boolean {
+        if (!f.exists()) return false
+        val pi = runCatching { c.packageManager.getPackageArchiveInfo(f.path, 0) }.getOrNull() ?: return false
+        @Suppress("DEPRECATION")
+        val v = if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode else pi.versionCode.toLong()
+        return pi.packageName == c.packageName && v == code.toLong()
+    }
+
     /** Downloads the APK (kept until installed, so a second start doesn't download it again). */
     suspend fun download(c: Context, info: Info): File? = withContext(Dispatchers.IO) {
         val f = apkFile(c, info.code)
-        if (f.exists() && f.length() > 1_000_000) return@withContext f
+        if (isComplete(c, f, info.code)) return@withContext f
         c.cacheDir.listFiles()?.filter { it.name.startsWith("update-") }?.forEach { it.delete() }
-        val tmp = File(c.cacheDir, "update-${info.code}.part")
+        val tmp = File(c.cacheDir, "update-${info.code}.part.apk") // ".apk": some Android versions only parse that
         runCatching {
             Http.client.newCall(Request.Builder().url(info.url).build()).execute().use { r ->
                 if (!r.isSuccessful) return@runCatching null
+                val expected = r.body?.contentLength() ?: -1L
                 r.body?.byteStream()?.use { i -> tmp.outputStream().use { o -> i.copyTo(o, 256 * 1024) } }
+                if (expected > 0 && tmp.length() != expected) { tmp.delete(); return@runCatching null }
             }
-            if (tmp.length() < 1_000_000 || !tmp.renameTo(f)) { tmp.delete(); null } else f
+            if (!isComplete(c, tmp, info.code) || !tmp.renameTo(f)) { tmp.delete(); null } else f
         }.getOrElse { tmp.delete(); null }
     }
 

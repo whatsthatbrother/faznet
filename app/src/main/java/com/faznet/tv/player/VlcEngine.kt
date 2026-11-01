@@ -58,8 +58,12 @@ class VlcEngine(context: Context, private val layout: VLCVideoLayout, private va
     fun progress(): Progress? {
         if (released) return null
         val st = runCatching { media?.stats }.getOrNull() ?: return null
+        // Pictures shown, not decoded + shown: with the sum, a picture that froze on screen while the decoder kept
+        // going (sound plays, picture stuck) still counted as moving and no watchdog saw it. Decoded pictures
+        // are the fallback only for outputs that never report displayed ones.
+        val displayed = st.displayedPictures.toLong()
         return Progress(
-            pictures = st.displayedPictures.toLong() + st.decodedVideo.toLong(),
+            pictures = if (displayed > 0) displayed else st.decodedVideo.toLong(),
             audio = st.decodedAudio.toLong(),
             bytes = st.readBytes.toLong(),
             time = runCatching { mp.time }.getOrDefault(0L),

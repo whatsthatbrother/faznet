@@ -20,8 +20,8 @@ android {
         applicationId = "com.faznet.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 40
-        versionName = "4.0.0"
+        versionCode = 43
+        versionName = "4.0.3"
 
 
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
@@ -133,4 +133,6 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    testImplementation("junit:junit:4.13.2")
 }

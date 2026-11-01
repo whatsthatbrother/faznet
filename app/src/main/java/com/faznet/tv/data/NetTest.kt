@@ -11,7 +11,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
-import java.util.concurrent.TimeUnit
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Socket
 import kotlin.math.abs
 
 /**
@@ -30,15 +32,6 @@ object NetTest {
 
     private const val SPEED_URL = "https://whatsthatbrother.github.io/faznet/download/Faznet-arm64.apk"
     private const val FALLBACK_PING = "https://whatsthatbrother.github.io/faznet/version.json"
-
-    private val client by lazy {
-        Http.client.newBuilder()
-            .connectTimeout(3, TimeUnit.SECONDS)
-            .readTimeout(3, TimeUnit.SECONDS)
-            .callTimeout(4, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .build()
-    }
 
     fun connection(c: Context): Connection {
         val cm = c.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -65,16 +58,22 @@ object NetTest {
         return u.newBuilder().encodedPath("/").query(null).fragment(null).build().toString()
     }
 
-    /** [count] small requests one after another: delay, jitter and how many got no answer. */
+    /**
+     * [count] connections one after another: delay, jitter and how many got no answer.
+     * Each one is only a TCP connect to the server's port (nothing is sent): many IPTV panels drop HTTP
+     * requests to their root page, which made a perfectly good server look 100% lost.
+     */
     suspend fun ping(target: String?, count: Int = 10, onStep: (Int) -> Unit = {}): Ping = withContext(Dispatchers.IO) {
-        val url = target ?: FALLBACK_PING
+        val url = (target ?: FALLBACK_PING).toHttpUrlOrNull()
+        // The name is looked up once here, so the times below are the connection alone.
+        val address = url?.let { u -> runCatching { InetSocketAddress(InetAddress.getByName(u.host), u.port) }.getOrNull() }
+        fun connect() = address != null && runCatching { Socket().use { it.connect(address, 3_000) } }.isSuccess
         val times = ArrayList<Long>()
         var lost = 0
-        // First request opens the connection (DNS, TCP, TLS): not counted.
-        runCatching { client.newCall(Request.Builder().url(url).head().build()).execute().close() }
+        connect() // warm-up (route, ARP), not counted
         for (i in 0 until count) {
             val t0 = SystemClock.elapsedRealtime()
-            val ok = runCatching { client.newCall(Request.Builder().url(url).head().build()).execute().close() }.isSuccess
+            val ok = connect()
             if (ok) times.add(SystemClock.elapsedRealtime() - t0) else lost++
             withContext(Dispatchers.Main) { onStep(i + 1) }
             delay(150)

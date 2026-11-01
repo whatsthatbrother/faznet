@@ -22,6 +22,7 @@ import com.faznet.tv.data.XtreamAccount
 import com.faznet.tv.data.XtreamApi
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Movies or series of the active Xtream account: categories on the left, posters on the right. */
@@ -55,7 +56,7 @@ class LibraryActivity : AppCompatActivity() {
         search = findViewById(R.id.libSearch)
         search.doAfterTextChanged { applyFilter() }
 
-        categories = GroupAdapter(horizontal = false, selectOnFocus = true, onSelect = { key, _ -> loadItems(key) })
+        categories = GroupAdapter(horizontal = false, selectOnFocus = true, onSelect = { key, fromClick -> loadItems(key, fromClick) })
         findViewById<RecyclerView>(R.id.libCategories).apply {
             layoutManager = LinearLayoutManager(this@LibraryActivity)
             adapter = categories
@@ -85,13 +86,15 @@ class LibraryActivity : AppCompatActivity() {
         grid.notifyDataSetChanged() // "continue watching" times may have changed
     }
 
-    private fun loadItems(key: String) {
+    /** [now] false = the remote is only passing over the category: load it once the remote stops there. */
+    private fun loadItems(key: String, now: Boolean = true) {
         selected = key
         categories.select(key)
         loadJob?.cancel()
         progress.visibility = View.VISIBLE
         empty.visibility = View.GONE
         loadJob = lifecycleScope.launch {
+            if (!now) delay(CATEGORY_DELAY_MS)
             val cat = key.takeUnless { it == ALL }
             items = if (series) {
                 XtreamApi.series(account, cat).map { s ->
@@ -185,6 +188,7 @@ class LibraryActivity : AppCompatActivity() {
 
     companion object {
         private const val ALL = "\u0000all"
+        private const val CATEGORY_DELAY_MS = 350L
         const val EXTRA_SERIES = "series"
 
         fun start(c: Context, series: Boolean) =

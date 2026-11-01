@@ -102,8 +102,7 @@ class SettingsActivity : AppCompatActivity() {
         Item.Toggle(getString(R.string.software_sd), { repo.softwareSd }, { repo.softwareSd = it }),
         Item.Toggle(getString(R.string.show_stats), { repo.showStats }, { repo.showStats = it }),
         Item.Header(getString(R.string.section_start)),
-        Item.Toggle(getString(R.string.autoplay_last), { repo.autoPlayLast }, { repo.autoPlayLast = it }),
-        Item.Header(getString(R.string.section_reports)),
+        Item.Toggle(getString(R.string.autoplay_last), { repo.autoPlayLast }, { repo.autoPlayLast = it }),        Item.Header(getString(R.string.section_reports)),
         Item.Toggle(getString(R.string.auto_reports), { repo.autoReports }, { repo.autoReports = it }),
         Item.Action(getString(R.string.problem_log), {
             ProblemLog.read(this).size.let { if (it == 0) getString(R.string.problem_log_empty) else "$it" }

@@ -58,6 +58,8 @@ class MainActivity : AppCompatActivity(), HomeActions {
         val wide = resources.getBoolean(R.bool.wide)
         val tv = isTv()
         setContent { FaznetTheme { HomeScreen(ui, this, wide, tv) } }
+        // The screen paints its own background: the window's would be one more full-screen fill for the TV's GPU.
+        window.setBackgroundDrawable(null)
 
         // 3.0: "open the last channel on start" is off unless the user turns it on again in Settings.
         getSharedPreferences("faznet_migrate", MODE_PRIVATE).let { m ->
@@ -253,6 +255,12 @@ class MainActivity : AppCompatActivity(), HomeActions {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // Refresh failed (no internet, server down): keep showing the copy on the device and say so.
+                if (force && repo.cacheFile(p.id).length() > 0) {
+                    Toast.makeText(this@MainActivity, getString(R.string.err_load, e.safeMessage()), Toast.LENGTH_LONG).show()
+                    load(p, false)
+                    return@launch
+                }
                 ui.loading = false
                 loadedPlaylistId = null
                 setChannels(emptyList()); visible = emptyList()

@@ -12,3 +12,6 @@ release.flag
 debuggable.flag
 keystore/
 CLAUDE.local.md
+/*.apk
+.kotlin/
+archive/

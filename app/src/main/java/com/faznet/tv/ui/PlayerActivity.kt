@@ -471,9 +471,20 @@ class PlayerActivity : AppCompatActivity() {
                         handler.postDelayed(stallWatchdog, STALL_TIMEOUT_MS)
                     }
                     Player.STATE_ENDED -> {
-                        // A live stream should never "end": the server dropped us, reconnect.
+                        // A live stream should never "end": the server dropped us, reconnect. With a growing pause
+                        // and a limit: a channel that ends at once used to open a new connection every second
+                        // forever, which is what trips the provider's connection limit (HTTP 403). After the
+                        // limit hardWatch keeps re-opening it, 15 → 30 → 60 → 120 s apart.
                         handler.removeCallbacks(retry)
-                        handler.postDelayed(retry, 1000)
+                        if (retries < MAX_RETRIES) {
+                            retries++
+                            handler.postDelayed(retry, (1000L * retries).coerceAtMost(5000L))
+                        } else {
+                            pbStart.visibility = View.GONE
+                            tvError.text = getString(R.string.err_stream, "ENDED")
+                            tvError.visibility = View.VISIBLE
+                            channels.getOrNull(index)?.let { ProblemLog.add(this@PlayerActivity, it.name, "stream ended $MAX_RETRIES times") }
+                        }
                     }
                     else -> readySince = 0L
                 }
@@ -512,6 +523,20 @@ class PlayerActivity : AppCompatActivity() {
             }
         })
         if (com.faznet.tv.BuildConfig.DEBUG) p.addAnalyticsListener(EventLogger("FaznetPlayer"))
+        // Live TV has no pause button, so nothing may pause it. Android sends "audio becoming noisy" whenever the
+        // HDMI signal drops for a moment (TV switched input or off and on, CEC standby, a loose cable); ExoPlayer
+        // then paused, and since the watchdogs only look at a player that is meant to play, the channel stayed
+        // frozen until the user left it (Mi TV Stick, 31.10: HDMI gone for 0.6 s → paused for good).
+        p.setHandleAudioBecomingNoisy(false)
+        p.addListener(object : Player.Listener {
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (playWhenReady || player !== p) return
+                // Paused by the system anyway (audio focus, a remote, …): open the channel again at the live edge,
+                // since the picture in the buffer is old by now.
+                channels.getOrNull(index)?.let { ProblemLog.add(this@PlayerActivity, it.name, "paused by the system ($reason) → re-open") }
+                handler.post { if (player === p) { freshPlayer(); startCurrent() } }
+            }
+        })
         p.playWhenReady = true
         playerView.player = p
         player = p

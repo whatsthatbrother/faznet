@@ -95,8 +95,9 @@ fun FocusBox(
 ) {
     var focused by remember { mutableStateOf(false) }
     var longFired by remember { mutableStateOf(false) }
-    // A light spring like on iOS / tvOS: quick, with a hint of bounce.
-    val scale by animateFloatAsState(if (focused) focusScale else 1f, spring(dampingRatio = 0.72f, stiffness = 900f), label = "scale")
+    // A light spring like on iOS / tvOS: quick, with a hint of bounce. Read only inside graphicsLayer, so the
+    // animation redraws the layer and does not recompose the box's content on every frame.
+    val scale = animateFloatAsState(if (focused) focusScale else 1f, spring(dampingRatio = 0.72f, stiffness = 900f), label = "scale")
     // Colour changes at once (no fade): the remote feels quicker on slow TV sticks.
     val bg = when {
             focused -> focusedColor
@@ -106,11 +107,9 @@ fun FocusBox(
     Box(
         modifier
             .zIndex(if (focused) 1f else 0f)
-            .graphicsLayer {
-                scaleX = scale; scaleY = scale
-                // Soft shadow under the focused item lifts it from the screen.
-                if (focused) { this.shape = shape; shadowElevation = 14.dp.toPx() }
-            }
+            // No shadow under the focused item: on the TV stick's GPU it cost more than the rest of the card.
+            // Items that do not grow get no layer at all.
+            .then(if (focusScale != 1f) Modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value } else Modifier)
             .clip(shape)
             .then(if (focused && focusedBrush != null) Modifier.background(focusedBrush) else Modifier.background(bg))
             .border(

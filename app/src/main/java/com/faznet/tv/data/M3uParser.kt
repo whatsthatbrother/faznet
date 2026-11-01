@@ -58,7 +58,9 @@ object M3uParser {
                     url = url.substring(0, pipe)
                     for (part in opts.split('&')) {
                         val k = part.substringBefore('=').trim().lowercase()
-                        val v = java.net.URLDecoder.decode(part.substringAfter('=', ""), "UTF-8")
+                        val raw = part.substringAfter('=', "")
+                        // A stray "%" must not stop the whole playlist from loading: keep the text as it is.
+                        val v = runCatching { java.net.URLDecoder.decode(raw, "UTF-8") }.getOrDefault(raw)
                         if (k == "user-agent") ua = v
                         else if (k == "referer" || k == "referrer") ref = v
                     }

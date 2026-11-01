@@ -2,8 +2,10 @@ package com.faznet.tv.data
 
 import android.util.Base64
 import com.faznet.tv.net.Http
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import org.json.JSONArray
@@ -43,17 +45,30 @@ data class XProgramme(val title: String, val desc: String, val start: Long, val 
 
 object XtreamApi {
 
-    private suspend fun call(a: XtreamAccount, action: String, vararg params: Pair<String, String>): String? =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val b = "${a.server}/player_api.php".toHttpUrlOrNull()?.newBuilder() ?: return@runCatching null
-                b.addQueryParameter("username", a.user).addQueryParameter("password", a.pass)
-                if (action.isNotEmpty()) b.addQueryParameter("action", action)
-                params.forEach { (k, v) -> b.addQueryParameter(k, v) }
-                val req = Request.Builder().url(b.build()).header("User-Agent", com.faznet.tv.data.Repository.DEFAULT_UA).build()
-                Http.api.newCall(req).execute().use { r -> if (r.isSuccessful) r.body?.string() else null }
-            }.getOrNull()
+    /**
+     * One API request. Cancelling the caller (another category chosen, screen closed) cancels the download
+     * too: a blocking OkHttp call would otherwise keep loading a big list in the background and use one of
+     * the account's few connections.
+     */
+    private suspend fun call(a: XtreamAccount, action: String, vararg params: Pair<String, String>): String? {
+        val b = "${a.server}/player_api.php".toHttpUrlOrNull()?.newBuilder() ?: return null
+        b.addQueryParameter("username", a.user).addQueryParameter("password", a.pass)
+        if (action.isNotEmpty()) b.addQueryParameter("action", action)
+        params.forEach { (k, v) -> b.addQueryParameter(k, v) }
+        val req = Request.Builder().url(b.build()).header("User-Agent", com.faznet.tv.data.Repository.DEFAULT_UA).build()
+        val http = Http.api.newCall(req)
+        return coroutineScope {
+            val body = async(Dispatchers.IO) {
+                runCatching { http.execute().use { r -> if (r.isSuccessful) r.body?.string() else null } }.getOrNull()
+            }
+            try {
+                body.await()
+            } catch (e: CancellationException) {
+                http.cancel()
+                throw e
+            }
         }
+    }
 
     private fun arr(s: String?): JSONArray = runCatching { JSONArray(s ?: "[]") }.getOrElse { JSONArray() }
     private fun JSONObject.str(k: String) = optString(k).takeUnless { it == "null" } ?: ""

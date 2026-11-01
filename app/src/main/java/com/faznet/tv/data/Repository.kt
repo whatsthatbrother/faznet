@@ -44,10 +44,21 @@ class Repository private constructor(private val ctx: Context) {
     fun removePlaylist(id: String) {
         val rest = playlists().filter { it.id != id }
         savePlaylists(rest)
+        forget(id)
+        if (activeId == id) activeId = rest.firstOrNull()?.id
+    }
+
+    /** Copies of a playlist on the device (M3U text, parsed copy, the list in memory). */
+    private fun dropCache(id: String) {
         cacheFile(id).delete()
         binFile(id).delete()
+        parsed.remove(id)
+    }
+
+    /** Everything kept for a playlist that is gone: its copies, favourites, recently watched and last channel. */
+    private fun forget(id: String) {
+        dropCache(id)
         prefs.edit().remove("fav_$id").remove("recent_$id").remove("last_$id").apply()
-        if (activeId == id) activeId = rest.firstOrNull()?.id
     }
 
     var activeId: String?
@@ -185,9 +196,9 @@ class Repository private constructor(private val ctx: Context) {
         for ((rid, old) in oldRemote) {
             val now = newRemote[rid]
             if (now == null) {
-                cacheFile(old.id).delete()
+                forget(old.id) // removed on the website
             } else if (now.source != old.source || now.username != old.username || now.password != old.password || now.type != old.type) {
-                cacheFile(old.id).delete()
+                dropCache(old.id) // changed on the website: download it again, keep the favourites
             }
         }
         val merged = current.filter { !it.isRemote } + remote
