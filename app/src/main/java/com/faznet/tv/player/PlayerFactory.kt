@@ -20,6 +20,7 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
@@ -39,6 +40,15 @@ object PlayerFactory {
      */
     private const val TS_FLAGS_STRICT = 0
     private const val TS_FLAGS_LOOSE = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
+
+    /**
+     * Every channel gets a new player but they share one allocator: the next channel re-uses the buffer memory of the
+     * last one, instead of the garbage collector freeing tens of MB and the player allocating them again on every zap.
+     */
+    private val allocator = DefaultAllocator(/* trimOnReset = */ false, C.DEFAULT_BUFFER_SEGMENT_SIZE)
+
+    /** Leaving the player: give the buffer memory back. */
+    fun freeBuffers() = allocator.setTargetBufferSize(0)
 
     /** Channels (URLs) that showed no picture in strict mode this session: open them in tolerant mode. */
     val looseKeyframes = HashSet<String>()
@@ -78,11 +88,12 @@ object PlayerFactory {
         // Many IPTV TS streams are muxed with audio and video several seconds apart, so one track must be
         // buffered far ahead of the other. Time must win over the byte cap, otherwise loading stops with
         // "target buffer size reached with < 500 ms buffered" and playback stalls.
-        // The buffer lives on the Java heap: on 1 GB sticks (Mi TV Stick) a big one causes GC pauses and
-        // frozen video after some minutes, so it is sized from the device's memory.
+        // The buffer lives on the Java heap, so on TV sticks a big one means GC pauses: it is sized from the device's
+        // memory. Providers send 25-30 s at once when a channel opens, so 20 s still fills within the first second.
         val low = isLowMemory(context)
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(if (low) 10_000 else 15_000, if (low) 25_000 else 40_000, 1_000, 2_500)
+            .setAllocator(allocator)
+            .setBufferDurationsMs(if (low) 10_000 else 15_000, if (low) 20_000 else 40_000, 1_000, 2_500)
             .setTargetBufferBytes(bufferBytes(context, low))
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
@@ -98,7 +109,8 @@ object PlayerFactory {
     fun isLowMemory(context: Context): Boolean {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val info = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
-        return am.isLowRamDevice || info.totalMem in 1 until 1_700L * 1024 * 1024
+        // The Mi TV Stick 4K has 2 GB, and its 32-bit Java heap is what the buffer has to live with.
+        return am.isLowRamDevice || info.totalMem in 1 until 2_600L * 1024 * 1024
     }
 
     private fun bufferBytes(context: Context, low: Boolean): Int {

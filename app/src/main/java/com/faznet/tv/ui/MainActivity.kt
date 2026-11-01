@@ -23,6 +23,7 @@ import com.faznet.tv.Perf
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
 import com.faznet.tv.data.ChannelCheck
+import com.faznet.tv.data.ChannelIndex
 import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.Parental
 import com.faznet.tv.data.ProblemLog
@@ -32,9 +33,11 @@ import com.faznet.tv.data.Repository
 import com.faznet.tv.data.safeMessage
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity(), HomeActions {
 
@@ -203,7 +206,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
         playlist = p
         if (p == null) {
             loadedPlaylistId = null
-            setChannels(emptyList()); visible = emptyList()
+            setChannels(ChannelIndex.Empty); visible = emptyList()
             ui.groups = emptyList(); ui.channels = emptyList(); ui.xtream = false
             ui.playlistName = ""
             val msg = if (repo.serverUrl.isEmpty()) getString(R.string.welcome_msg)
@@ -240,7 +243,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
             try {
                 val list = Perf.measure("home.load") { repo.loadChannels(p, force) }
                 Perf.log("home.channels ${list.size}")
-                setChannels(list)
+                setChannels(ChannelIndex.of(list))
                 loadedPlaylistId = p.id
                 selectedGroup = KEY_ALL
                 ui.loading = false
@@ -265,7 +268,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
                 }
                 ui.loading = false
                 loadedPlaylistId = null
-                setChannels(emptyList()); visible = emptyList()
+                setChannels(ChannelIndex.Empty); visible = emptyList()
                 ui.groups = emptyList(); ui.channels = emptyList()
                 ui.empty = EmptyInfo(p.name, getString(R.string.err_load, e.safeMessage()), getString(R.string.retry), { load(p, true) })
             }
@@ -321,8 +324,9 @@ class MainActivity : AppCompatActivity(), HomeActions {
     private fun refreshInBackground(p: Playlist) {
         lifecycleScope.launch {
             val fresh = try { repo.loadChannels(p, forceRefresh = true) } catch (e: CancellationException) { throw e } catch (e: Exception) { return@launch }
-            if (playlist?.id != p.id || loadedPlaylistId != p.id || fresh.isEmpty()) return@launch
-            setChannels(fresh)
+            // The same list object: the server sent exactly what the device already has.
+            if (playlist?.id != p.id || loadedPlaylistId != p.id || fresh.isEmpty() || fresh === all) return@launch
+            setChannels(ChannelIndex.of(fresh))
             rebuild(keepScroll = true)
         }
     }
@@ -370,17 +374,33 @@ class MainActivity : AppCompatActivity(), HomeActions {
         if (Parental.isLocked(this, selectedGroup)) { selectedGroup = KEY_ALL; ui.selectedGroup = KEY_ALL }
         val base = Parental.visible(this, when (selectedGroup) {
             KEY_ALL -> all
-            KEY_FAV -> all.filter { favs.contains(it.url) }
+            KEY_FAV -> favs.mapNotNull { byUrl[it] }.sortedBy { it.number }
             KEY_RECENT -> repo.recents(p.id).mapNotNull { byUrl[it] }
             else -> byGroup[selectedGroup] ?: emptyList()
         })
         val q = ui.query.trim().lowercase()
-        visible = if (q.isEmpty()) base else base.filter { it.name.lowercase().contains(q) }
         ui.favs = favs
-        ui.channels = visible
-        if (!keepScroll) ui.scrollTop++
-        ui.empty = if (visible.isEmpty()) EmptyInfo("", getString(R.string.no_channels)) else null
+        filterJob?.cancel()
+        if (q.isEmpty()) {
+            show(base, keepScroll)
+        } else {
+            // Typing: searching a big list takes longer than a frame, so it runs beside the screen, for the last letter.
+            filterJob = lifecycleScope.launch {
+                delay(SEARCH_DELAY_MS)
+                val found = withContext(Dispatchers.Default) { base.filter { it.name.lowercase().contains(q) } }
+                show(found, keepScroll)
+            }
+        }
         Perf.since("home.filter", start)
+    }
+
+    private var filterJob: Job? = null
+
+    private fun show(list: List<Channel>, keepScroll: Boolean) {
+        visible = list
+        ui.channels = list
+        if (!keepScroll) ui.scrollTop++
+        ui.empty = if (list.isEmpty()) EmptyInfo("", getString(R.string.no_channels)) else null
     }
 
     override fun toggleFavorite(ch: Channel) {
@@ -396,31 +416,28 @@ class MainActivity : AppCompatActivity(), HomeActions {
         }
     }
 
-    /** Channels by group, built once per loaded list: switching groups is then instant even with 20 000 channels. */
+    /** Channels by group, built once per loaded list: switching groups is then instant even with 50 000 channels. */
     private var byGroup: Map<String, List<Channel>> = emptyMap()
 
-    private fun setChannels(list: List<Channel>) {
-        val start = Perf.now()
-        all = list
-        byUrl = list.associateBy { it.url }
-        val m = LinkedHashMap<String, ArrayList<Channel>>()
-        for (c in list) m.getOrPut(c.group) { ArrayList() }.add(c)
-        byGroup = m
-        ChannelStore.all = list
-        Perf.since("home.setChannels", start)
+    private fun setChannels(index: ChannelIndex) {
+        all = index.all
+        byUrl = index.byUrl
+        byGroup = index.byGroup
+        ChannelStore.all = index.all
+        ChannelStore.index = index
     }
 
+    /** Only counts what it needs from the maps: this runs on every return to the home screen. */
     private fun groupItems(favs: Set<String>): List<GroupItem> {
         val p = playlist ?: return emptyList()
-        val counts = LinkedHashMap<String, Int>()
-        for ((g, l) in byGroup) counts[g] = l.size
-        val shown = Parental.visible(this, all)
-        val shownUrls = shown.mapTo(HashSet()) { it.url }
-        val items = ArrayList<GroupItem>(counts.size + 3)
-        items.add(GroupItem(KEY_ALL, getString(R.string.group_all), shown.size))
-        items.add(GroupItem(KEY_FAV, getString(R.string.group_favorites), shown.count { favs.contains(it.url) }))
-        items.add(GroupItem(KEY_RECENT, getString(R.string.group_recent), repo.recents(p.id).count { it in shownUrls }))
-        counts.forEach { (g, n) -> items.add(GroupItem(g, if (Parental.isLocked(this, g)) "🔒 $g" else g, n)) }
+        val locked = if (Parental.unlocked || !Parental.enabled(this)) emptySet() else Parental.lockedGroups(this)
+        fun open(c: Channel?) = c != null && c.group !in locked
+        val shownCount = if (locked.isEmpty()) all.size else byGroup.entries.sumOf { (g, l) -> if (g in locked) 0 else l.size }
+        val items = ArrayList<GroupItem>(byGroup.size + 3)
+        items.add(GroupItem(KEY_ALL, getString(R.string.group_all), shownCount))
+        items.add(GroupItem(KEY_FAV, getString(R.string.group_favorites), favs.count { open(byUrl[it]) }))
+        items.add(GroupItem(KEY_RECENT, getString(R.string.group_recent), repo.recents(p.id).count { open(byUrl[it]) }))
+        for ((g, l) in byGroup) items.add(GroupItem(g, if (g in locked) "🔒 $g" else g, l.size))
         return items
     }
 
@@ -511,6 +528,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
         const val KEY_ALL = "\u0000all"
         const val KEY_FAV = "\u0000fav"
         const val KEY_RECENT = "\u0000recent"
+        private const val SEARCH_DELAY_MS = 120L
         private const val BACKGROUND_REFRESH_MS = 3 * 60 * 60 * 1000L
         private const val GROUP_DELAY_MS = 220L
     }

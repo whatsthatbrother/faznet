@@ -26,6 +26,15 @@ object Http {
             .build()
     }
 
+    /** Channel logos: many live on slow or dead servers, and one of those must not hold up a screenful of tiles. */
+    val images: OkHttpClient by lazy {
+        client.newBuilder()
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .readTimeout(6, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false)
+            .build()
+    }
+
     /** API calls to the Faznet server. */
     val api: OkHttpClient by lazy {
         client.newBuilder()

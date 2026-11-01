@@ -37,7 +37,7 @@
             android:drawableStart="@drawable/ic_search"
             android:drawablePadding="10dp"
             android:drawableTint="@color/text_dim"
-            android:hint="@string/search_hint"
+            android:hint="@string/library_search"
             android:imeOptions="actionSearch"
             android:inputType="text"
             android:maxLines="1"

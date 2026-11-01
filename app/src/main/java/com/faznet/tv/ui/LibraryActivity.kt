@@ -74,7 +74,7 @@ class LibraryActivity : AppCompatActivity() {
             progress.visibility = View.VISIBLE
             val cats = if (series) XtreamApi.seriesCategories(account) else XtreamApi.vodCategories(account)
             val list = ArrayList<GroupItem>()
-            list.add(GroupItem(ALL, getString(R.string.group_all), -1))
+            list.add(GroupItem(ALL, getString(R.string.library_all), -1))
             cats.forEach { list.add(GroupItem(it.id, it.name, -1)) }
             categories.submit(list, ALL)
             loadItems(if (cats.isNotEmpty()) cats.first().id else ALL)

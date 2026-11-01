@@ -1,3 +1,48 @@
+# 5.0: restructure (agreed with Diar on 2026-11-01)
+
+Work happens on branch `v5`; `main` is what users run. Nothing is published without Diar's OK.
+
+1. [x] Phase 0: real git working copy, 4.0.3 source on GitHub, timing logs, measuring tools (`tools/`)
+2. [ ] Phase 1: quick wins without restructuring (library upgrades, byte M3U parser, channel opening, freezes, Home)
+3. [ ] Phase 2: data layer (Hilt, Room, streaming import, migration of favourites, recents, playlists, MAC + PIN)
+4. [ ] Phase 3: player split in pieces with tests (engines, watchdog, ViewModel, Compose overlay)
+5. [ ] Phase 4: redesign, one design system, every screen in Compose (2-3 looks to choose from on the TV)
+6. [ ] Phase 5: baseline profile from the emulator, phones and tablets, clean-up, 5.0.0
+
+Targets with 50 000 channels on the Mi TV Stick: under 5% late frames, 99% of frames under 35 ms, restart to list under
+1 s, channel switch around 1.5 s. Decide about keeping VLC in Phase 3 (it is 80% of the APK; in the reports ExoPlayer
+fell back to it once).
+
+## Baseline: 4.0.3 on the Mi TV Stick, 2026-11-01
+
+Real playlist (5978 channels), Compose 1.7:
+
+| | Result |
+|---|---|
+| Cold start to first frame | 740-1200 ms; list loaded 550-870 ms after process start |
+| Remote, one press at a time | 4% late frames, p99 21 ms |
+| Remote held down | 50% late frames, p99 500-600 ms |
+| Moving over the groups | 12-15% late frames, p95 65 ms, p99 90-105 ms |
+| Channel switch, press to picture | median 1.76-2.05 s (0.35 s wait, 0.8 s to first frame, 0.65 s hidden until "stable") |
+| Channels that re-opened themselves | 1 of 15, 8 of 20 (p90 5.7 s, worst 9.8 s), 0 of 95 with the trace build: comes in waves |
+| Memory (PSS) | 54-96 MB |
+
+Synthetic 50 000 channels (`tools/bench.ps1`), Compose 1.7:
+
+| | Result |
+|---|---|
+| First load (regular-expression parser) | 9.2 s |
+| Load from the device copy | 0.64 s, plus 105-130 ms and 86-168 ms on the main thread |
+| Player `buildGroups` on the main thread | 127-155 ms per channel opened |
+| Search, per letter on the main thread | about 190 ms |
+| Remote one press at a time | 2-3% late frames, p99 22 ms |
+| Remote held down | 36-86% late frames, p99 1.5-4.7 s |
+
+What a real freeze looks like (KLAN HEVC, trace build): after 5 pictures the video decoder takes no more input and gives no
+more output (`vIn=87 vOut=5` for 8 s) while sound and clock run on. A new decoder fixes it. Providers send 25-30 s at
+once when a channel opens, and the first picture comes within 0.2 s of the first timestamp, so the start itself is clean.
+Reports (8 days, 5 devices): no crashes; 38 of 80 problem lines are "picture frozen at start", all on the Mi Stick.
+
 # Faznet — next release (1.1.4)
 
 Agreed with Diar on 2026-10-22. All items are in 1.1.4 (EPG: Xtream channels only).

@@ -6,6 +6,7 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.faznet.tv.net.Http
+import kotlinx.coroutines.Dispatchers
 
 /** Channel logos are kept on the device: they are downloaded once, not on every screen. */
 class FaznetApp : Application(), ImageLoaderFactory {
@@ -21,7 +22,11 @@ class FaznetApp : Application(), ImageLoaderFactory {
     }
 
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
-        .okHttpClient { Http.client }
+        .okHttpClient { Http.images }
+        // At most two logos at a time are decoded: the screen and the player come first on four small cores.
+        .decoderDispatcher(Dispatchers.Default.limitedParallelism(2))
+        .bitmapFactoryMaxParallelism(2)
+        .allowRgb565(true)
         .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.15).build() }
         .diskCache { DiskCache.Builder().directory(cacheDir.resolve("logos")).maxSizeBytes(80L * 1024 * 1024).build() }
         // Many IPTV logo servers send no-cache headers; logos rarely change, so keep them anyway.

@@ -53,6 +53,7 @@ class Repository private constructor(private val ctx: Context) {
         cacheFile(id).delete()
         binFile(id).delete()
         parsed.remove(id)
+        prefs.edit().remove("checked_$id").apply()
     }
 
     /** Everything kept for a playlist that is gone: its copies, favourites, recently watched and last channel. */
@@ -77,6 +78,7 @@ class Repository private constructor(private val ctx: Context) {
         val url = p.m3uUrl()
         if (url != null && (forceRefresh || !file.exists() || file.length() == 0L)) {
             download(url, file)
+            prefs.edit().putLong("checked_${p.id}", System.currentTimeMillis()).apply()
         }
         if (!file.exists()) throw IOException("Playlist file missing")
         // Big lists (thousands of channels) are parsed once and kept in memory while the file is unchanged,
@@ -136,8 +138,10 @@ class Repository private constructor(private val ctx: Context) {
 
     /** How old the cached copy of a downloadable playlist is (Long.MAX_VALUE if there is none). */
     fun cacheAgeMs(p: Playlist): Long {
+        if (p.m3uUrl() == null) return 0 // a file on the device: there is nothing to refresh it from
         val f = cacheFile(p.id)
-        return if (p.m3uUrl() == null || !f.exists()) Long.MAX_VALUE else System.currentTimeMillis() - f.lastModified()
+        if (!f.exists()) return Long.MAX_VALUE
+        return System.currentTimeMillis() - maxOf(f.lastModified(), prefs.getLong("checked_${p.id}", 0))
     }
 
     suspend fun importFile(uri: Uri, id: String) = withContext(Dispatchers.IO) {
@@ -184,8 +188,40 @@ class Repository private constructor(private val ctx: Context) {
             tmp.delete()
             throw IOException("Response is not an M3U playlist")
         }
+        // Nothing changed on the server: keep the file, so the copy parsed from it stays valid.
+        if (sameContent(tmp, dest)) {
+            tmp.delete()
+            return
+        }
         if (dest.exists()) dest.delete()
         if (!tmp.renameTo(dest)) throw IOException("Cannot save playlist")
+    }
+
+    private fun sameContent(a: File, b: File): Boolean {
+        if (!b.exists() || a.length() != b.length()) return false
+        a.inputStream().use { x ->
+            b.inputStream().use { y ->
+                val p = ByteArray(64 * 1024)
+                val q = ByteArray(64 * 1024)
+                while (true) {
+                    val n = x.readFully(p)
+                    if (n != y.readFully(q)) return false
+                    if (n == 0) return true
+                    for (i in 0 until n) if (p[i] != q[i]) return false
+                }
+            }
+        }
+    }
+
+    /** Fills [buf] as far as the file allows. @return how many bytes that was. */
+    private fun java.io.InputStream.readFully(buf: ByteArray): Int {
+        var total = 0
+        while (total < buf.size) {
+            val n = read(buf, total, buf.size - total)
+            if (n < 0) break
+            total += n
+        }
+        return total
     }
 
     /** Replace the server-managed playlists with [remote]; local ones are kept. @return true if anything changed. */
@@ -360,6 +396,30 @@ class Repository private constructor(private val ctx: Context) {
     }
 }
 
+/** A channel list with what the screens look up in it: making it takes a while for big lists, so it is done once. */
+class ChannelIndex private constructor(
+    val all: List<Channel>,
+    val byUrl: Map<String, Channel>,
+    val byGroup: Map<String, List<Channel>>,
+) {
+    companion object {
+        val Empty = ChannelIndex(emptyList(), emptyMap(), emptyMap())
+
+        /** Runs beside the screen: on a TV stick 50 000 channels take longer than several frames. */
+        suspend fun of(list: List<Channel>): ChannelIndex = withContext(Dispatchers.Default) { build(list) }
+
+        fun build(list: List<Channel>): ChannelIndex {
+            val urls = HashMap<String, Channel>(list.size * 4 / 3 + 1)
+            val groups = LinkedHashMap<String, ArrayList<Channel>>()
+            for (c in list) {
+                urls[c.url] = c
+                groups.getOrPut(c.group) { ArrayList() }.add(c)
+            }
+            return ChannelIndex(list, urls, groups)
+        }
+    }
+}
+
 /** In-memory hand-off of the channel list to the player (lists can be too large for an Intent). */
 object ChannelStore {
     var playlistId: String = ""
@@ -367,6 +427,8 @@ object ChannelStore {
     var current: List<Channel> = emptyList()
     /** Group the player starts in (MainActivity.KEY_* or a group name); null = the `current` list as-is (search). */
     var groupKey: String? = null
+    /** The same list sorted for lookups, made once per list so screens don't each do it again. */
+    var index: ChannelIndex? = null
     var lastPlayedUrl: String? = null
     /** Set by the player's "switch playlist": open the new playlist's last channel once it is loaded. */
     var autoPlayNext = false

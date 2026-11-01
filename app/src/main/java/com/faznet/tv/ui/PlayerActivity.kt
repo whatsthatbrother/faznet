@@ -41,6 +41,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.faznet.tv.Perf
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
+import com.faznet.tv.data.ChannelIndex
 import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.ChannelMemory
 import com.faznet.tv.data.EnginePrefs
@@ -119,8 +120,12 @@ class PlayerActivity : AppCompatActivity() {
     private var lastRenderedAt = 0L
     private var lastPos = -1L
     private var lastPosAt = 0L
+    /** Written on the player's thread: the time of the last picture and the distance between the last two. */
+    @Volatile private var lastFramePtsUs = -1L
+    @Volatile private var frameIntervalUs = 0L
+    private var lastDecoderActivity = -1L
+    private var lastDecoderActiveAt = 0L
     private var recoveries = 0
-    private var httpRetried = false
     private var httpRetries = 0
     /** Engine chosen for this channel only after the other one gave up; remembered once it really plays. */
     private var forcedEngine: String? = null
@@ -165,7 +170,7 @@ class PlayerActivity : AppCompatActivity() {
                         p.playbackState == Player.STATE_IDLE || tvError.visibility == View.VISIBLE)
                 ) {
                     retries = 0
-                    httpRetried = false; httpRetries = 0
+                    httpRetries = 0
                     freshPlayer()
                     startCurrent()
                 }
@@ -197,7 +202,8 @@ class PlayerActivity : AppCompatActivity() {
     private val frameWatch = object : Runnable {
         override fun run() {
             checkFrames()
-            handler.postDelayed(this, 500)
+            // Often while the channel is still behind the loading circle: it appears the moment it runs.
+            handler.postDelayed(this, if (revealed) 500 else 100)
         }
     }
 
@@ -340,6 +346,7 @@ class PlayerActivity : AppCompatActivity() {
         pendingZap = -1
         handler.removeCallbacksAndMessages(null)
         releaseEngines()
+        PlayerFactory.freeBuffers()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -358,18 +365,18 @@ class PlayerActivity : AppCompatActivity() {
     // ---------- groups ----------
 
     private fun buildGroups(start: List<Channel>) {
-        val all = Parental.visible(this, ChannelStore.all.ifEmpty { start })
+        val whole = ChannelStore.all.ifEmpty { start }
+        val all = Parental.visible(this, whole)
         val favs = repo.favorites(ChannelStore.playlistId)
-        val byUrl = all.associateBy { it.url }
-        val list = ArrayList<Group>()
+        // The home screen already sorted the whole list; only a parental lock makes this a different list.
+        val index = ChannelStore.index?.takeIf { it.all === all } ?: ChannelIndex.build(all)
+        val list = ArrayList<Group>(index.byGroup.size + 3)
         list.add(Group(MainActivity.KEY_ALL, getString(R.string.group_all), all))
-        all.filter { favs.contains(it.url) }.takeIf { it.isNotEmpty() }
+        favs.mapNotNull { index.byUrl[it] }.sortedBy { it.number }.takeIf { it.isNotEmpty() }
             ?.let { list.add(Group(MainActivity.KEY_FAV, getString(R.string.group_favorites), it)) }
-        repo.recents(ChannelStore.playlistId).mapNotNull { byUrl[it] }.takeIf { it.isNotEmpty() }
+        repo.recents(ChannelStore.playlistId).mapNotNull { index.byUrl[it] }.takeIf { it.isNotEmpty() }
             ?.let { list.add(Group(MainActivity.KEY_RECENT, getString(R.string.group_recent), it)) }
-        val byGroup = LinkedHashMap<String, ArrayList<Channel>>()
-        for (c in all) byGroup.getOrPut(c.group) { ArrayList() }.add(c)
-        byGroup.forEach { (g, chs) -> list.add(Group(g, g, chs)) }
+        index.byGroup.forEach { (g, chs) -> list.add(Group(g, g, chs)) }
 
         val key = ChannelStore.groupKey
         var at = if (key != null) list.indexOfFirst { it.key == key } else -1
@@ -411,29 +418,6 @@ class PlayerActivity : AppCompatActivity() {
         pbStart.visibility = View.VISIBLE
     }
 
-    /** Channels known to freeze on their first opening are re-opened at once, before any frozen picture. */
-    private var preReopened = false
-
-    private fun isFullHd(ch: Channel): Boolean =
-        (ChannelMemory.get(this, ch.url)?.height ?: 0) >= 1000 || FHD_NAME.containsMatchIn(ch.name)
-
-    private fun maybePreReopen() {
-        val ch = channels.getOrNull(index) ?: return
-        if (preReopened || recoveries > 0 || pendingZap >= 0) return
-        // Only channels that froze at their start at least twice are re-opened at once (each one costs a second
-        // connection, which made opening slower in 3.0.2/3.0.3 when it was done for every Full HD channel).
-        // Every quick re-open uses one count up, so a channel that got better goes back to a normal single
-        // opening; a freeze that still happens is fixed by the hidden 1-second re-open anyway.
-        if (ChannelMemory.startFreezes(this, ch.url) < 2) return
-        ChannelMemory.cleanStart(this, ch.url)
-        preReopened = true
-        lastWarning = "quick re-open (known slow start)"
-        handler.post {
-            freshPlayer()
-            startCurrent()
-        }
-    }
-
     // ---- how long a channel took to appear: logged when it does, tools/zap-test.ps1 reads it ----
     private var openPressAt = 0L
     private var openAt = 0L
@@ -458,8 +442,6 @@ class PlayerActivity : AppCompatActivity() {
     private fun reveal() {
         if (revealed) return
         logOpen()
-        // Opened cleanly on the first try: this channel needs the quick re-open less and less.
-        if (!preReopened && recoveries == 0) channels.getOrNull(index)?.let { ChannelMemory.cleanStart(this, it.url) }
         revealed = true
         // The other engine plays this channel: use it for this channel from now on.
         forcedEngine?.let { e -> channels.getOrNull(index)?.let { EnginePrefs.setOverride(this, it.url, e) } }
@@ -488,7 +470,7 @@ class PlayerActivity : AppCompatActivity() {
                         readySince = now
                         lastPosAt = now
                         lastRenderedAt = now
-                        maybePreReopen()
+                        lastDecoderActiveAt = now
                     }
                     Player.STATE_BUFFERING -> {
                         stallCount++
@@ -554,6 +536,11 @@ class PlayerActivity : AppCompatActivity() {
             trace?.stop()
             trace = com.faznet.tv.player.PlayerTrace(p, handler, channels.getOrNull(index)?.let { "${it.number} ${it.name}" } ?: "")
         }
+        p.setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
+            if (lastFramePtsUs >= 0) frameIntervalUs = presentationTimeUs - lastFramePtsUs
+            lastFramePtsUs = presentationTimeUs
+            if (com.faznet.tv.BuildConfig.PLAYER_TRACE) trace?.frame(presentationTimeUs)
+        }
         // Live TV has no pause button, so nothing may pause it. Android sends "audio becoming noisy" whenever the
         // HDMI signal drops for a moment (TV switched input or off and on, CEC standby, a loose cable); ExoPlayer
         // then paused, and since the watchdogs only look at a player that is meant to play, the channel stayed
@@ -581,12 +568,10 @@ class PlayerActivity : AppCompatActivity() {
         index = i
         forceHls = false
         retries = 0
-        httpRetried = false; httpRetries = 0
+        httpRetries = 0
         recoveries = 0
-        preReopened = false
         enginesTried.clear()
         forcedEngine = null
-        httpRetries = 0
         resetHardWatch()
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
@@ -630,8 +615,6 @@ class PlayerActivity : AppCompatActivity() {
             retries = 0
             if (vlcPlayingAt == 0L) vlcPlayingAt = SystemClock.elapsedRealtime()
             tvError.visibility = View.GONE
-            // Channels known to start badly at the provider: re-open once right away, like with ExoPlayer.
-            maybePreReopen()
             // Audio-only channels never get a video output: show them after a moment anyway.
             handler.removeCallbacks(vlcReveal)
             handler.postDelayed(vlcReveal, 2000)
@@ -727,11 +710,7 @@ class PlayerActivity : AppCompatActivity() {
             vlcPicturesSeen && audioRuns && now - vlcPicAt > (if (early) VLC_EARLY_FROZEN_MS else VLC_FROZEN_MS) ->
                 if (early) "picture frozen at start" else "picture frozen"
             // Still behind the loading circle: the provider's first seconds are bad, re-open quickly (it fixes it).
-            !revealed && now - vlcTimeAt > VLC_EARLY_STUCK_MS && now - vlcAudioAt > VLC_EARLY_STUCK_MS -> {
-                ChannelMemory.addStartFreeze(this, ch.url)
-                sessionStartFreezes++
-                "stuck at start"
-            }
+            !revealed && now - vlcTimeAt > VLC_EARLY_STUCK_MS && now - vlcAudioAt > VLC_EARLY_STUCK_MS -> "stuck at start"
             now - vlcTimeAt > VLC_STUCK_MS && now - vlcAudioAt > VLC_STUCK_MS -> "playback stuck"
             else -> {
                 // Healthy for a while: forgive earlier recoveries on this channel.
@@ -782,7 +761,7 @@ class PlayerActivity : AppCompatActivity() {
         lastWarning = "switched engine: $why"
         retries = 0
         recoveries = 0
-        httpRetried = false; httpRetries = 0
+        httpRetries = 0
         showReconnecting()
         // Posted: this can be called from inside the old engine's own callbacks.
         handler.post {
@@ -842,6 +821,9 @@ class PlayerActivity : AppCompatActivity() {
         readySince = 0L
         lastRendered = -1
         lastPos = -1L
+        lastFramePtsUs = -1L
+        frameIntervalUs = 0L
+        lastDecoderActivity = -1L
         hideUntilStable()
         val ua = ch.userAgent ?: repo.userAgent
         probeJob?.cancel()
@@ -896,7 +878,7 @@ class PlayerActivity : AppCompatActivity() {
         hardDelay = (hardDelay * 2).coerceAtMost(HARD_STUCK_MAX_MS)
         retries = 0
         recoveries = 0
-        httpRetried = false; httpRetries = 0
+        httpRetries = 0
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
         showReconnecting()
@@ -923,8 +905,15 @@ class PlayerActivity : AppCompatActivity() {
         ) return
         val now = SystemClock.elapsedRealtime()
         val hasVideo = p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)
-        val tunneled = false
-        val rendered = p.videoDecoderCounters?.let { it.ensureUpdated(); it.renderedOutputBufferCount } ?: 0
+        val counters = p.videoDecoderCounters?.also { it.ensureUpdated() }
+        val rendered = counters?.renderedOutputBufferCount ?: 0
+        // Anything the decoder does: a frame taken in, a picture shown, a late one dropped.
+        val activity = if (counters == null) 0L else counters.queuedInputBufferCount.toLong() + rendered +
+            counters.skippedOutputBufferCount + counters.droppedBufferCount + counters.droppedInputBufferCount
+        if (activity != lastDecoderActivity) {
+            lastDecoderActivity = activity
+            lastDecoderActiveAt = now
+        }
         if (rendered != lastRendered) {
             lastRendered = rendered
             lastRenderedAt = now
@@ -938,18 +927,26 @@ class PlayerActivity : AppCompatActivity() {
             if (running || (!hasVideo && now - readySince > 500)) reveal()
         }
 
-        // Right after a channel opens is when the picture freezes on the Mi TV Stick (MP2 sound via FFmpeg runs
-        // ahead of the picture); re-opening always fixes it, so react within about a second there.
+        // Right after a channel opens is when the Mi TV Stick's video decoder sometimes stops dead: it shows a few
+        // pictures, then takes nothing in and gives nothing out while the sound plays on. A new decoder fixes it, so
+        // this reacts within half a second, and only to that: a picture that is merely late is not touched.
         val early = now - readySince < EARLY_WINDOW_MS
-        val frozenLimit = if (com.faznet.tv.BuildConfig.PLAYER_TRACE_WATCH) 60_000L else if (early) EARLY_FROZEN_MS else FROZEN_TIMEOUT_MS
+        val watching = com.faznet.tv.BuildConfig.PLAYER_TRACE_WATCH
+        val framePts = lastFramePtsUs / 1000
+        val behind = if (lastFramePtsUs >= 0) pos - framePts else 0L
+        val wedged = !watching && hasVideo && firstFrameSeen && now - lastDecoderActiveAt > DECODER_IDLE_MS &&
+            behind > maxOf(DECODER_BEHIND_MS, 3 * frameIntervalUs / 1000) && (early || now - lastRenderedAt > LATE_WEDGED_MS)
+        val frozenLimit = if (watching) 60_000L else if (early) EARLY_FROZEN_MS else FROZEN_TIMEOUT_MS
         val reason = when {
             hasVideo && !firstFrameSeen && now - readySince > FIRST_FRAME_TIMEOUT_MS -> "no picture"
-            // Tunneled playback does not report decoded frames, so only the other checks apply there.
-            !tunneled && hasVideo && firstFrameSeen && now - lastRenderedAt > frozenLimit && now - lastPosAt < 1_000 ->
+            wedged || (hasVideo && firstFrameSeen && now - lastRenderedAt > frozenLimit && now - lastPosAt < 1_000) ->
                 if (early) "picture frozen at start" else "picture frozen"
             now - lastPosAt > STUCK_TIMEOUT_MS -> "playback stuck"
             else -> return
         }
+        // The numbers say what really happened; they reach the developer with the problem log.
+        val detail = "wedged=$wedged in=${counters?.queuedInputBufferCount} out=$rendered behind=$behind buf=${p.totalBufferedDuration}"
+        Perf.log("freeze $reason $detail ch=${channels.getOrNull(index)?.number}")
         if (recoveries >= MAX_RECOVERIES) {
             tryOtherEngine("ExoPlayer: $reason")
             return
@@ -960,12 +957,10 @@ class PlayerActivity : AppCompatActivity() {
         totalRecoveries++
         lastWarning = "auto-fix: $reason"
         channels.getOrNull(index)?.let { ch ->
-            // A freeze right at the start comes from the provider (the first seconds of a channel it just
-            // started serving); it has nothing to do with the decoder, so don't switch decoders for it.
+            // A freeze right at the start says nothing about the channel, so don't switch decoders for it.
             if (!reason.endsWith("at start")) ChannelMemory.addFix(this, ch.url)
-            else { ChannelMemory.addStartFreeze(this, ch.url); sessionStartFreezes++ }
             p.videoFormat?.let { ChannelMemory.rememberHeight(this, ch.url, it.height) }
-            ProblemLog.add(this, ch.name, reason + if (softwareVideo) " (software)" else "")
+            ProblemLog.add(this, ch.name, reason + (if (softwareVideo) " (software)" else "") + " [$detail]")
         }
         showReconnecting()
         freshPlayer()
@@ -1005,7 +1000,6 @@ class PlayerActivity : AppCompatActivity() {
             // Two retries (2 s, then 4 s): the provider often still counts the previous channel's connection.
             if (httpRetries < 2) {
                 httpRetries++
-                httpRetried = true
                 showReconnecting()
                 handler.removeCallbacks(retry)
                 handler.postDelayed(retry, 2000L * httpRetries)
@@ -1131,8 +1125,12 @@ class PlayerActivity : AppCompatActivity() {
         vlc?.stop()
         tvError.visibility = View.GONE
         handler.removeCallbacks(zapCommit)
-        handler.postDelayed(zapCommit, ZAP_DELAY_MS)
+        val now = Perf.now()
+        handler.postDelayed(zapCommit, if (now - lastZapPressAt > ZAP_IDLE_MS) ZAP_FIRST_DELAY_MS else ZAP_DELAY_MS)
+        lastZapPressAt = now
     }
+
+    private var lastZapPressAt = 0L
 
     private fun epgText(nn: Epg.NowNext): String = buildString {
         nn.now?.let { append(getString(R.string.epg_now, it.title, "${timeFmt.format(it.start)}–${timeFmt.format(it.end)}")) }
@@ -1583,9 +1581,13 @@ class PlayerActivity : AppCompatActivity() {
         private const val FIRST_FRAME_TIMEOUT_MS = 2_500L
         private const val FROZEN_TIMEOUT_MS = 2_500L
         private const val EARLY_WINDOW_MS = 6_000L
-        // The picture is hidden during the start, so reacting quickly costs nothing visible.
-        private const val EARLY_FROZEN_MS = 1_000L
-        private const val STABLE_FRAMES = 12
+        // No new picture for this long right after the start, even though the decoder still looks busy.
+        private const val EARLY_FROZEN_MS = 1_500L
+        // The decoder is wedged when it has done nothing at all for this long and the clock has passed the last picture.
+        private const val DECODER_IDLE_MS = 400L
+        private const val DECODER_BEHIND_MS = 500L
+        private const val LATE_WEDGED_MS = 1_500L
+        private const val STABLE_FRAMES = 5
         private const val MAX_HIDDEN_MS = 9_000L
         private const val VLC_REVEAL_MS = 900L
         private const val VLC_NO_PICTURE_MS = 6_000L
@@ -1601,10 +1603,10 @@ class PlayerActivity : AppCompatActivity() {
         private const val INFO_MS = 4_000L
         private const val OPTIONS_MS = 8_000L
         private const val LIST_MS = 12_000L
+        // A single press opens the channel soon; while presses keep coming only the one the user stops on opens.
+        private const val ZAP_FIRST_DELAY_MS = 200L
         private const val ZAP_DELAY_MS = 350L
-        private val FHD_NAME = Regex("(?i)\\b(FHD|1080[pi]?|UHD|4K)\\b")
-        /** Channels that froze right at their start in this app session (provider-side cold starts). */
-        private var sessionStartFreezes = 0
+        private const val ZAP_IDLE_MS = 1_000L
     }
 }
 

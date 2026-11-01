@@ -141,6 +141,8 @@
     <string name="playlists_only_one">Ke vetëm një listë</string>
     <string name="section_player">Player-i</string>
     <string name="section_start">Nisja</string>
+    <string name="library_all">Të gjitha</string>
+    <string name="library_search">Kërko…</string>
     <string name="section_reports">Raportet e problemeve</string>
     <string name="section_other">Të tjera</string>
     <string name="section_updates">Përditësimet</string>

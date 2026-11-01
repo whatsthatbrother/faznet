@@ -1,16 +1,13 @@
 package com.faznet.tv.player
 
-import android.media.MediaFormat
 import android.os.Handler
 import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.media3.common.Format
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
-import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import com.faznet.tv.Perf
 
 /**
@@ -19,7 +16,7 @@ import com.faznet.tv.Perf
  */
 @OptIn(UnstableApi::class)
 class PlayerTrace(private val p: ExoPlayer, private val handler: Handler, private val label: String) :
-    AnalyticsListener, VideoFrameMetadataListener {
+    AnalyticsListener {
 
     private val t0 = SystemClock.elapsedRealtime()
     @Volatile private var framesSeen = 0
@@ -48,7 +45,6 @@ class PlayerTrace(private val p: ExoPlayer, private val handler: Handler, privat
     init {
         log("begin $label")
         p.addAnalyticsListener(this)
-        p.setVideoFrameMetadataListener(this)
         handler.postDelayed(sampler, 200)
     }
 
@@ -57,7 +53,8 @@ class PlayerTrace(private val p: ExoPlayer, private val handler: Handler, privat
         handler.removeCallbacks(sampler)
     }
 
-    override fun onVideoFrameAboutToBeRendered(presentationTimeUs: Long, releaseTimeNs: Long, format: Format, mediaFormat: MediaFormat?) {
+    /** Called by the player screen, which watches the frame times itself. */
+    fun frame(presentationTimeUs: Long) {
         lastPtsUs = presentationTimeUs
         if (framesSeen++ < 4) log("frame#$framesSeen pts=${presentationTimeUs / 1000}")
     }

@@ -3,13 +3,12 @@ package com.faznet.tv.ui.compose
 import android.view.KeyEvent
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.BringIntoViewSpec
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -20,23 +19,47 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusEventModifierNode
+import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.invalidateDraw
+import androidx.compose.ui.node.invalidatePlacement
+import androidx.compose.ui.platform.InspectorInfo
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
+import com.faznet.tv.ui.isTv
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /** Faznet colours (same as res/values/colors.xml). */
 object Fz {
@@ -57,6 +80,8 @@ object Fz {
 
 @Composable
 fun FaznetTheme(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val tv = remember(context) { context.isTv() }
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Fz.accent,
@@ -67,9 +92,13 @@ fun FaznetTheme(content: @Composable () -> Unit) {
             onBackground = Fz.text,
             onSurface = Fz.text,
         ),
-        content = content,
-    )
+    ) {
+        CompositionLocalProvider(LocalTvMode provides tv, content = content)
+    }
 }
+
+/** True on a TV: nothing needs a touch ripple there, and every saved object counts on a stick. */
+val LocalTvMode = staticCompositionLocalOf { false }
 
 /**
  * A focusable, clickable box made for the TV remote and for touch:
@@ -94,35 +123,17 @@ fun FocusBox(
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    var longFired by remember { mutableStateOf(false) }
-    // A light spring like on iOS / tvOS: quick, with a hint of bounce. Read only inside graphicsLayer, so the
-    // animation redraws the layer and does not recompose the box's content on every frame.
-    val scale = animateFloatAsState(if (focused) focusScale else 1f, spring(dampingRatio = 0.72f, stiffness = 900f), label = "scale")
-    // Colour changes at once (no fade): the remote feels quicker on slow TV sticks.
-    val bg = when {
-            focused -> focusedColor
-            selected -> selectedColor
-            else -> color
-        }
+    val longFired = remember { BooleanArray(1) }
+    val tv = LocalTvMode.current
     Box(
         modifier
-            .zIndex(if (focused) 1f else 0f)
-            // No shadow under the focused item: on the TV stick's GPU it cost more than the rest of the card.
-            // Items that do not grow get no layer at all.
-            .then(if (focusScale != 1f) Modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value } else Modifier)
-            .clip(shape)
-            .then(if (focused && focusedBrush != null) Modifier.background(focusedBrush) else Modifier.background(bg))
-            .border(
-                if (focused) 2.dp else if (outline) 1.dp else 0.dp,
-                if (focused) Color.White else if (outline) Fz.line else Color.Transparent,
-                shape,
-            )
-            .onFocusChanged {
-                if (focused != it.isFocused) {
-                    focused = it.isFocused
-                    onFocus?.invoke(it.isFocused)
+            .then(
+                FocusLookElement(shape, color, focusedColor, selectedColor, selected, focusedBrush, focusScale, outline) { f ->
+                    focused = f
+                    onFocus?.invoke(f)
                 }
-            }
+            )
+            .then(if (tv) Modifier else Modifier.clip(shape)) // keeps the touch ripple inside the shape
             // Remote: OK pressed = click, OK held (key repeat) = long click.
             .onPreviewKeyEvent { e ->
                 val k = e.nativeKeyEvent
@@ -131,19 +142,159 @@ fun FocusBox(
                 ) return@onPreviewKeyEvent false
                 when (k.action) {
                     KeyEvent.ACTION_DOWN -> {
-                        if (k.repeatCount == 0) longFired = false
-                        else if (!longFired && onLongClick != null) { longFired = true; onLongClick() }
+                        if (k.repeatCount == 0) longFired[0] = false
+                        else if (!longFired[0] && onLongClick != null) { longFired[0] = true; onLongClick() }
                     }
                     KeyEvent.ACTION_UP -> {
-                        if (!longFired) onClick()
-                        longFired = false
+                        if (!longFired[0]) onClick()
+                        longFired[0] = false
                     }
                 }
                 true
             }
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .combinedClickable(
+                interactionSource = null,
+                indication = if (tv) null else LocalIndication.current,
+                onLongClick = onLongClick,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.CenterStart,
     ) { content(focused) }
+}
+
+private val FocusSpring = spring<Float>(dampingRatio = 0.72f, stiffness = 900f) // light, like iOS / tvOS
+
+/**
+ * Background, frame and focus growth of a [FocusBox] in one modifier node: no animation, clip or extra modifiers per
+ * box, nothing to recompose while it grows, and a screenful of channels draws in a few calls. No shadow under the
+ * focused item: on a TV stick's GPU it cost more than the rest of the card.
+ */
+private class FocusLookElement(
+    private val shape: Shape,
+    private val color: Color,
+    private val focusedColor: Color,
+    private val selectedColor: Color,
+    private val selected: Boolean,
+    private val focusedBrush: Brush?,
+    private val focusScale: Float,
+    private val outline: Boolean,
+    private val onFocusChanged: (Boolean) -> Unit,
+) : ModifierNodeElement<FocusLookNode>() {
+    override fun create() =
+        FocusLookNode(shape, color, focusedColor, selectedColor, selected, focusedBrush, focusScale, outline, onFocusChanged)
+
+    override fun update(node: FocusLookNode) =
+        node.update(shape, color, focusedColor, selectedColor, selected, focusedBrush, focusScale, outline, onFocusChanged)
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "focusLook"
+    }
+
+    // The focus callback is a new lambda on every recomposition, so elements are never equal and update() always runs.
+    override fun equals(other: Any?) = this === other
+
+    override fun hashCode() = System.identityHashCode(this)
+}
+
+private class FocusLookNode(
+    private var shape: Shape,
+    private var color: Color,
+    private var focusedColor: Color,
+    private var selectedColor: Color,
+    private var selected: Boolean,
+    private var focusedBrush: Brush?,
+    private var focusScale: Float,
+    private var outline: Boolean,
+    private var onFocusChanged: (Boolean) -> Unit,
+) : Modifier.Node(), LayoutModifierNode, DrawModifierNode, FocusEventModifierNode {
+
+    private var focused = false
+    private val scale = mutableFloatStateOf(1f)
+    private var growing: Job? = null
+    private val layer: GraphicsLayerScope.() -> Unit = {
+        scaleX = scale.floatValue
+        scaleY = scale.floatValue
+    }
+    private var outlineFor = Size.Unspecified
+    private var cachedOutline: Outline? = null
+
+    fun update(
+        newShape: Shape, newColor: Color, newFocusedColor: Color, newSelectedColor: Color, newSelected: Boolean,
+        newBrush: Brush?, newScale: Float, newOutline: Boolean, newOnFocusChanged: (Boolean) -> Unit,
+    ) {
+        onFocusChanged = newOnFocusChanged
+        focusScale = newScale
+        if (newShape != shape) {
+            shape = newShape
+            cachedOutline = null
+        } else if (newColor == color && newFocusedColor == focusedColor && newSelectedColor == selectedColor &&
+            newSelected == selected && newBrush == focusedBrush && newOutline == outline
+        ) return
+        color = newColor
+        focusedColor = newFocusedColor
+        selectedColor = newSelectedColor
+        selected = newSelected
+        focusedBrush = newBrush
+        outline = newOutline
+        invalidateDraw()
+    }
+
+    override fun onFocusEvent(focusState: FocusState) {
+        if (focusState.isFocused == focused) return
+        focused = focusState.isFocused
+        onFocusChanged(focused)
+        invalidateDraw()
+        invalidatePlacement() // the focused box is drawn above its neighbours
+        growing?.cancel()
+        val target = if (focused) focusScale else 1f
+        if (scale.floatValue != target) {
+            growing = coroutineScope.launch {
+                animate(scale.floatValue, target, animationSpec = FocusSpring) { value, _ -> scale.floatValue = value }
+            }
+        }
+    }
+
+    override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+        val placeable = measurable.measure(constraints)
+        return layout(placeable.width, placeable.height) {
+            // A layer per box also means scrolling only moves it, without drawing it again.
+            placeable.placeWithLayer(0, 0, if (focused) 1f else 0f, layer)
+        }
+    }
+
+    override fun ContentDrawScope.draw() {
+        val shapeOutline = cachedOutline?.takeIf { outlineFor == size }
+            ?: shape.createOutline(size, layoutDirection, this).also { cachedOutline = it; outlineFor = size }
+        val rounded = (shapeOutline as? Outline.Rounded)?.roundRect
+        val radius = rounded?.topLeftCornerRadius
+        val uniform = rounded != null && rounded.topRightCornerRadius == radius &&
+            rounded.bottomRightCornerRadius == radius && rounded.bottomLeftCornerRadius == radius
+
+        val brush = if (focused) focusedBrush else null
+        val fill = if (focused) focusedColor else if (selected) selectedColor else color
+        when {
+            brush != null -> if (uniform) drawRoundRect(brush, cornerRadius = radius!!) else drawOutline(shapeOutline, brush)
+            fill == Color.Transparent -> Unit
+            uniform -> drawRoundRect(fill, cornerRadius = radius!!)
+            else -> drawOutline(shapeOutline, fill)
+        }
+        drawContent()
+
+        val frame = if (focused) 2.dp.toPx() else if (outline) 1.dp.toPx() else 0f
+        if (frame > 0f) {
+            val frameColor = if (focused) Color.White else Fz.line
+            if (uniform) {
+                val half = frame / 2
+                drawRoundRect(
+                    frameColor,
+                    topLeft = Offset(half, half),
+                    size = Size(size.width - frame, size.height - frame),
+                    cornerRadius = CornerRadius((radius!!.x - half).coerceAtLeast(0f), (radius.y - half).coerceAtLeast(0f)),
+                    style = Stroke(frame),
+                )
+            } else drawOutline(shapeOutline, frameColor, style = Stroke(frame))
+        }
+    }
 }
 
 /** Round icon button of the top bar. */
@@ -166,6 +317,7 @@ fun IconAction(icon: Int, label: String, onClick: () -> Unit, onLongClick: (() -
  */
 @OptIn(ExperimentalFoundationApi::class)
 val PivotScroll: BringIntoViewSpec = object : BringIntoViewSpec {
+    @Suppress("OVERRIDE_DEPRECATION")
     override val scrollAnimationSpec: AnimationSpec<Float> = tween(240, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
 
     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
