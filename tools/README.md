@@ -25,6 +25,16 @@ Screenshots of the player come out white on the stick (the video plane), and pan
 the player shows, read the texts with `uiautomator dump` right after the key press and the opened channel from the
 `open ...` lines in the log.
 
+## Does hiding the picture freeze the decoder?
+
+Every "frozen at start" in the reports stops at exactly 5 pictures (in=89-95 out=5), in 4.0.3 too, where the picture only
+appeared after 12: so 5 is not the reveal. While a channel opens the video view has alpha 0, which leaves its surface
+covered and may keep the display from taking pictures. Unproven. To compare, install each build in turn and count `freeze`
+lines with `zap-test.ps1 -Count 100`; freezes come in waves, so alternate the builds and repeat:
+
+    gradlew assembleDebug                    (alpha, as published)
+    gradlew assembleDebug -PhideWithCover    (a black cover over a visible surface)
+
 ## Trying the updater before a release
 
 A broken updater would leave every user on that version, so it is tried with a site on this PC, on the emulators (the bench
