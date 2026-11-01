@@ -161,6 +161,10 @@ private fun HomeContent(state: HomeState, pages: Flow<PagingData<Channel>>, acti
             }
     ) {
         TopBar(state, actions, wide)
+        // A phone's top bar has no room for it: search and the buttons would be pushed off the screen.
+        if (!wide) state.updateVersion?.let { v ->
+            UpdateButton(v, actions, Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 6.dp))
+        }
         if (wide) {
             Row(Modifier.fillMaxSize()) {
                 GroupList(state, actions, vertical = true, modifier = Modifier.width(250.dp).fillMaxHeight())
@@ -215,20 +219,9 @@ private fun TopBar(state: HomeState, actions: HomeActions, wide: Boolean) {
                 )
             }
         }
-        state.updateVersion?.let { v ->
+        if (wide) state.updateVersion?.let { v ->
             Spacer(Modifier.width(8.dp))
-            FocusBox(
-                onClick = { actions.update() },
-                modifier = Modifier.height(42.dp),
-                shape = RoundedCornerShape(21.dp),
-                color = Color(0xFF2EC27E),
-                focusScale = 1.08f,
-            ) {
-                Text(
-                    stringResource(R.string.update_banner, v), color = Color.White, fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
+            UpdateButton(v, actions, Modifier)
         }
         if (wide) Clock()
         Row(
@@ -244,6 +237,22 @@ private fun TopBar(state: HomeState, actions: HomeActions, wide: Boolean) {
             IconAction(R.drawable.ic_refresh, stringResource(R.string.refresh), actions::refresh, onLongClick = { actions.debugPlaylist() })
             IconAction(R.drawable.ic_settings, stringResource(R.string.settings), actions::settings)
         }
+    }
+}
+
+@Composable
+private fun UpdateButton(version: String, actions: HomeActions, modifier: Modifier) {
+    FocusBox(
+        onClick = { actions.update() },
+        modifier = modifier.height(42.dp),
+        shape = RoundedCornerShape(21.dp),
+        color = Color(0xFF2EC27E),
+        focusScale = 1.08f,
+    ) {
+        Text(
+            stringResource(R.string.update_banner, version), color = Color.White, fontSize = 14.sp,
+            fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.align(Alignment.Center).padding(horizontal = 16.dp),
+        )
     }
 }
 

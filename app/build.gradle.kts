@@ -26,9 +26,10 @@ android {
         applicationId = if (bench) "com.faznet.tv.bench" else "com.faznet.tv"
         minSdk = 23
         targetSdk = 35
-        // The bench app must never be offered an update from the website.
-        versionCode = if (bench) 999_999 else 43
-        versionName = "4.0.3"
+        // The bench app must never be offered an update from the website. Only for trying the updater against a site on
+        // this PC does it take a real number: -PbenchVersion=43 -PfaznetWeb=http://127.0.0.1:8765
+        versionCode = if (bench) (project.findProperty("benchVersion") as String?)?.toInt() ?: 999_999 else 44
+        versionName = "4.1.0"
 
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
         // "REPLACE" counts as no server (Repository.serverUrl): the bench app registers nothing and sends no reports.
@@ -84,6 +85,7 @@ android {
             isEnable = true
             reset()
             include("armeabi-v7a", "arm64-v8a")
+            if (bench) include("x86_64") // for trying phones and tablets on the emulator
             isUniversalApk = false
         }
     }

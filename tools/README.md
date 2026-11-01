@@ -24,3 +24,15 @@ icon, no server, no updates. Its output goes to `app/build-bench/`, so the relea
 Screenshots of the player come out white on the stick (the video plane), and panels hide after a few seconds. To see what
 the player shows, read the texts with `uiautomator dump` right after the key press and the opened channel from the
 `open ...` lines in the log.
+
+## Trying the updater before a release
+
+A broken updater would leave every user on that version, so it is tried with a site on this PC, on the emulators (the bench
+app also builds for x86_64; the phone image's Play Protect stops the install, so finish on the TV image):
+
+1. `gradlew assembleDebug -Pbench -PbenchVersion=43 -PfaznetWeb=http://127.0.0.1:8765` and install that APK.
+2. The same with `-PbenchVersion=44`: its APK goes to `<folder>/download/Faznet-TV.apk`, next to a copy of
+   `docs/version.json` with code 44.
+3. `python -m http.server 8765 --bind 127.0.0.1 --directory <folder>` and `adb reverse tcp:8765 tcp:8765`, then open the app.
+
+Start emulators with `-read-only -no-window`, so nothing stays on them and they don't get in the way.
