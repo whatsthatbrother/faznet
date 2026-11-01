@@ -31,6 +31,26 @@ this test, not use). Each round about 80 channels opened clean in 1.03-1.09 s (m
 - The 14-15 that never ran were the same number every round and never reached READY. Probably dead or refused channels, not
   confirmed: `zap-test` output should keep the channel names to tell. They keep the viewer behind the circle for 9 s.
 
+Later the same night (until 23:58, test builds on the stick, so reports up to then are tests too), channels 4-43 with the full
+log, per opening:
+
+| | First opening froze | Next opening froze |
+|---|---|---|
+| Progressive (the decoder log has no "is interlaced", 40 ms between pictures) | 0 of 19 | |
+| Interlaced (20 ms between pictures, usually MP2 sound) | 17 of 21 | 0 of 17 |
+
+So it is the Amlogic decoder with interlaced H.264. Its log says `dec_dpb_size=5`, and it stops at about 5 pictures (the
+reason for that number is a guess). It goes silent about 100 ms before.
+
+No effect, 12-13 freezes in each round of 18 channels: no info panel, not stopping the old player while zapping, releasing it
+at once, no hiding at all, no frame listener. Also no effect: re-opening at the first picture or when the decoder starts (so a
+short opening does not cure the next), and a throwaway `MediaCodec` before each opening. "Every second decoder" looked true
+for one run and failed with an exact count. Why the opening after a freeze is clean is **not known**.
+
+Done about it: the picture now appears at 10 frames, not 5. In a round of 18 channels, 12 froze and the viewer saw none of them
+start and stop. It costs clean channels about 0.2 s (1.25-1.3 s to picture); interlaced channels that freeze show after 2.8-3.2 s.
+Not tried yet: tunneling on interlaced channels only, the software decoder on them, vendor decoder parameters.
+
 ## Baseline: 4.0.3 on the Mi TV Stick, 2026-11-01
 
 Real playlist (5978 channels), Compose 1.7:

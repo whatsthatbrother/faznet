@@ -37,9 +37,9 @@ class ExoWatchTest {
         watch.onOpen()
         watch.onReady(1_000)
         watch.onFirstFrame(1_000)
-        assertFalse(watch.check(sample(1_100, 4, 8, 100, 100)).canShow)
-        assertTrue(watch.check(sample(1_200, 5, 10, 200, 200)).canShow)
-        assertFalse("five pictures and then nothing is not running", watch.check(sample(1_700, 5, 10, 700, 200)).canShow)
+        assertFalse(watch.check(sample(1_100, 9, 18, 100, 100)).canShow)
+        assertTrue(watch.check(sample(1_200, 10, 20, 200, 200)).canShow)
+        assertFalse("ten pictures and then nothing is not running", watch.check(sample(1_700, 10, 20, 700, 200)).canShow)
     }
 
     @Test

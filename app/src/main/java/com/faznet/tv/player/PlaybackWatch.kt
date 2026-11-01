@@ -101,7 +101,9 @@ class ExoWatch(private val traceWatching: Boolean = false) {
 
     private companion object {
         const val NO_PICTURE = "no picture"
-        const val STABLE_FRAMES = 5
+        // The Mi TV Stick's decoder often stops at 5 pictures on interlaced channels (rarely up to 9), and a new one plays.
+        // With fewer than this the viewer would see the channel start, stop and start again.
+        const val STABLE_FRAMES = 10
         const val RUNNING_MS = 400L
         const val NO_VIDEO_SHOW_MS = 500L
         const val HEALTHY_MS = 30_000L
