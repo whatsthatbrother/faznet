@@ -19,6 +19,7 @@ import com.faznet.tv.ui.compose.HomeActions
 import com.faznet.tv.ui.compose.HomeScreen
 import com.faznet.tv.ui.compose.HomeState
 import com.faznet.tv.BuildConfig
+import com.faznet.tv.Perf
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
 import com.faznet.tv.data.ChannelCheck
@@ -237,7 +238,8 @@ class MainActivity : AppCompatActivity(), HomeActions {
         ui.loading = true
         loadJob = lifecycleScope.launch {
             try {
-                val list = repo.loadChannels(p, force)
+                val list = Perf.measure("home.load") { repo.loadChannels(p, force) }
+                Perf.log("home.channels ${list.size}")
                 setChannels(list)
                 loadedPlaylistId = p.id
                 selectedGroup = KEY_ALL
@@ -326,6 +328,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
     }
 
     private fun rebuild(keepScroll: Boolean) {
+        val start = Perf.now()
         val p = playlist ?: return
         val favs = repo.favorites(p.id)
         val items = groupItems(favs)
@@ -333,6 +336,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
         ui.groups = items
         ui.selectedGroup = selectedGroup
         applyFilter(keepScroll)
+        Perf.since("home.rebuild", start)
     }
 
     override fun selectGroup(key: String, fromClick: Boolean) {
@@ -359,6 +363,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
     private var groupJob: Job? = null
 
     private fun applyFilter(keepScroll: Boolean = false) {
+        val start = Perf.now()
         val p = playlist ?: return
         if (loadedPlaylistId == null) return
         val favs = repo.favorites(p.id)
@@ -375,6 +380,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
         ui.channels = visible
         if (!keepScroll) ui.scrollTop++
         ui.empty = if (visible.isEmpty()) EmptyInfo("", getString(R.string.no_channels)) else null
+        Perf.since("home.filter", start)
     }
 
     override fun toggleFavorite(ch: Channel) {
@@ -394,12 +400,14 @@ class MainActivity : AppCompatActivity(), HomeActions {
     private var byGroup: Map<String, List<Channel>> = emptyMap()
 
     private fun setChannels(list: List<Channel>) {
+        val start = Perf.now()
         all = list
         byUrl = list.associateBy { it.url }
         val m = LinkedHashMap<String, ArrayList<Channel>>()
         for (c in list) m.getOrPut(c.group) { ArrayList() }.add(c)
         byGroup = m
         ChannelStore.all = list
+        Perf.since("home.setChannels", start)
     }
 
     private fun groupItems(favs: Set<String>): List<GroupItem> {

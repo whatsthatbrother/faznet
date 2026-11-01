@@ -15,3 +15,4 @@ CLAUDE.local.md
 /*.apk
 .kotlin/
 archive/
+app/build-bench/

@@ -38,6 +38,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.faznet.tv.Perf
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
 import com.faznet.tv.data.ChannelStore
@@ -221,7 +222,7 @@ class PlayerActivity : AppCompatActivity() {
         if (start.isEmpty()) { finish(); return }
         val startIndex = (savedInstanceState?.getInt(EXTRA_INDEX) ?: intent.getIntExtra(EXTRA_INDEX, 0))
             .coerceIn(0, start.size - 1)
-        buildGroups(start)
+        Perf.measure("player.buildGroups") { buildGroups(start) }
         channels = groups[playGroup].channels
         // The start list is one of the groups (or the search result), so the index is valid in it.
         index = channels.indexOfFirst { it.url == start[startIndex].url }.coerceAtLeast(0)
@@ -433,8 +434,30 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    // ---- how long a channel took to appear: logged when it does, tools/zap-test.ps1 reads it ----
+    private var openPressAt = 0L
+    private var openAt = 0L
+    private var openPreparedAt = 0L
+    private var openReadyAt = 0L
+    private var openFrameAt = 0L
+    private var openCount = 0
+
+    private fun logOpen() {
+        val ch = channels.getOrNull(index) ?: return
+        val now = Perf.now()
+        val press = if (openPressAt != 0L) openPressAt else openAt
+        fun after(t: Long) = if (t == 0L) -1 else t - openAt
+        Perf.log(
+            "open total=${now - press} wait=${openAt - press} prepare=${after(openPreparedAt)} ready=${after(openReadyAt)} " +
+                "frame=${after(openFrameAt)} show=${now - openAt} reopens=${(openCount - 1).coerceAtLeast(0)} " +
+                "engine=${if (vlc != null) "vlc" else "exo"} forced=${now - hiddenSince > MAX_HIDDEN_MS} ch=${ch.number} ${ch.name}"
+        )
+        openPressAt = 0L
+    }
+
     private fun reveal() {
         if (revealed) return
+        logOpen()
         // Opened cleanly on the first try: this channel needs the quick re-open less and less.
         if (!preReopened && recoveries == 0) channels.getOrNull(index)?.let { ChannelMemory.cleanStart(this, it.url) }
         revealed = true
@@ -455,6 +478,7 @@ class PlayerActivity : AppCompatActivity() {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
                     Player.STATE_READY -> {
+                        if (openReadyAt == 0L) openReadyAt = Perf.now()
                         tvError.visibility = View.GONE
                         retries = 0
                         handler.removeCallbacks(stallWatchdog)
@@ -491,6 +515,7 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onRenderedFirstFrame() {
+                if (openFrameAt == 0L) openFrameAt = Perf.now()
                 firstFrameSeen = true
                 lastRenderedAt = SystemClock.elapsedRealtime()
             }
@@ -543,6 +568,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun play(i: Int) {
+        openAt = Perf.now()
+        openCount = 0
         handler.removeCallbacks(zapCommit)
         pendingZap = -1
         index = i
@@ -787,6 +814,10 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun startCurrent() {
+        openCount++
+        openPreparedAt = 0L
+        openReadyAt = 0L
+        openFrameAt = 0L
         vlc?.let { v ->
             val ch = channels[index]
             tvError.visibility = View.GONE
@@ -816,6 +847,7 @@ class PlayerActivity : AppCompatActivity() {
             val type = if (forceHls) StreamType.HLS else StreamProbe.detect(ch.url, ua, ch.referrer)
             if (token != playToken || player !== p) return@launch
             p.setMediaSource(PlayerFactory.mediaSource(this@PlayerActivity, ch, ua, type))
+            openPreparedAt = Perf.now()
             p.prepare()
             p.play()
         }
@@ -1079,6 +1111,7 @@ class PlayerActivity : AppCompatActivity() {
      */
     private fun zap(delta: Int) {
         if (channels.isEmpty()) return
+        openPressAt = Perf.now()
         val n = channels.size
         val from = if (pendingZap >= 0) pendingZap else index
         pendingZap = ((from + delta) % n + n) % n

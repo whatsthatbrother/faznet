@@ -6,6 +6,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// `gradlew assembleDebug -Pbench` builds a second app next to the real one (see tools/README.md): same code and
+// same R8 settings, but its own data, no launcher icon, no server. For measuring only, it is never published.
+val bench = project.hasProperty("bench")
+if (bench) layout.buildDirectory.set(file("build-bench"))
+
 // The release key is NOT in the repository (see signingConfigs below).
 val keyProps = Properties().apply {
     val f = rootProject.file("keystore/keystore.properties")
@@ -17,15 +22,16 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.faznet.tv"
+        applicationId = if (bench) "com.faznet.tv.bench" else "com.faznet.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 43
+        // The bench app must never be offered an update from the website.
+        versionCode = if (bench) 999_999 else 43
         versionName = "4.0.3"
 
-
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
-        val server = (project.findProperty("faznetServer") as String?) ?: "https://faznet.diarfazliu.workers.dev"
+        // "REPLACE" counts as no server (Repository.serverUrl): the bench app registers nothing and sends no reports.
+        val server = if (bench) "REPLACE" else (project.findProperty("faznetServer") as String?) ?: "https://faznet.diarfazliu.workers.dev"
         val web = (project.findProperty("faznetWeb") as String?) ?: "https://whatsthatbrother.github.io/faznet"
         buildConfigField("String", "SERVER_URL", "\"$server\"")
         buildConfigField("String", "WEB_URL", "\"$web\"")
@@ -53,7 +59,7 @@ android {
                 isMinifyEnabled = true
                 isShrinkResources = true
                 proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-                signingConfig = signingConfigs.getByName("release")
+                signingConfig = signingConfigs.getByName(if (bench) "debug" else "release")
             }
         }
         release {
@@ -94,6 +100,12 @@ android {
     }
     if (releaseFlag) {
         sourceSets.getByName("debug").assets.setSrcDirs(emptyList<String>())
+    }
+    if (bench) {
+        sourceSets.getByName("debug") {
+            java.srcDir("src/bench/java")
+            manifest.srcFile("src/bench/AndroidManifest.xml")
+        }
     }
 
     lint {
