@@ -1,3 +1,33 @@
+## Faznet v4.1.0
+
+**Shqip:** Shumë më e shpejtë dhe më e lehtë. Kanalet hapen për rreth 1.2 s në vend të 2 s, një dekoder video i bllokuar vërehet dhe rregullohet më shpejt, dhe aplikacioni niset më shpejt. Listat e kanaleve tani ruhen në një databazë, kështu që playlist-at me dhjetëra mijëra kanale lëvizin butë. Playlist-at dhe favoritet mbeten.
+
+### Faster (measured on the Mi TV Stick against 4.0.3)
+- Channel switch, press to picture: about 1.2 s instead of 1.8-2.0 s, and 9 of 10 within 1.35 s (it could take 5.7 s)
+- Start to first picture of the home screen: 617 ms instead of 740-1200 ms; the list is on screen in about 350 ms
+- Moving through channels as fast as the remote allows: 99% of frames under 48 ms instead of 500-600 ms
+- 50 000 channels: first load 5.9 s instead of 9.2 s, later loads under 0.6 s, a key held down stays smooth instead of stalling for seconds
+- Memory right after start: 45 MB instead of 54-96 MB
+
+### Steadier
+- The player tells a stuck video decoder from a picture that is merely late, and opens the channel again sooner
+- Problem reports say what the decoder was doing, so freezes can be tracked down
+- Home: buttons no longer stay lit after the focus moved on, and removing the last favourite keeps the focus nearby instead of sending it to the top bar
+- Parental lock: a list with locked groups no longer gives a channel in a locked group a place in the list
+- Update notes appear in Albanian on Albanian devices
+- Phones: the "Update" button has its own row, so search and Settings stay on the screen while an update waits
+
+### Under the hood
+- Channel lists, favourites and recently watched are in a database (Room) and read a page at a time (Paging); dependency injection with Hilt
+- The M3U file is read as a stream of bytes, about 8 times faster
+- Favourites and recently watched from older versions carry over on the first start; MAC + PIN do not change
+- Current build tools and Compose; measuring tools in `tools/`, more unit tests (23)
+
+### How it was tested
+- Mi TV Stick: all screens and channel playback, with a build that differs from this one only by the phone button above, the update notes language and the version number
+- Phone and TV emulators (Android 37 and 36): all screens, portrait and landscape, and a full in-app update; no real channel was played there
+- Not tried on a real phone
+
 ## Faznet v4.0.3
 
 **Shqip:** Kanali nuk mbetet më i ngrirë kur sinjali HDMI i TV-së ndërpritet për një çast (ndërrim input-i, standby, lidhje e lirshme). TV live tani vazhdon të luajë, dhe nëse sistemi e pauzon prapë, kanali rihapet vetë.

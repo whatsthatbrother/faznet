@@ -1,6 +1,6 @@
 # 5.0: restructure (agreed with Diar on 2026-11-01)
 
-Work happens on branch `v5`; `main` is what users run. Nothing is published without Diar's OK.
+Work happens on branch `v5`; `main` is what users run. Nothing is published without Diar's OK. Phases 0-2 went out as 4.1.0.
 
 1. [x] Phase 0: real git working copy, 4.0.3 source on GitHub, timing logs, measuring tools (`tools/`)
 2. [x] Phase 1: quick wins without restructuring (library upgrades, byte M3U parser, channel opening, freezes, Home)
@@ -72,8 +72,9 @@ Synthetic 50 000 channels, measured before the last focus fix (a state read whil
 
 Checked by hand on the stick: focus look, coming back from the player, favourites from Home and the player, search, the
 player's channel list, number entry, TV guide, Device and Settings screens, playlist switch, parental lock with a wrong and a
-right PIN. After using all of those: 1 Activity and 1 ViewRootImpl left, no crash in the log. VLC plays too (2.2-2.7 s to picture, 88 MB). Not checked: playback through a
-weak network, phones.
+right PIN. After using all of those: 1 Activity and 1 ViewRootImpl left, no crash in the log. VLC plays too (2.2-2.7 s to
+picture, 88 MB). Phone and TV emulators: the same screens, portrait and landscape, and a full in-app update. Not checked:
+playback through a weak network, a real phone.
 
 Known for later: the TV guide opens with the focus on Back at channel 1, and Search keeps the group highlighted. The player
 still reads a whole group into memory (Phase 3).
