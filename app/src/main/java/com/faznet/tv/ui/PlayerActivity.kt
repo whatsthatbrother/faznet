@@ -41,11 +41,11 @@ import androidx.recyclerview.widget.RecyclerView
 import com.faznet.tv.Perf
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
-import com.faznet.tv.data.ChannelIndex
+import com.faznet.tv.data.ChannelRepository
+import com.faznet.tv.data.ChannelScope
 import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.ChannelMemory
 import com.faznet.tv.data.EnginePrefs
-import com.faznet.tv.data.Parental
 import com.faznet.tv.data.ProblemLog
 import com.faznet.tv.data.ChannelCheck
 import com.faznet.tv.data.Epg
@@ -57,15 +57,22 @@ import com.faznet.tv.player.StreamType
 import com.faznet.tv.player.Throughput
 import com.faznet.tv.player.VlcEngine
 import org.videolan.libvlc.util.VLCVideoLayout
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 import kotlin.math.abs
 
 @OptIn(UnstableApi::class)
+@AndroidEntryPoint
 class PlayerActivity : AppCompatActivity() {
 
-    /** A browsable group in the in-player channel list. */
-    private class Group(val key: String?, val title: String, val channels: List<Channel>)
+    @Inject lateinit var channelRepo: ChannelRepository
+
+    /** A browsable group in the in-player channel list; its channels are read when they are first needed. */
+    private class Group(val key: String?, val title: String, val scope: ChannelScope) {
+        var channels: List<Channel>? = null
+    }
 
     private lateinit var repo: Repository
     private lateinit var playerView: PlayerView
@@ -224,14 +231,13 @@ class PlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_player)
         repo = Repository.get(this)
 
-        val start = ChannelStore.current
-        if (start.isEmpty()) { finish(); return }
-        val startIndex = (savedInstanceState?.getInt(EXTRA_INDEX) ?: intent.getIntExtra(EXTRA_INDEX, 0))
-            .coerceIn(0, start.size - 1)
-        Perf.measure("player.buildGroups") { buildGroups(start) }
-        channels = groups[playGroup].channels
-        // The start list is one of the groups (or the search result), so the index is valid in it.
-        index = channels.indexOfFirst { it.url == start[startIndex].url }.coerceAtLeast(0)
+        val startChannel = ChannelStore.startChannel
+        val startScope = ChannelStore.scope
+        if (startChannel == null || startScope == null) { finish(); return }
+        // The channel opens at once; the list it belongs to follows from the database (see loadLists).
+        groups = listOf(Group(ChannelStore.groupKey, ChannelStore.groupTitle, startScope))
+        channels = listOf(startChannel)
+        index = 0
 
         playerView = findViewById(R.id.playerView)
         topBar = findViewById(R.id.topBar)
@@ -316,14 +322,15 @@ class PlayerActivity : AppCompatActivity() {
         vlcLayout.setOnTouchListener { _, ev -> gestures.onTouchEvent(ev); true }
 
         hideSystemUi()
+        loadLists()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         // Restart in the group being watched, at the channel being watched.
-        ChannelStore.current = channels
-        ChannelStore.groupKey = groups.getOrNull(playGroup)?.key
-        outState.putInt(EXTRA_INDEX, index)
+        val group = groups.getOrNull(playGroup) ?: return
+        val ch = channels.getOrNull(index) ?: return
+        ChannelStore.start(ChannelStore.playlistId, ch, group.scope, group.key, group.title)
     }
 
     override fun onStart() {
@@ -364,31 +371,40 @@ class PlayerActivity : AppCompatActivity() {
 
     // ---------- groups ----------
 
-    private fun buildGroups(start: List<Channel>) {
-        val whole = ChannelStore.all.ifEmpty { start }
-        val all = Parental.visible(this, whole)
-        val favs = repo.favorites(ChannelStore.playlistId)
-        // The home screen already sorted the whole list; only a parental lock makes this a different list.
-        val index = ChannelStore.index?.takeIf { it.all === all } ?: ChannelIndex.build(all)
-        val list = ArrayList<Group>(index.byGroup.size + 3)
-        list.add(Group(MainActivity.KEY_ALL, getString(R.string.group_all), all))
-        favs.mapNotNull { index.byUrl[it] }.sortedBy { it.number }.takeIf { it.isNotEmpty() }
-            ?.let { list.add(Group(MainActivity.KEY_FAV, getString(R.string.group_favorites), it)) }
-        repo.recents(ChannelStore.playlistId).mapNotNull { index.byUrl[it] }.takeIf { it.isNotEmpty() }
-            ?.let { list.add(Group(MainActivity.KEY_RECENT, getString(R.string.group_recent), it)) }
-        index.byGroup.forEach { (g, chs) -> list.add(Group(g, g, chs)) }
+    /** Becomes true when the list the channel was opened from is here: only then the next channel is known. */
+    private var listReady = false
+    private val playlist by lazy { repo.playlists().firstOrNull { it.id == ChannelStore.playlistId } }
 
-        val key = ChannelStore.groupKey
-        var at = if (key != null) list.indexOfFirst { it.key == key } else -1
-        if (at >= 0 && list[at].channels.size != start.size) at = -1
-        if (at < 0) {
-            // Search results (or a list we can't match): keep it as its own group in front.
-            list.add(0, Group(null, getString(R.string.group_search), start))
-            at = 0
+    /**
+     * Reads the list the channel was opened from, then the other groups for browsing in the channel list. The channel
+     * is already opening: on a TV stick this must not hold it up, whatever the size of the list.
+     */
+    private fun loadLists() {
+        lifecycleScope.launch {
+            val first = groups[0]
+            val list = Perf.measure("player.list") { channelRepo.channelsOf(first.scope) }
+            first.channels = list
+            val at = channels.getOrNull(index)?.let { playing -> list.indexOfFirst { it.url == playing.url } } ?: -1
+            if (at >= 0) {
+                channels = list
+                index = at
+            }
+            listReady = true
+            val p = playlist ?: return@launch
+            val view = channelRepo.listView(channelRepo.activeList(p.id) ?: return@launch)
+            val all = ArrayList<Group>(view.groups.size + 3)
+            all.add(Group(MainActivity.KEY_ALL, getString(R.string.group_all), view.all()))
+            view.favorites(p).takeIf { it.size > 0 }?.let { all.add(Group(MainActivity.KEY_FAV, getString(R.string.group_favorites), it)) }
+            view.recents(p).takeIf { it.size > 0 }?.let { all.add(Group(MainActivity.KEY_RECENT, getString(R.string.group_recent), it)) }
+            for (g in view.openGroups) view.group(g.name)?.let { all.add(Group(g.name, g.name, it)) }
+            // The first group stays what it is; one that is no group (search results) goes in front.
+            val same = if (first.key == null) -1 else all.indexOfFirst { it.key == first.key }
+            if (same >= 0) all[same] = first else all.add(0, first)
+            val browsing = groups.getOrNull(listGroupIndex)
+            groups = all
+            playGroup = all.indexOf(first)
+            listGroupIndex = all.indexOf(browsing).coerceAtLeast(0)
         }
-        groups = list
-        playGroup = at
-        listGroupIndex = at
     }
 
     // ---------- player ----------
@@ -576,7 +592,7 @@ class PlayerActivity : AppCompatActivity() {
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
         val ch = channels[index]
-        ChannelStore.lastPlayedUrl = ch.url
+        ChannelStore.lastPlayed = ch
         stallCount = 0
         underruns = 0
         bufferingTotalMs = 0
@@ -591,7 +607,7 @@ class PlayerActivity : AppCompatActivity() {
         tvTitle.text = "${ch.number}. ${ch.name}"
         updateFavIcon()
         if (listPanel.visibility == View.VISIBLE) listAdapter.setPlaying(ch.url)
-        repo.markWatched(ChannelStore.playlistId, ch.url)
+        playlist?.let { p -> lifecycleScope.launch { channelRepo.markWatched(p, ch) } }
     }
 
     /** Resolve the servers of the previous/next channels in advance, so zapping to them starts sooner. */
@@ -1110,7 +1126,7 @@ class PlayerActivity : AppCompatActivity() {
      * presses stop. The old stream is stopped at once so the server sees a single connection.
      */
     private fun zap(delta: Int) {
-        if (channels.isEmpty()) return
+        if (channels.isEmpty() || !listReady) return
         openPressAt = Perf.now()
         val n = channels.size
         val from = if (pendingZap >= 0) pendingZap else index
@@ -1212,15 +1228,21 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun toggleFavorite() {
         val ch = channels.getOrNull(index) ?: return
-        val added = repo.toggleFavorite(ChannelStore.playlistId, ch.url)
-        toast(getString(if (added) R.string.fav_added else R.string.fav_removed))
-        updateFavIcon()
+        val p = playlist ?: return
+        lifecycleScope.launch {
+            val added = channelRepo.toggleFavorite(p, ch)
+            toast(getString(if (added) R.string.fav_added else R.string.fav_removed))
+            updateFavIcon()
+        }
     }
 
     private fun updateFavIcon() {
         val ch = channels.getOrNull(index) ?: return
-        val fav = repo.favorites(ChannelStore.playlistId).contains(ch.url)
-        btnFav.setImageResource(if (fav) R.drawable.ic_star else R.drawable.ic_star_border)
+        val p = playlist ?: return
+        lifecycleScope.launch {
+            val fav = channelRepo.isFavorite(p, ch)
+            btnFav.setImageResource(if (fav) R.drawable.ic_star else R.drawable.ic_star_border)
+        }
     }
 
     /** Sound language and subtitles of the current channel. */
@@ -1390,20 +1412,29 @@ class PlayerActivity : AppCompatActivity() {
         if (groups.isEmpty()) return
         val n = groups.size
         listGroupIndex = ((listGroupIndex + delta) % n + n) % n
-        val playingUrl = channels.getOrNull(index)?.url
-        val g = groups[listGroupIndex]
-        fillList(focusUrl = if (g.channels.any { it.url == playingUrl }) playingUrl else null)
+        fillList(focusUrl = channels.getOrNull(index)?.url)
         bumpList()
     }
 
     private fun fillList(focusUrl: String?) {
         val g = groups[listGroupIndex]
         listGroup.text = g.title
-        listAdapter.submit(g.channels, channels.getOrNull(index)?.url)
-        val pos = focusUrl?.let { u -> g.channels.indexOfFirst { it.url == u } }?.takeIf { it >= 0 } ?: 0
-        listCount.text = getString(R.string.list_count, pos + 1, g.channels.size)
+        val list = g.channels
+        if (list == null) {
+            // Read when first needed: the groups of a big playlist would not all fit in memory.
+            listAdapter.submit(emptyList(), null)
+            listCount.text = ""
+            lifecycleScope.launch {
+                g.channels = channelRepo.channelsOf(g.scope)
+                if (groups.getOrNull(listGroupIndex) === g && listPanel.visibility == View.VISIBLE) fillList(focusUrl)
+            }
+            return
+        }
+        listAdapter.submit(list, channels.getOrNull(index)?.url)
+        val pos = focusUrl?.let { u -> list.indexOfFirst { it.url == u } }?.takeIf { it >= 0 } ?: 0
+        listCount.text = getString(R.string.list_count, pos + 1, list.size)
         focusListRow(pos)
-        showListEpg(g.channels.getOrNull(pos))
+        showListEpg(list.getOrNull(pos))
     }
 
     private fun focusListRow(pos: Int) {
@@ -1419,13 +1450,14 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun onListPick(pos: Int) {
         val g = groups[listGroupIndex]
-        val ch = g.channels.getOrNull(pos) ?: return
+        val list = g.channels ?: return
+        val ch = list.getOrNull(pos) ?: return
         if (listGroupIndex == playGroup && channels.getOrNull(index)?.url == ch.url) {
             hideChannelList()
             return
         }
         playGroup = listGroupIndex
-        channels = g.channels
+        channels = list
         hideChannelList()
         play(pos)
     }
@@ -1456,15 +1488,27 @@ class PlayerActivity : AppCompatActivity() {
         numberBuffer = ""
         tvNumberEntry.visibility = View.GONE
         if (num == null) return
-        var i = channels.indexOfFirst { it.number == num }
-        if (i < 0) {
-            val allIdx = groups.indexOfFirst { it.key == MainActivity.KEY_ALL }
-            val all = groups.getOrNull(allIdx)?.channels ?: emptyList()
-            i = all.indexOfFirst { it.number == num }
-            if (i >= 0) { playGroup = allIdx; channels = all }
+        val i = channels.indexOfFirst { it.number == num }
+        if (i >= 0) {
+            play(i)
+            return
         }
-        if (i >= 0) play(i)
-        else toast(getString(R.string.channel_not_found, num))
+        // Not in this group: channel numbers are those of the whole list.
+        val allIdx = groups.indexOfFirst { it.key == MainActivity.KEY_ALL }
+        val whole = groups.getOrNull(allIdx)
+        if (whole == null) {
+            toast(getString(R.string.channel_not_found, num))
+            return
+        }
+        lifecycleScope.launch {
+            val all = whole.channels ?: channelRepo.channelsOf(whole.scope).also { whole.channels = it }
+            val at = all.indexOfFirst { it.number == num }
+            if (at >= 0) {
+                playGroup = allIdx
+                channels = all
+                play(at)
+            } else toast(getString(R.string.channel_not_found, num))
+        }
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -1575,7 +1619,6 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     companion object {
-        const val EXTRA_INDEX = "index"
         private const val STALL_TIMEOUT_MS = 8_000L
         private const val MAX_RETRIES = 5
         private const val FIRST_FRAME_TIMEOUT_MS = 2_500L

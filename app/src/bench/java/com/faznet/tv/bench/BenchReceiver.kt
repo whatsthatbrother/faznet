@@ -1,14 +1,17 @@
 package com.faznet.tv.bench
 
+import android.app.Instrumentation
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import android.util.Log
+import android.view.KeyEvent
 import com.faznet.tv.data.M3uParser
 import com.faznet.tv.data.Playlist
 import com.faznet.tv.data.Repository
-import kotlinx.coroutines.runBlocking
+import com.faznet.tv.data.db.ChannelImporter
+import com.faznet.tv.data.db.FaznetDatabase
 import java.io.File
 import java.net.URL
 import kotlin.concurrent.thread
@@ -17,20 +20,38 @@ import kotlin.concurrent.thread
  * Measuring build only (-Pbench). Lists come from the PC through `adb reverse` (tools/bench.ps1):
  *   add   makes a list the active playlist of this app, then the real screens can be measured with it
  *   data  times reading the list without any screen, so it can run while the stick is in use
+ *   hold  a key held down on the open screen for a while, as the remote does it (adb can't do that)
  */
 class BenchReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
         val app = c.applicationContext
-        val list = i.getStringExtra("list") ?: return
         val mode = i.getStringExtra("mode") ?: "add"
-        val rounds = i.getIntExtra("rounds", 3)
         thread(name = "bench") {
             runCatching {
-                val file = fetch(app, list)
-                if (mode == "data") data(app, file, rounds) else add(app, file)
+                when (mode) {
+                    "hold" -> hold(i.getIntExtra("key", KeyEvent.KEYCODE_DPAD_DOWN), i.getIntExtra("ms", 5000))
+                    else -> {
+                        val file = fetch(app, i.getStringExtra("list") ?: return@runCatching)
+                        if (mode == "data") data(app, file, i.getIntExtra("rounds", 3)) else add(app, file)
+                    }
+                }
             }.onFailure { Log.e(TAG, "FAILED", it) }
-            Log.i(TAG, "DONE $mode $list")
+            Log.i(TAG, "DONE $mode")
         }
+    }
+
+    /** The system repeats a held key every 50 ms after 500 ms; this sends the same events into this app's window. */
+    private fun hold(key: Int, ms: Int) {
+        val i = Instrumentation()
+        val down = SystemClock.uptimeMillis()
+        i.sendKeySync(KeyEvent(down, down, KeyEvent.ACTION_DOWN, key, 0))
+        Thread.sleep(500)
+        var repeat = 1
+        while (SystemClock.uptimeMillis() - down < ms) {
+            i.sendKeySync(KeyEvent(down, SystemClock.uptimeMillis(), KeyEvent.ACTION_DOWN, key, repeat++))
+            Thread.sleep(50)
+        }
+        i.sendKeySync(KeyEvent(down, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, key, 0))
     }
 
     private fun fetch(c: Context, name: String): File {
@@ -55,28 +76,20 @@ class BenchReceiver : BroadcastReceiver() {
         return r
     }
 
-    private fun heapMb(): Double {
-        repeat(2) { System.gc(); System.runFinalization(); Thread.sleep(150) }
-        val rt = Runtime.getRuntime()
-        return (rt.totalMemory() - rt.freeMemory()) / 1048576.0
-    }
-
     private fun data(c: Context, file: File, rounds: Int) {
         Log.i(TAG, "=== ${file.name} ${file.length() / 1024} KB")
-        val repo = Repository.get(c)
-        val heap0 = heapMb()
         var count = 0
         repeat(rounds) { n ->
             count = timed("parse #${n + 1}") { file.inputStream().use { M3uParser.parse(it, "Other") }.size }
         }
         Log.i(TAG, "channels $count")
-        // First load parses and writes the device copy; a new process would read that copy.
-        val p = Playlist("benchdata", file.name, Playlist.TYPE_FILE, file.name)
-        file.copyTo(repo.cacheFile(p.id), overwrite = true)
-        val list = timed("repository first load") { runBlocking { repo.loadChannels(p, false) } }
-        val heap1 = heapMb()
-        Log.i(TAG, "heap with the list +%.1f MB (%d channels)".format(heap1 - heap0, list.size))
-        repo.removePlaylist(p.id)
+        val db = FaznetDatabase.create(c)
+        val importer = ChannelImporter(db)
+        repeat(rounds) { n ->
+            val r = timed("import #${n + 1}") { file.inputStream().use { importer.import("benchdata", it, "Other", false, "$n", null, 0) } }
+            Log.i(TAG, "list ${r.listId}: ${r.channels} channels, ${r.groups} groups, database ${c.getDatabasePath("faznet.db").length() / 1024} KB")
+        }
+        db.close()
     }
 
     private companion object {

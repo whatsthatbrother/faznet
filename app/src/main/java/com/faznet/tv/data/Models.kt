@@ -10,6 +10,8 @@ data class Channel(
     val group: String,
     val userAgent: String?,
     val referrer: String?,
+    /** Its row in the database; 0 for a channel that came straight from a parser. */
+    val id: Long = 0,
 )
 
 data class Playlist(

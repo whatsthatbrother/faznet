@@ -3,6 +3,8 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
+    id("com.google.dagger.hilt.android")
 }
 
 // `gradlew assembleDebug -Pbench` builds a second app next to the real one (see tools/README.md): same code and
@@ -114,6 +116,15 @@ android {
         abortOnError = false
         checkReleaseBuilds = false
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+ksp {
+    // The database schema of each version is kept in the repository, for writing and testing migrations.
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -147,5 +158,20 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.13.0")
 
+    val room = "2.8.5"
+    implementation("androidx.room:room-runtime:$room")
+    implementation("androidx.room:room-ktx:$room")
+    ksp("androidx.room:room-compiler:$room")
+    val paging = "3.5.3"
+    implementation("androidx.paging:paging-runtime:$paging")
+    implementation("androidx.paging:paging-compose:$paging")
+    val hilt = "2.60.1"
+    implementation("com.google.dagger:hilt-android:$hilt")
+    ksp("com.google.dagger:hilt-compiler:$hilt")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0")
+
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("androidx.test:core:1.7.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 }

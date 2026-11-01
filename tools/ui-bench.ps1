@@ -1,5 +1,7 @@
 # Home screen speed on the stick: cold start, frame times while the remote moves through the channels (one press at a
-# time, then a held-down remote) and over the groups, then the app's own timings. Run it 2-3 times and compare medians.
+# time, a held-down key, presses as fast as the app takes them) and over the groups, then the app's own timings.
+# Run it 2-3 times and compare. Compare the number of late frames, not only the percentage: a shorter scroll animation
+# means fewer frames in total, which raises the percentage without anything getting worse.
 #   tools\ui-bench.ps1 -Label before
 #   tools\ui-bench.ps1 -Package com.faznet.tv.bench -Label 50k
 param([string]$Package = 'com.faznet.tv', [string]$Label = 'run', [int]$Steps = 30)
@@ -19,12 +21,19 @@ Keys DPAD_DOWN $Steps
 Keys DPAD_UP $Steps
 Frames $Package 'grid'
 
+if ($Package -like '*.bench') {
+    Sh "dumpsys gfxinfo $Package reset" | Out-Null
+    Hold $Package 20 6000  # KEYCODE_DPAD_DOWN
+    Hold $Package 19 6000  # KEYCODE_DPAD_UP
+    Frames $Package 'held'
+}
+
 Sh "dumpsys gfxinfo $Package reset" | Out-Null
 Burst DPAD_DOWN 80
 Start-Sleep 2
 Burst DPAD_UP 80
 Start-Sleep 2
-Frames $Package 'held'
+Frames $Package 'burst'
 
 Sh "dumpsys gfxinfo $Package reset" | Out-Null
 Keys DPAD_LEFT 4

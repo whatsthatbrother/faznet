@@ -48,7 +48,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.faznet.tv.BuildConfig
 import com.faznet.tv.R
-import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.Parental
 import com.faznet.tv.data.ProblemLog
 import com.faznet.tv.data.Reports
@@ -61,7 +60,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Settings as a full screen made for the remote: every change is saved at once (no Save button). */
+@dagger.hilt.android.AndroidEntryPoint
 class SettingsActivity : AppCompatActivity() {
+
+    @javax.inject.Inject lateinit var channelRepo: com.faznet.tv.data.ChannelRepository
 
     private sealed class Item {
         class Header(val title: String) : Item()
@@ -308,11 +310,15 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun chooseLockedGroups(pin: String) {
-        val groups = ChannelStore.all.map { it.group }.distinct()
-        if (groups.isEmpty()) {
-            Toast.makeText(this, R.string.no_channels, Toast.LENGTH_SHORT).show()
-            return
+        lifecycleScope.launch {
+            val listId = repo.activePlaylist()?.let { channelRepo.activeList(it.id) }
+            val groups = listId?.let { channelRepo.listView(it).groups.map { g -> g.name } }.orEmpty()
+            if (groups.isEmpty()) Toast.makeText(this@SettingsActivity, R.string.no_channels, Toast.LENGTH_SHORT).show()
+            else chooseLockedGroups(pin, groups)
         }
+    }
+
+    private fun chooseLockedGroups(pin: String, groups: List<String>) {
         val locked = Parental.lockedGroups(this)
         val checked = BooleanArray(groups.size) { groups[it] in locked }
         MaterialAlertDialogBuilder(this)

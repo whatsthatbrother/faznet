@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -55,11 +54,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.paging.PagingData
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
 import com.faznet.tv.data.ChannelCheck
 import com.faznet.tv.ui.GroupItem
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -83,23 +85,30 @@ class HomeState {
     var xtream by mutableStateOf(false)
     var groups by mutableStateOf<List<GroupItem>>(emptyList())
     var selectedGroup by mutableStateOf("")
-    var channels by mutableStateOf<List<Channel>>(emptyList())
-    var favs by mutableStateOf<Set<String>>(emptySet())
+    /** The channels that are favourites in the list on screen. */
+    var favIds by mutableStateOf<Set<Long>>(emptySet())
     var loading by mutableStateOf(false)
+    /** How many channels of a playlist have been read so far while it is being imported. */
+    var importing by mutableStateOf<Int?>(null)
+    /** Filled in when the account has answered: without any, the button stays away. */
+    var hasMovies by mutableStateOf(false)
+    var hasSeries by mutableStateOf(false)
     var query by mutableStateOf("")
     var empty by mutableStateOf<EmptyInfo?>(null)
-    /** Channel that should get the remote's focus (coming back from the player). */
-    var focusUrl by mutableStateOf<String?>(null)
+    /** Place in the grid of the channel that should get the remote's focus (coming back from the player). */
+    var focusIndex by mutableStateOf<Int?>(null)
     /** Increase to scroll the channel grid back to the top. */
     var scrollTop by mutableIntStateOf(0)
     /** Increase after a channel check so "not working" labels are redrawn. */
     var checkVersion by mutableIntStateOf(0)
     /** A newer Faznet is downloaded and ready: the top bar shows an "Update" button. */
     var updateVersion by mutableStateOf<String?>(null)
+    /** What the "add playlist" button on the welcome screen does. */
+    var addPlaylist: (() -> Unit)? = null
 }
 
 interface HomeActions {
-    fun openChannel(index: Int)
+    fun openChannel(channel: Channel)
     fun toggleFavorite(ch: Channel)
     fun selectGroup(key: String, fromClick: Boolean)
     fun checkGroup(key: String)
@@ -117,16 +126,16 @@ interface HomeActions {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun HomeScreen(state: HomeState, actions: HomeActions, wide: Boolean, tv: Boolean) {
+fun HomeScreen(state: HomeState, pages: Flow<PagingData<Channel>>, actions: HomeActions, wide: Boolean, tv: Boolean) {
     if (tv) {
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides PivotScroll
-        ) { HomeContent(state, actions, wide, tv) }
-    } else HomeContent(state, actions, wide, tv)
+        ) { HomeContent(state, pages, actions, wide, tv) }
+    } else HomeContent(state, pages, actions, wide, tv)
 }
 
 @Composable
-private fun HomeContent(state: HomeState, actions: HomeActions, wide: Boolean, tv: Boolean) {
+private fun HomeContent(state: HomeState, pages: Flow<PagingData<Channel>>, actions: HomeActions, wide: Boolean, tv: Boolean) {
     val background = remember { Brush.verticalGradient(listOf(Color(0xFF16161D), Color(0xFF060608))) }
     val lastRepeat = remember { LongArray(1) }
     Column(
@@ -154,11 +163,11 @@ private fun HomeContent(state: HomeState, actions: HomeActions, wide: Boolean, t
             Row(Modifier.fillMaxSize()) {
                 GroupList(state, actions, vertical = true, modifier = Modifier.width(250.dp).fillMaxHeight())
                 Spacer(Modifier.width(8.dp))
-                ChannelArea(state, actions, wide, tv, Modifier.weight(1f))
+                ChannelArea(state, pages, actions, tv, Modifier.weight(1f))
             }
         } else {
             GroupList(state, actions, vertical = false, modifier = Modifier.fillMaxWidth())
-            ChannelArea(state, actions, wide, tv, Modifier.fillMaxSize())
+            ChannelArea(state, pages, actions, tv, Modifier.fillMaxSize())
         }
     }
 }
@@ -226,8 +235,8 @@ private fun TopBar(state: HomeState, actions: HomeActions, wide: Boolean) {
         ) {
             if (state.xtream) {
                 IconAction(R.drawable.ic_guide, stringResource(R.string.guide), actions::guide)
-                IconAction(R.drawable.ic_movie, stringResource(R.string.movies), actions::movies)
-                IconAction(R.drawable.ic_series, stringResource(R.string.series), actions::series)
+                if (state.hasMovies) IconAction(R.drawable.ic_movie, stringResource(R.string.movies), actions::movies)
+                if (state.hasSeries) IconAction(R.drawable.ic_series, stringResource(R.string.series), actions::series)
             }
             IconAction(R.drawable.ic_device, stringResource(R.string.device_title), actions::device)
             IconAction(R.drawable.ic_refresh, stringResource(R.string.refresh), actions::refresh, onLongClick = { actions.debugPlaylist() })
@@ -303,16 +312,16 @@ private fun GroupChip(g: GroupItem, state: HomeState, actions: HomeActions, vert
 }
 
 @Composable
-private fun ChannelArea(state: HomeState, actions: HomeActions, wide: Boolean, tv: Boolean, modifier: Modifier) {
+private fun ChannelArea(state: HomeState, pages: Flow<PagingData<Channel>>, actions: HomeActions, tv: Boolean, modifier: Modifier) {
     Box(modifier) {
-        val channels = state.channels
+        val channels = pages.collectAsLazyPagingItems()
         val gridState = rememberLazyGridState()
-        // One painter for every card's "no logo" picture, instead of two per card.
+        // One painter for every tile's "no logo" picture.
         val tvIcon = painterResource(R.drawable.ic_tv)
         LaunchedEffect(state.scrollTop) { if (state.scrollTop > 0) gridState.scrollToItem(0) }
-        val favs = state.favs
+        val favs = state.favIds
         val check = state.checkVersion
-        ScrollToFocusedChannel(state, gridState)
+        ScrollToFocusedChannel(state, gridState, channels.itemCount)
         LazyVerticalGrid(
             columns = GridCells.Adaptive(if (tv) 148.dp else 160.dp),
             state = gridState,
@@ -321,39 +330,46 @@ private fun ChannelArea(state: HomeState, actions: HomeActions, wide: Boolean, t
             verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            itemsIndexed(channels, key = { i, ch -> ch.url + "#" + i }, contentType = { _, _ -> "ch" }) { i, ch ->
+            // The place is the key: a tile keeps the focus when its channel arrives from the database, and a new group
+            // only updates the tiles on screen instead of building them again.
+            items(channels.itemCount, key = { it }, contentType = { "ch" }) { i ->
+                val ch = channels[i]
                 // Plain values in, so Compose skips every tile whose values did not change.
-                TileCard(ch, i, fav = ch.url in favs, check = check, tvIcon, state, actions)
+                TileCard(ch, i, fav = ch != null && ch.id in favs, check = check, tvIcon, state, actions)
             }
         }
-        if (state.loading) CircularProgressIndicator(color = Fz.accent, modifier = Modifier.align(Alignment.Center).size(48.dp))
+        if (state.loading) {
+            Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = Fz.accent, modifier = Modifier.size(48.dp))
+                state.importing?.let { read ->
+                    Spacer(Modifier.height(14.dp))
+                    Text(stringResource(R.string.import_progress, read), color = Fz.dim, fontSize = 14.sp)
+                }
+            }
+        }
         state.empty?.let { EmptyBox(it, actions, Modifier.align(Alignment.Center)) }
     }
 }
 
 /** Its own function, so that a change of the focused channel does not recompose the whole grid. */
 @Composable
-private fun ScrollToFocusedChannel(state: HomeState, gridState: androidx.compose.foundation.lazy.grid.LazyGridState) {
-    val channels = state.channels
-    val target = state.focusUrl
-    LaunchedEffect(target, channels) {
-        if (target == null) return@LaunchedEffect
-        val i = channels.indexOfFirst { it.url == target }
-        if (i < 0) { state.focusUrl = null; return@LaunchedEffect }
-        val visible = gridState.layoutInfo.visibleItemsInfo
-        if (visible.none { it.index == i }) gridState.scrollToItem(i)
+private fun ScrollToFocusedChannel(state: HomeState, gridState: androidx.compose.foundation.lazy.grid.LazyGridState, count: Int) {
+    val target = state.focusIndex
+    LaunchedEffect(target, count) {
+        if (target == null || target >= count) return@LaunchedEffect
+        if (gridState.layoutInfo.visibleItemsInfo.none { it.index == target }) gridState.scrollToItem(target)
     }
 }
 
-/** Coming back from the player: the card of the channel that was playing takes the remote's focus. */
+/** Coming back from the player: the tile of the channel that was playing takes the remote's focus. */
 @Composable
-private fun rememberFocusMe(ch: Channel, state: HomeState): FocusRequester {
+private fun rememberFocusMe(index: Int, state: HomeState): FocusRequester {
     val requester = remember { FocusRequester() }
-    if (state.focusUrl == ch.url) {
-        LaunchedEffect(ch.url) {
+    if (state.focusIndex == index) {
+        LaunchedEffect(index) {
             delay(30)
             runCatching { requester.requestFocus() }
-            state.focusUrl = null
+            state.focusIndex = null
         }
     }
     return requester
@@ -369,14 +385,14 @@ private val TileNameDead = Color(0xFFFF6B81)
 /** Tiles look (Apple TV style): a big logo on a dark tile, the name under it; the focused tile grows. */
 @Composable
 private fun TileCard(
-    ch: Channel, index: Int, fav: Boolean, check: Int,
+    ch: Channel?, index: Int, fav: Boolean, check: Int,
     tvIcon: androidx.compose.ui.graphics.painter.Painter, state: HomeState, actions: HomeActions,
 ) {
-    val requester = rememberFocusMe(ch, state)
-    val dead = remember(ch.url, check) { ChannelCheck.isDead(ch.url) }
+    val requester = rememberFocusMe(index, state)
+    val dead = remember(ch?.url, check) { ch != null && ChannelCheck.isDead(ch.url) }
     FocusBox(
-        onClick = { actions.openChannel(index) },
-        onLongClick = { actions.toggleFavorite(ch) },
+        onClick = { ch?.let(actions::openChannel) },
+        onLongClick = { ch?.let(actions::toggleFavorite) },
         modifier = Modifier.fillMaxWidth().height(118.dp).focusRequester(requester),
         shape = RoundedCornerShape(16.dp),
         color = Color(0xFF1C1C24),
@@ -388,12 +404,12 @@ private fun TileCard(
         // The fewest layouts that give this picture: every tile on screen is composed when a group opens.
         Box(
             Modifier.fillMaxSize().padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 48.dp)
-                .channelLogo(ch.logo?.takeIf { it.isNotBlank() }, tvIcon)
+                .channelLogo(ch?.logo?.takeIf { it.isNotBlank() }, tvIcon.takeIf { ch != null })
         )
         if (fav) Icon(painterResource(R.drawable.ic_star), null, tint = Color(0xFFFFC94D),
             modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(14.dp))
         BasicText(
-            ch.name,
+            ch?.name.orEmpty(),
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(TileBandColor, TileBand)
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             style = if (focused) TileNameFocused else TileName,

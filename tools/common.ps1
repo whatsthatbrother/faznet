@@ -10,6 +10,13 @@ function Sh([string]$c) { & $script:adb -s $script:Serial shell $c }
 function Keys([string]$key, [int]$n) { Sh ("for i in `$(seq $n); do input keyevent $key; done") | Out-Null }
 function Burst([string]$key, [int]$n) { Sh ("input keyevent " + (@($key) * $n -join ' ')) | Out-Null }
 
+# A key really held down, as on the remote. adb has no way to do this, so only the bench app can: it sends the same
+# key events the system would (a repeat every 50 ms after half a second) into its own window.
+function Hold([string]$pkg, [int]$keyCode, [int]$ms) {
+    Sh "am broadcast -n $pkg/com.faznet.tv.bench.BenchReceiver --es mode hold --ei key $keyCode --ei ms $ms" | Out-Null
+    Start-Sleep -Milliseconds ($ms + 1000)
+}
+
 function Assert-StickFree {
     $focus = (Sh "dumpsys window | grep mCurrentFocus") -join ' '
     $playing = Sh "dumpsys media_session | grep -c 'state=PlaybackState {state=3'"

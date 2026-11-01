@@ -142,6 +142,7 @@
     <string name="playlists_only_one">You have only one playlist</string>
     <string name="section_player">Player</string>
     <string name="section_start">Start</string>
+    <string name="import_progress">Loading channels… %1$d</string>
     <string name="library_all">All</string>
     <string name="library_search">Search…</string>
     <string name="section_reports">Problem reports</string>

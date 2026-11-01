@@ -14,23 +14,29 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
+import com.faznet.tv.data.ChannelRepository
+import com.faznet.tv.data.ChannelScope
 import com.faznet.tv.data.ChannelStore
-import com.faznet.tv.data.Parental
 import com.faznet.tv.data.Repository
 import com.faznet.tv.data.XProgramme
 import com.faznet.tv.data.XtreamAccount
 import com.faznet.tv.data.XtreamApi
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import javax.inject.Inject
 
 /**
  * TV guide of the Xtream account: pick a channel, see its programmes. Past programmes that the provider keeps
  * in its archive can be watched again (catch-up); the one on air opens the live channel.
  */
+@AndroidEntryPoint
 class GuideActivity : AppCompatActivity() {
+
+    @Inject lateinit var channelRepo: ChannelRepository
 
     private lateinit var account: XtreamAccount
     private var channels: List<Channel> = emptyList()
@@ -39,6 +45,7 @@ class GuideActivity : AppCompatActivity() {
     private lateinit var empty: TextView
     private lateinit var title: TextView
     private lateinit var rvProg: RecyclerView
+    private var playlistId = ""
     private var serverTz: TimeZone = TimeZone.getDefault()
     private var archive: Map<String, Int> = emptyMap()
     private var job: Job? = null
@@ -50,8 +57,9 @@ class GuideActivity : AppCompatActivity() {
         setContentView(R.layout.activity_guide)
         findViewById<View>(android.R.id.content).applyTvSafeArea()
         val repo = Repository.get(this)
-        account = XtreamAccount.from(repo.activePlaylist()) ?: run { finish(); return }
-        channels = Parental.visible(this, ChannelStore.all).filter { XtreamAccount.liveStreamId(it.url) != null }
+        val active = repo.activePlaylist()
+        account = XtreamAccount.from(active) ?: run { finish(); return }
+        playlistId = active!!.id
         findViewById<View>(R.id.guideBack).setOnClickListener { finish() }
         progress = findViewById(R.id.guideProgress)
         empty = findViewById(R.id.guideEmpty)
@@ -63,7 +71,6 @@ class GuideActivity : AppCompatActivity() {
             adapter = chAdapter
             itemAnimator = null
         }
-        chAdapter.submit(channels, null)
         progAdapter = ProgrammeAdapter()
         rvProg = findViewById(R.id.guideProgrammes)
         rvProg.layoutManager = LinearLayoutManager(this)
@@ -71,9 +78,13 @@ class GuideActivity : AppCompatActivity() {
         rvProg.itemAnimator = null
 
         lifecycleScope.launch {
+            channelRepo.activeList(playlistId)?.let { listId ->
+                channels = channelRepo.channelsOf(channelRepo.listView(listId).all()).filter { XtreamAccount.liveStreamId(it.url) != null }
+            }
+            chAdapter.submit(channels, null)
             serverTz = XtreamApi.serverTimeZone(account)
             archive = XtreamApi.archiveDays(account)
-            val start = channels.indexOfFirst { it.url == ChannelStore.lastPlayedUrl }.coerceAtLeast(0)
+            val start = channels.indexOfFirst { it.url == ChannelStore.lastPlayed?.url }.coerceAtLeast(0)
             if (channels.isNotEmpty()) showChannel(start)
             else { empty.setText(R.string.guide_none); empty.visibility = View.VISIBLE }
         }
@@ -103,9 +114,8 @@ class GuideActivity : AppCompatActivity() {
         when {
             p.start <= now && now < p.end -> {
                 // On air: the live channel
-                ChannelStore.current = channels
-                ChannelStore.groupKey = MainActivity.KEY_ALL
-                startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_INDEX, channels.indexOf(ch)))
+                ChannelStore.start(playlistId, ch, ChannelScope.Fixed(channels), null, getString(R.string.group_all))
+                startActivity(Intent(this, PlayerActivity::class.java))
             }
             p.end <= now && (p.hasArchive || archive.containsKey(streamId)) ->
                 VodPlayerActivity.start(this, XtreamApi.catchupUrl(account, streamId, p, serverTz), "${ch.name} · ${p.title}")

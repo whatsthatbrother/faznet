@@ -36,7 +36,7 @@ import kotlin.math.roundToInt
  * channels appears much sooner this way than with a composable image per channel, and a logo arriving only
  * repaints its own tile.
  */
-fun Modifier.channelLogo(url: String?, placeholder: Painter): Modifier = this then LogoElement(url, placeholder)
+fun Modifier.channelLogo(url: String?, placeholder: Painter?): Modifier = this then LogoElement(url, placeholder)
 
 /** Logos that just failed: a dead server must not be asked again every time a tile scrolls back into view. */
 private object FailedLogos {
@@ -57,7 +57,7 @@ private object FailedLogos {
     }
 }
 
-private class LogoElement(private val url: String?, private val placeholder: Painter) : ModifierNodeElement<LogoNode>() {
+private class LogoElement(private val url: String?, private val placeholder: Painter?) : ModifierNodeElement<LogoNode>() {
     override fun create() = LogoNode(url, placeholder)
 
     override fun update(node: LogoNode) = node.update(url, placeholder)
@@ -72,15 +72,18 @@ private class LogoElement(private val url: String?, private val placeholder: Pai
     override fun hashCode() = url.hashCode() * 31 + placeholder.hashCode()
 }
 
-private class LogoNode(private var url: String?, private var placeholder: Painter) :
+private class LogoNode(private var url: String?, private var placeholder: Painter?) :
     Modifier.Node(), DrawModifierNode, LayoutAwareModifierNode, CompositionLocalConsumerModifierNode {
 
     private var image: ImageBitmap? = null
     private var request: Disposable? = null
     private var measured = IntSize.Zero
 
-    fun update(newUrl: String?, newPlaceholder: Painter) {
-        placeholder = newPlaceholder
+    fun update(newUrl: String?, newPlaceholder: Painter?) {
+        if (newPlaceholder !== placeholder) {
+            placeholder = newPlaceholder
+            invalidateDraw()
+        }
         if (newUrl == url) return
         url = newUrl
         clear()
@@ -143,11 +146,13 @@ private class LogoNode(private var url: String?, private var placeholder: Painte
                 dstSize = IntSize(w, h),
             )
         } else {
-            val own = placeholder.intrinsicSize
-            val scale = min(size.width / own.width, size.height / own.height)
-            val w = own.width * scale
-            val h = own.height * scale
-            translate((size.width - w) / 2, (size.height - h) / 2) { with(placeholder) { draw(Size(w, h)) } }
+            placeholder?.let { p ->
+                val own = p.intrinsicSize
+                val scale = min(size.width / own.width, size.height / own.height)
+                val w = own.width * scale
+                val h = own.height * scale
+                translate((size.width - w) / 2, (size.height - h) / 2) { with(p) { draw(Size(w, h)) } }
+            }
         }
         drawContent()
     }

@@ -2,66 +2,43 @@ package com.faznet.tv.ui
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
-import android.widget.Button
-import android.widget.CheckBox
 import android.widget.EditText
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
-import com.faznet.tv.ui.compose.EmptyInfo
+import com.faznet.tv.BuildConfig
+import com.faznet.tv.R
+import com.faznet.tv.data.Channel
+import com.faznet.tv.data.Parental
+import com.faznet.tv.data.Playlist
+import com.faznet.tv.data.Repository
 import com.faznet.tv.ui.compose.FaznetTheme
 import com.faznet.tv.ui.compose.HomeActions
 import com.faznet.tv.ui.compose.HomeScreen
-import com.faznet.tv.ui.compose.HomeState
-import com.faznet.tv.BuildConfig
-import com.faznet.tv.Perf
-import com.faznet.tv.R
-import com.faznet.tv.data.Channel
-import com.faznet.tv.data.ChannelCheck
-import com.faznet.tv.data.ChannelIndex
-import com.faznet.tv.data.ChannelStore
-import com.faznet.tv.data.Parental
-import com.faznet.tv.data.ProblemLog
-import com.faznet.tv.data.Playlist
-import com.faznet.tv.data.RemoteSync
-import com.faznet.tv.data.Repository
-import com.faznet.tv.data.safeMessage
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity(), HomeActions {
 
     private lateinit var repo: Repository
-    /** Everything the (Compose) home screen shows. */
-    private val ui = HomeState()
-
-    private var playlist: Playlist? = null
-    private var all: List<Channel> = emptyList()
-    private var byUrl: Map<String, Channel> = emptyMap()
-    private var visible: List<Channel> = emptyList()
-    private var selectedGroup = KEY_ALL
-    private var loadedPlaylistId: String? = null
-    private var autoPlayPending = false
-    private var hintShown = false
-    private var loadJob: Job? = null
-    private var pollJob: Job? = null
+    private val vm: HomeViewModel by viewModels()
+    private val ui get() = vm.ui
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repo = Repository.get(this)
         val wide = resources.getBoolean(R.bool.wide)
         val tv = isTv()
-        setContent { FaznetTheme { HomeScreen(ui, this, wide, tv) } }
+        ui.addPlaylist = { openPlaylists(add = true) }
+        setContent { FaznetTheme { HomeScreen(ui, vm.pages, this, wide, tv) } }
         // The screen paints its own background: the window's would be one more full-screen fill for the TV's GPU.
         window.setBackgroundDrawable(null)
 
@@ -78,8 +55,18 @@ class MainActivity : AppCompatActivity(), HomeActions {
                 m.edit().putBoolean("v303", true).apply()
             }
         }
-        autoPlayPending = savedInstanceState == null && repo.autoPlayLast
+        lifecycleScope.launch {
+            vm.events.collect { e ->
+                when (e) {
+                    is HomeViewModel.Event.Toast ->
+                        Toast.makeText(this@MainActivity, e.text, if (e.long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+                    is HomeViewModel.Event.AskPin -> askParentalPin { vm.unlockedOpen(e.group) }
+                    is HomeViewModel.Event.Play -> startActivity(Intent(this@MainActivity, PlayerActivity::class.java))
+                }
+            }
+        }
         if (savedInstanceState == null) {
+            vm.autoPlayOnce()
             checkForUpdate()
             lifecycleScope.launch {
                 com.faznet.tv.data.Reports.sendPendingCrash(this@MainActivity, repo)
@@ -93,22 +80,19 @@ class MainActivity : AppCompatActivity(), HomeActions {
     }
 
     // ---------- HomeActions (called by the Compose screen) ----------
-    override fun openChannel(index: Int) = openPlayer(index)
+    override fun openChannel(channel: Channel) = vm.openChannel(channel)
+    override fun toggleFavorite(ch: Channel) = vm.toggleFavorite(ch)
+    override fun selectGroup(key: String, fromClick: Boolean) = vm.selectGroup(key, fromClick)
     override fun checkGroup(key: String) = confirmCheck(key)
     override fun playlists() = openPlaylists()
-    override fun refresh() = refreshAll()
+    override fun refresh() = vm.refreshAll()
     override fun debugPlaylist() { if (BuildConfig.DEBUG) addDebugTestPlaylist() }
-    override fun device() = openDevice()
-    override fun settings() = showSettings()
+    override fun device() = startActivity(Intent(this, DeviceActivity::class.java))
+    override fun settings() = startActivity(Intent(this, SettingsActivity::class.java))
     override fun movies() = LibraryActivity.start(this, series = false)
     override fun series() = LibraryActivity.start(this, series = true)
+    override fun guide() = GuideActivity.start(this)
     override fun update() = UpdateUi.run(this, interactive = true) { info -> ui.updateVersion = info.version }
-
-    override fun guide() {
-        ChannelStore.playlistId = playlist?.id ?: ""
-        ChannelStore.all = all
-        GuideActivity.start(this)
-    }
 
     /** Search: a small dialog with a text field (works with the TV remote's keyboard); the list filters while typing. */
     override fun search() {
@@ -118,12 +102,12 @@ class MainActivity : AppCompatActivity(), HomeActions {
             setText(ui.query)
             setSelection(text.length)
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
-            doAfterTextChanged { ui.query = it?.toString() ?: ""; applyFilter() }
+            doAfterTextChanged { vm.setQuery(it?.toString() ?: "") }
         }
         val d = MaterialAlertDialogBuilder(this)
             .setView(padded(et))
             .setPositiveButton(android.R.string.ok, null)
-            .setNeutralButton(R.string.clear) { _, _ -> ui.query = ""; applyFilter() }
+            .setNeutralButton(R.string.clear) { _, _ -> vm.setQuery("") }
             .show()
         et.setOnEditorActionListener { _, _, _ -> d.dismiss(); true }
         et.requestFocus()
@@ -134,51 +118,12 @@ class MainActivity : AppCompatActivity(), HomeActions {
         super.onResume()
         UpdateUi.resume(this)
         checkForUpdate()
-        refreshState()
-        syncFromWeb(force = false)
-        startWelcomePolling()
+        vm.onResume()
     }
 
     override fun onPause() {
         super.onPause()
-        pollJob?.cancel()
-    }
-
-    /** Pull playlists uploaded on the website (MAC + PIN). Quiet: errors only matter on the device screen. */
-    private fun syncFromWeb(force: Boolean, then: (() -> Unit)? = null) {
-        if (repo.serverUrl.isEmpty()) { then?.invoke(); return }
-        if (!force && System.currentTimeMillis() - repo.lastSync < 30_000) { then?.invoke(); return }
-        lifecycleScope.launch {
-            val r = RemoteSync.sync(repo)
-            if (r is RemoteSync.Result.Ok && r.changed) {
-                loadedPlaylistId = null
-                refreshState()
-            }
-            then?.invoke()
-        }
-    }
-
-    /** While there is nothing to watch, keep checking the server so an upload from the web appears by itself. */
-    private fun startWelcomePolling() {
-        pollJob?.cancel()
-        if (repo.serverUrl.isEmpty()) return
-        pollJob = lifecycleScope.launch {
-            while (repo.playlists().isEmpty()) {
-                delay(15_000)
-                val r = RemoteSync.sync(repo)
-                if (r is RemoteSync.Result.Ok && r.changed) refreshState()
-            }
-        }
-    }
-
-    private fun refreshAll() {
-        syncFromWeb(force = true) {
-            repo.activePlaylist()?.let { p ->
-                playlist = p
-                ui.playlistName = p.name
-                load(p, true)
-            }
-        }
+        vm.onPause()
     }
 
     /** Debug builds only: a local test playlist from app/src/debug/assets (never committed), else the public demo. */
@@ -193,106 +138,21 @@ class MainActivity : AppCompatActivity(), HomeActions {
                 Playlist(repo.newId(), "Demo · Kosovo", Playlist.TYPE_URL, "https://iptv-org.github.io/iptv/countries/xk.m3u")
             )
         }
-        loadedPlaylistId = null
-        refreshState()
-    }
-
-    private fun openDevice() {
-        startActivity(Intent(this, DeviceActivity::class.java))
-    }
-
-    private fun refreshState() {
-        val p = repo.activePlaylist()
-        playlist = p
-        if (p == null) {
-            loadedPlaylistId = null
-            setChannels(ChannelIndex.Empty); visible = emptyList()
-            ui.groups = emptyList(); ui.channels = emptyList(); ui.xtream = false
-            ui.playlistName = ""
-            val msg = if (repo.serverUrl.isEmpty()) getString(R.string.welcome_msg)
-            else getString(R.string.welcome_msg) + "\n\n" + getString(R.string.welcome_mac, repo.deviceMac)
-            ui.empty = EmptyInfo(
-                getString(R.string.welcome_title), msg, getString(R.string.add_playlist), { openPlaylists(add = true) },
-                showDevice = true, showDemo = BuildConfig.DEBUG,
-            )
-            return
-        }
-        ui.playlistName = p.name
-        // Movies, series and the TV guide come from the Xtream account behind the playlist.
-        ui.xtream = com.faznet.tv.data.XtreamAccount.from(p) != null
-        if (p.id != loadedPlaylistId) {
-            load(p, false)
-        } else {
-            rebuild(keepScroll = true)
-            restoreFocusToLastPlayed()
-        }
-    }
-
-    /** Coming back from the player on TV: put the D-pad focus on the channel that was playing. */
-    private fun restoreFocusToLastPlayed() {
-        if (!isTv()) return
-        val url = ChannelStore.lastPlayedUrl ?: return
-        if (visible.any { it.url == url }) ui.focusUrl = url
-    }
-
-    private fun load(p: Playlist, force: Boolean) {
-        loadJob?.cancel()
-        ui.empty = null
-        ui.loading = true
-        loadJob = lifecycleScope.launch {
-            try {
-                val list = Perf.measure("home.load") { repo.loadChannels(p, force) }
-                Perf.log("home.channels ${list.size}")
-                setChannels(ChannelIndex.of(list))
-                loadedPlaylistId = p.id
-                selectedGroup = KEY_ALL
-                ui.loading = false
-                rebuild(keepScroll = false)
-                if (isTv()) visible.firstOrNull { it.url == repo.lastChannel(p.id) }?.let { ui.focusUrl = it.url }
-                    ?: visible.firstOrNull()?.let { ui.focusUrl = it.url }
-                if (!hintShown && list.isNotEmpty()) {
-                    hintShown = true
-                    Toast.makeText(this@MainActivity, R.string.hint_long_press, Toast.LENGTH_LONG).show()
-                }
-                maybeAutoPlay(p)
-                // Opened from the copy on the device (instant); refresh it from the server in the background.
-                if (!force && repo.cacheAgeMs(p) > BACKGROUND_REFRESH_MS) refreshInBackground(p)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Refresh failed (no internet, server down): keep showing the copy on the device and say so.
-                if (force && repo.cacheFile(p.id).length() > 0) {
-                    Toast.makeText(this@MainActivity, getString(R.string.err_load, e.safeMessage()), Toast.LENGTH_LONG).show()
-                    load(p, false)
-                    return@launch
-                }
-                ui.loading = false
-                loadedPlaylistId = null
-                setChannels(ChannelIndex.Empty); visible = emptyList()
-                ui.groups = emptyList(); ui.channels = emptyList()
-                ui.empty = EmptyInfo(p.name, getString(R.string.err_load, e.safeMessage()), getString(R.string.retry), { load(p, true) })
-            }
-        }
+        vm.reload()
     }
 
     /** Long-press on a group: test its channels one by one and dim the ones that don't answer. */
     private fun confirmCheck(key: String) {
-        val p = playlist ?: return
-        val favs = repo.favorites(p.id)
-        val list = when (key) {
-            KEY_ALL -> all
-            KEY_FAV -> all.filter { favs.contains(it.url) }
-            KEY_RECENT -> repo.recents(p.id).mapNotNull { byUrl[it] }
-            else -> all.filter { it.group == key }
+        lifecycleScope.launch {
+            val (title, list) = vm.channelsForCheck(key) ?: return@launch
+            if (list.isEmpty()) return@launch
+            MaterialAlertDialogBuilder(this@MainActivity)
+                .setTitle(R.string.check_title)
+                .setMessage(getString(R.string.check_confirm, title, list.size))
+                .setPositiveButton(R.string.check_start) { _, _ -> runCheck(list) }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
         }
-        if (list.isEmpty()) return
-        val title = groupItems(favs).firstOrNull { it.key == key }?.title ?: key
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.check_title)
-            .setMessage(getString(R.string.check_confirm, title, list.size))
-            .setPositiveButton(R.string.check_start) { _, _ -> runCheck(list) }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
     }
 
     private fun runCheck(list: List<Channel>) {
@@ -306,170 +166,23 @@ class MainActivity : AppCompatActivity(), HomeActions {
         job = lifecycleScope.launch {
             var bad = 0
             list.forEachIndexed { i, ch ->
-                if (!ChannelCheck.check(ch, repo.userAgent)) { bad++; ui.checkVersion++ }
+                if (!vm.checkChannel(ch)) bad++
                 dialog.setMessage(getString(R.string.check_progress, i + 1, list.size, bad))
                 delay(250) // gentle on the provider (connection limits)
             }
             dialog.dismiss()
-            ui.checkVersion++
+            vm.checkProgress()
             MaterialAlertDialogBuilder(this@MainActivity)
                 .setTitle(R.string.check_title)
                 .setMessage(getString(R.string.check_done, list.size - bad, bad))
                 .setPositiveButton(android.R.string.ok, null)
                 .show()
         }
-        job?.invokeOnCompletion { ui.checkVersion++ }
-    }
-
-    private fun refreshInBackground(p: Playlist) {
-        lifecycleScope.launch {
-            val fresh = try { repo.loadChannels(p, forceRefresh = true) } catch (e: CancellationException) { throw e } catch (e: Exception) { return@launch }
-            // The same list object: the server sent exactly what the device already has.
-            if (playlist?.id != p.id || loadedPlaylistId != p.id || fresh.isEmpty() || fresh === all) return@launch
-            setChannels(ChannelIndex.of(fresh))
-            rebuild(keepScroll = true)
-        }
-    }
-
-    private fun rebuild(keepScroll: Boolean) {
-        val start = Perf.now()
-        val p = playlist ?: return
-        val favs = repo.favorites(p.id)
-        val items = groupItems(favs)
-        if (items.none { it.key == selectedGroup }) selectedGroup = KEY_ALL
-        ui.groups = items
-        ui.selectedGroup = selectedGroup
-        applyFilter(keepScroll)
-        Perf.since("home.rebuild", start)
-    }
-
-    override fun selectGroup(key: String, fromClick: Boolean) {
-        if (Parental.isLocked(this, key)) {
-            // Locked group: only a real click asks for the PIN (not the D-pad passing over it).
-            if (fromClick) askParentalPin { rebuild(keepScroll = false); selectGroup(key, true) }
-            return
-        }
-        if (key == selectedGroup && ui.selectedGroup == key) return
-        selectedGroup = key
-        ui.selectedGroup = key
-        groupJob?.cancel()
-        if (fromClick) applyFilter()
-        else {
-            // Remote moving over the groups: show the channels of the group it stops on, not of every group
-            // it passes (keeps the D-pad smooth on slow TV sticks).
-            groupJob = lifecycleScope.launch {
-                delay(GROUP_DELAY_MS)
-                applyFilter()
-            }
-        }
-    }
-
-    private var groupJob: Job? = null
-
-    private fun applyFilter(keepScroll: Boolean = false) {
-        val start = Perf.now()
-        val p = playlist ?: return
-        if (loadedPlaylistId == null) return
-        val favs = repo.favorites(p.id)
-        if (Parental.isLocked(this, selectedGroup)) { selectedGroup = KEY_ALL; ui.selectedGroup = KEY_ALL }
-        val base = Parental.visible(this, when (selectedGroup) {
-            KEY_ALL -> all
-            KEY_FAV -> favs.mapNotNull { byUrl[it] }.sortedBy { it.number }
-            KEY_RECENT -> repo.recents(p.id).mapNotNull { byUrl[it] }
-            else -> byGroup[selectedGroup] ?: emptyList()
-        })
-        val q = ui.query.trim().lowercase()
-        ui.favs = favs
-        filterJob?.cancel()
-        if (q.isEmpty()) {
-            show(base, keepScroll)
-        } else {
-            // Typing: searching a big list takes longer than a frame, so it runs beside the screen, for the last letter.
-            filterJob = lifecycleScope.launch {
-                delay(SEARCH_DELAY_MS)
-                val found = withContext(Dispatchers.Default) { base.filter { it.name.lowercase().contains(q) } }
-                show(found, keepScroll)
-            }
-        }
-        Perf.since("home.filter", start)
-    }
-
-    private var filterJob: Job? = null
-
-    private fun show(list: List<Channel>, keepScroll: Boolean) {
-        visible = list
-        ui.channels = list
-        if (!keepScroll) ui.scrollTop++
-        ui.empty = if (list.isEmpty()) EmptyInfo("", getString(R.string.no_channels)) else null
-    }
-
-    override fun toggleFavorite(ch: Channel) {
-        val p = playlist ?: return
-        val added = repo.toggleFavorite(p.id, ch.url)
-        Toast.makeText(this, if (added) R.string.fav_added else R.string.fav_removed, Toast.LENGTH_SHORT).show()
-        if (selectedGroup == KEY_FAV) {
-            rebuild(keepScroll = true)
-        } else {
-            val favs = repo.favorites(p.id)
-            ui.favs = favs
-            ui.groups = groupItems(favs)
-        }
-    }
-
-    /** Channels by group, built once per loaded list: switching groups is then instant even with 50 000 channels. */
-    private var byGroup: Map<String, List<Channel>> = emptyMap()
-
-    private fun setChannels(index: ChannelIndex) {
-        all = index.all
-        byUrl = index.byUrl
-        byGroup = index.byGroup
-        ChannelStore.all = index.all
-        ChannelStore.index = index
-    }
-
-    /** Only counts what it needs from the maps: this runs on every return to the home screen. */
-    private fun groupItems(favs: Set<String>): List<GroupItem> {
-        val p = playlist ?: return emptyList()
-        val locked = if (Parental.unlocked || !Parental.enabled(this)) emptySet() else Parental.lockedGroups(this)
-        fun open(c: Channel?) = c != null && c.group !in locked
-        val shownCount = if (locked.isEmpty()) all.size else byGroup.entries.sumOf { (g, l) -> if (g in locked) 0 else l.size }
-        val items = ArrayList<GroupItem>(byGroup.size + 3)
-        items.add(GroupItem(KEY_ALL, getString(R.string.group_all), shownCount))
-        items.add(GroupItem(KEY_FAV, getString(R.string.group_favorites), favs.count { open(byUrl[it]) }))
-        items.add(GroupItem(KEY_RECENT, getString(R.string.group_recent), repo.recents(p.id).count { open(byUrl[it]) }))
-        for ((g, l) in byGroup) items.add(GroupItem(g, if (g in locked) "🔒 $g" else g, l.size))
-        return items
-    }
-
-    private fun openPlayer(position: Int) {
-        val p = playlist ?: return
-        ChannelStore.playlistId = p.id
-        ChannelStore.all = all
-        ChannelStore.current = visible
-        ChannelStore.groupKey = if (ui.query.isBlank()) selectedGroup else null
-        startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_INDEX, position))
-    }
-
-    private fun maybeAutoPlay(p: Playlist) {
-        if (!autoPlayPending && !ChannelStore.autoPlayNext) return
-        autoPlayPending = false
-        ChannelStore.autoPlayNext = false
-        val last = repo.lastChannel(p.id) ?: return
-        val idx = all.indexOfFirst { it.url == last }
-        if (idx < 0 || Parental.isLocked(this, all[idx].group)) return
-        ChannelStore.playlistId = p.id
-        ChannelStore.all = all
-        ChannelStore.current = all
-        ChannelStore.groupKey = KEY_ALL
-        startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_INDEX, idx))
+        job?.invokeOnCompletion { vm.checkProgress() }
     }
 
     private fun openPlaylists(add: Boolean = false) {
         startActivity(Intent(this, PlaylistsActivity::class.java).putExtra(PlaylistsActivity.EXTRA_ADD, add))
-    }
-
-    private fun showSettings() {
-        startActivity(Intent(this, SettingsActivity::class.java))
     }
 
     // ---------- parental lock ----------
@@ -503,33 +216,18 @@ class MainActivity : AppCompatActivity(), HomeActions {
     }
 
     // ---------- update notice ----------
-    /** Once a day: if a newer Faznet is published on GitHub, say so. */
-    /** At most every 6 hours: a newer Faznet on the website is downloaded quietly and offered for install. */
+    /** Every start and every return to the home screen, at most every 30 minutes (version.json is tiny). */
     private fun checkForUpdate() {
         if (!repo.autoUpdate) return
         val prefs = getSharedPreferences("faznet_update", MODE_PRIVATE)
-        // Every start and every return to the home screen, at most every 30 minutes (version.json is tiny).
         if (System.currentTimeMillis() - prefs.getLong("checked", 0) < 30 * 60_000L) return
         prefs.edit().putLong("checked", System.currentTimeMillis()).apply()
         UpdateUi.run(this, interactive = false) { info -> ui.updateVersion = info.version }
     }
 
-    private fun isNewer(a: String, b: String): Boolean {
-        val x = a.split('.').map { it.filter(Char::isDigit).toIntOrNull() ?: 0 }
-        val y = b.split('.').map { it.filter(Char::isDigit).toIntOrNull() ?: 0 }
-        for (i in 0 until maxOf(x.size, y.size)) {
-            val d = x.getOrElse(i) { 0 } - y.getOrElse(i) { 0 }
-            if (d != 0) return d > 0
-        }
-        return false
-    }
-
     companion object {
-        const val KEY_ALL = "\u0000all"
-        const val KEY_FAV = "\u0000fav"
-        const val KEY_RECENT = "\u0000recent"
-        private const val SEARCH_DELAY_MS = 120L
-        private const val BACKGROUND_REFRESH_MS = 3 * 60 * 60 * 1000L
-        private const val GROUP_DELAY_MS = 220L
+        const val KEY_ALL = HomeViewModel.KEY_ALL
+        const val KEY_FAV = HomeViewModel.KEY_FAV
+        const val KEY_RECENT = HomeViewModel.KEY_RECENT
     }
 }

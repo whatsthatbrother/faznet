@@ -2,7 +2,6 @@ package com.faznet.tv.data
 
 import android.content.Context
 import android.net.Uri
-import com.faznet.tv.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -48,15 +47,16 @@ class Repository private constructor(private val ctx: Context) {
         if (activeId == id) activeId = rest.firstOrNull()?.id
     }
 
-    /** Copies of a playlist on the device (M3U text, parsed copy, the list in memory). */
+    /** The copy of a playlist's file on the device. */
     private fun dropCache(id: String) {
         cacheFile(id).delete()
-        binFile(id).delete()
-        parsed.remove(id)
-        prefs.edit().remove("checked_$id").apply()
+        deleteOldCopy(id)
     }
 
-    /** Everything kept for a playlist that is gone: its copies, favourites, recently watched and last channel. */
+    /**
+     * What was kept here for a playlist that is gone. Its list and favourites in the database are removed by
+     * [ChannelRepository.cleanUp].
+     */
     private fun forget(id: String) {
         dropCache(id)
         prefs.edit().remove("fav_$id").remove("recent_$id").remove("last_$id").apply()
@@ -73,75 +73,9 @@ class Repository private constructor(private val ctx: Context) {
 
     fun cacheFile(id: String) = File(cacheDir, "$id.m3u")
 
-    suspend fun loadChannels(p: Playlist, forceRefresh: Boolean): List<Channel> = withContext(Dispatchers.IO) {
-        val file = cacheFile(p.id)
-        val url = p.m3uUrl()
-        if (url != null && (forceRefresh || !file.exists() || file.length() == 0L)) {
-            download(url, file)
-            prefs.edit().putLong("checked_${p.id}", System.currentTimeMillis()).apply()
-        }
-        if (!file.exists()) throw IOException("Playlist file missing")
-        // Big lists (thousands of channels) are parsed once and kept in memory while the file is unchanged,
-        // so coming back to the main screen or switching groups never re-parses them.
-        val stamp = file.lastModified() xor file.length()
-        parsed[p.id]?.let { (s, list) -> if (s == stamp) return@withContext list }
-        // After a restart: the ready-made copy of the parsed list opens several times faster than the M3U text.
-        val list = readBinary(p.id, stamp) ?: file.inputStream().use {
-            M3uParser.parse(it, ctx.getString(R.string.group_uncategorized))
-        }.also { writeBinary(p.id, stamp, it) }
-        parsed[p.id] = stamp to list
-        list
-    }
-
-    private fun binFile(id: String) = File(cacheDir, "$id.bin")
-
-    private fun readBinary(id: String, stamp: Long): List<Channel>? = try {
-        val f = binFile(id)
-        if (!f.exists()) null
-        else java.io.DataInputStream(f.inputStream().buffered(256 * 1024)).use { d ->
-            if (d.readInt() != BIN_MAGIC || d.readLong() != stamp) return@use null
-            val n = d.readInt()
-            val out = ArrayList<Channel>(n)
-            fun opt(): String? = if (d.readBoolean()) d.readUTF() else null
-            repeat(n) {
-                out.add(Channel(d.readInt(), d.readUTF(), d.readUTF(), opt(), d.readUTF(), opt(), opt()))
-            }
-            out
-        }
-    } catch (e: Exception) {
-        binFile(id).delete()
-        null
-    }
-
-    private fun writeBinary(id: String, stamp: Long, list: List<Channel>) {
-        val f = binFile(id)
-        val tmp = File(cacheDir, "$id.bin.part")
-        try {
-            java.io.DataOutputStream(tmp.outputStream().buffered(256 * 1024)).use { d ->
-                fun utf(v: String) = d.writeUTF(if (v.length > 20_000) v.take(20_000) else v)
-                fun opt(v: String?) { d.writeBoolean(v != null); if (v != null) utf(v) }
-                d.writeInt(BIN_MAGIC)
-                d.writeLong(stamp)
-                d.writeInt(list.size)
-                for (c in list) {
-                    d.writeInt(c.number); utf(c.name); utf(c.url); opt(c.logo); utf(c.group); opt(c.userAgent); opt(c.referrer)
-                }
-            }
-            if (f.exists()) f.delete()
-            tmp.renameTo(f)
-        } catch (e: Exception) {
-            tmp.delete()
-        }
-    }
-
-    private val parsed = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<Channel>>>()
-
-    /** How old the cached copy of a downloadable playlist is (Long.MAX_VALUE if there is none). */
-    fun cacheAgeMs(p: Playlist): Long {
-        if (p.m3uUrl() == null) return 0 // a file on the device: there is nothing to refresh it from
-        val f = cacheFile(p.id)
-        if (!f.exists()) return Long.MAX_VALUE
-        return System.currentTimeMillis() - maxOf(f.lastModified(), prefs.getLong("checked_${p.id}", 0))
+    /** The old parsed copy of a playlist's file, from before there was a database. */
+    fun deleteOldCopy(id: String) {
+        File(cacheDir, "$id.bin").delete()
     }
 
     suspend fun importFile(uri: Uri, id: String) = withContext(Dispatchers.IO) {
@@ -160,7 +94,8 @@ class Repository private constructor(private val ctx: Context) {
             setRequestProperty("Accept", "*/*")
         }
 
-    private fun download(start: String, dest: File) {
+    /** Downloads to the side and swaps the file in when it is whole, so a failed download changes nothing. */
+    fun download(start: String, dest: File) {
         var url = start
         var conn = open(url)
         var redirects = 0
@@ -188,40 +123,8 @@ class Repository private constructor(private val ctx: Context) {
             tmp.delete()
             throw IOException("Response is not an M3U playlist")
         }
-        // Nothing changed on the server: keep the file, so the copy parsed from it stays valid.
-        if (sameContent(tmp, dest)) {
-            tmp.delete()
-            return
-        }
         if (dest.exists()) dest.delete()
         if (!tmp.renameTo(dest)) throw IOException("Cannot save playlist")
-    }
-
-    private fun sameContent(a: File, b: File): Boolean {
-        if (!b.exists() || a.length() != b.length()) return false
-        a.inputStream().use { x ->
-            b.inputStream().use { y ->
-                val p = ByteArray(64 * 1024)
-                val q = ByteArray(64 * 1024)
-                while (true) {
-                    val n = x.readFully(p)
-                    if (n != y.readFully(q)) return false
-                    if (n == 0) return true
-                    for (i in 0 until n) if (p[i] != q[i]) return false
-                }
-            }
-        }
-    }
-
-    /** Fills [buf] as far as the file allows. @return how many bytes that was. */
-    private fun java.io.InputStream.readFully(buf: ByteArray): Int {
-        var total = 0
-        while (total < buf.size) {
-            val n = read(buf, total, buf.size - total)
-            if (n < 0) break
-            total += n
-        }
-        return total
     }
 
     /** Replace the server-managed playlists with [remote]; local ones are kept. @return true if anything changed. */
@@ -299,28 +202,12 @@ class Repository private constructor(private val ctx: Context) {
         get() = prefs.getLong(KEY_LAST_SYNC, 0)
         set(v) = prefs.edit().putLong(KEY_LAST_SYNC, v).apply()
 
-    // ---------- favorites / recents / last ----------
+    // ---------- favorites / recents / last from before the database: only read, once, by ChannelRepository ----------
     fun favorites(pid: String): Set<String> = prefs.getStringSet("fav_$pid", emptySet())!!.toSet()
-
-    /** @return true if the channel is now a favorite */
-    fun toggleFavorite(pid: String, url: String): Boolean {
-        val set = favorites(pid).toMutableSet()
-        val added = if (set.contains(url)) { set.remove(url); false } else { set.add(url); true }
-        prefs.edit().putStringSet("fav_$pid", set).apply()
-        return added
-    }
 
     fun recents(pid: String): List<String> {
         val arr = JSONArray(prefs.getString("recent_$pid", "[]"))
         return (0 until arr.length()).map { arr.getString(it) }
-    }
-
-    fun markWatched(pid: String, url: String) {
-        val list = (listOf(url) + recents(pid).filter { it != url }).take(40)
-        prefs.edit()
-            .putString("recent_$pid", JSONArray(list).toString())
-            .putString("last_$pid", url)
-            .apply()
     }
 
     fun lastChannel(pid: String): String? = prefs.getString("last_$pid", null)
@@ -378,7 +265,6 @@ class Repository private constructor(private val ctx: Context) {
     companion object {
         const val DEFAULT_UA = "Faznet/1.0 (Linux; Android)"
         private const val KEY_PLAYLISTS = "playlists"
-        private const val BIN_MAGIC = 0x465A4E31 // "FZN1"
         private const val KEY_ACTIVE = "active"
         private const val KEY_UA = "user_agent"
         private const val KEY_AUTOPLAY = "autoplay_last"
@@ -396,40 +282,25 @@ class Repository private constructor(private val ctx: Context) {
     }
 }
 
-/** A channel list with what the screens look up in it: making it takes a while for big lists, so it is done once. */
-class ChannelIndex private constructor(
-    val all: List<Channel>,
-    val byUrl: Map<String, Channel>,
-    val byGroup: Map<String, List<Channel>>,
-) {
-    companion object {
-        val Empty = ChannelIndex(emptyList(), emptyMap(), emptyMap())
-
-        /** Runs beside the screen: on a TV stick 50 000 channels take longer than several frames. */
-        suspend fun of(list: List<Channel>): ChannelIndex = withContext(Dispatchers.Default) { build(list) }
-
-        fun build(list: List<Channel>): ChannelIndex {
-            val urls = HashMap<String, Channel>(list.size * 4 / 3 + 1)
-            val groups = LinkedHashMap<String, ArrayList<Channel>>()
-            for (c in list) {
-                urls[c.url] = c
-                groups.getOrPut(c.group) { ArrayList() }.add(c)
-            }
-            return ChannelIndex(list, urls, groups)
-        }
-    }
-}
-
-/** In-memory hand-off of the channel list to the player (lists can be too large for an Intent). */
+/** What the home screen hands to the player when it opens a channel. */
 object ChannelStore {
     var playlistId: String = ""
-    var all: List<Channel> = emptyList()
-    var current: List<Channel> = emptyList()
-    /** Group the player starts in (MainActivity.KEY_* or a group name); null = the `current` list as-is (search). */
+    var startChannel: Channel? = null
+    /** The list the channel was opened from; the player zaps through it. */
+    var scope: ChannelScope? = null
+    /** Group it stands for (HomeViewModel.KEY_* or a group name); null for one that is no group, like search results. */
     var groupKey: String? = null
-    /** The same list sorted for lookups, made once per list so screens don't each do it again. */
-    var index: ChannelIndex? = null
-    var lastPlayedUrl: String? = null
+    var groupTitle: String = ""
+    var lastPlayed: Channel? = null
+
+    fun start(playlistId: String, channel: Channel, scope: ChannelScope, key: String?, title: String) {
+        this.playlistId = playlistId
+        startChannel = channel
+        this.scope = scope
+        groupKey = key
+        groupTitle = title
+    }
+
     /** Set by the player's "switch playlist": open the new playlist's last channel once it is loaded. */
     var autoPlayNext = false
 }

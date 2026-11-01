@@ -9,6 +9,7 @@ import com.faznet.tv.net.Http
 import kotlinx.coroutines.Dispatchers
 
 /** Channel logos are kept on the device: they are downloaded once, not on every screen. */
+@dagger.hilt.android.HiltAndroidApp
 class FaznetApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
