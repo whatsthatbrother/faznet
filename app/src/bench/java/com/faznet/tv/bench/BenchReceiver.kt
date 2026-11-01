@@ -67,9 +67,7 @@ class BenchReceiver : BroadcastReceiver() {
         val heap0 = heapMb()
         var count = 0
         repeat(rounds) { n ->
-            count = timed("parse #${n + 1}") {
-                file.inputStream().buffered(256 * 1024).reader(Charsets.UTF_8).buffered(256 * 1024).use { M3uParser.parse(it, "Other") }.size
-            }
+            count = timed("parse #${n + 1}") { file.inputStream().use { M3uParser.parse(it, "Other") }.size }
         }
         Log.i(TAG, "channels $count")
         // First load parses and writes the device copy; a new process would read that copy.

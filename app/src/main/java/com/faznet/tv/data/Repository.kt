@@ -84,7 +84,7 @@ class Repository private constructor(private val ctx: Context) {
         val stamp = file.lastModified() xor file.length()
         parsed[p.id]?.let { (s, list) -> if (s == stamp) return@withContext list }
         // After a restart: the ready-made copy of the parsed list opens several times faster than the M3U text.
-        val list = readBinary(p.id, stamp) ?: file.inputStream().buffered(256 * 1024).reader(Charsets.UTF_8).buffered(256 * 1024).use {
+        val list = readBinary(p.id, stamp) ?: file.inputStream().use {
             M3uParser.parse(it, ctx.getString(R.string.group_uncategorized))
         }.also { writeBinary(p.id, stamp, it) }
         parsed[p.id] = stamp to list

@@ -471,6 +471,8 @@ class PlayerActivity : AppCompatActivity() {
         tvError.visibility = View.GONE
     }
 
+    private var trace: com.faznet.tv.player.PlayerTrace? = null
+
     private fun initPlayer() {
         softwareVideo = wantsSoftwareVideo(channels.getOrNull(index))
         val p = PlayerFactory.create(this, repo.useFfmpeg, tunneling = false, softwareVideo = softwareVideo)
@@ -548,6 +550,10 @@ class PlayerActivity : AppCompatActivity() {
             }
         })
         if (com.faznet.tv.BuildConfig.DEBUG) p.addAnalyticsListener(EventLogger("FaznetPlayer"))
+        if (com.faznet.tv.BuildConfig.PLAYER_TRACE) {
+            trace?.stop()
+            trace = com.faznet.tv.player.PlayerTrace(p, handler, channels.getOrNull(index)?.let { "${it.number} ${it.name}" } ?: "")
+        }
         // Live TV has no pause button, so nothing may pause it. Android sends "audio becoming noisy" whenever the
         // HDMI signal drops for a moment (TV switched input or off and on, CEC standby, a loose cable); ExoPlayer
         // then paused, and since the watchdogs only look at a player that is meant to play, the channel stayed
@@ -935,7 +941,7 @@ class PlayerActivity : AppCompatActivity() {
         // Right after a channel opens is when the picture freezes on the Mi TV Stick (MP2 sound via FFmpeg runs
         // ahead of the picture); re-opening always fixes it, so react within about a second there.
         val early = now - readySince < EARLY_WINDOW_MS
-        val frozenLimit = if (early) EARLY_FROZEN_MS else FROZEN_TIMEOUT_MS
+        val frozenLimit = if (com.faznet.tv.BuildConfig.PLAYER_TRACE_WATCH) 60_000L else if (early) EARLY_FROZEN_MS else FROZEN_TIMEOUT_MS
         val reason = when {
             hasVideo && !firstFrameSeen && now - readySince > FIRST_FRAME_TIMEOUT_MS -> "no picture"
             // Tunneled playback does not report decoded frames, so only the other checks apply there.
