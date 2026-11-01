@@ -43,7 +43,6 @@ android {
         val trace = project.findProperty("playerTrace")?.toString()
         buildConfigField("boolean", "PLAYER_TRACE", (trace != null).toString())
         buildConfigField("boolean", "PLAYER_TRACE_WATCH", (trace == "watch").toString())
-        buildConfigField("boolean", "HIDE_WITH_COVER", project.hasProperty("hideWithCover").toString())
     }
 
     // The release key is NOT in the repository. Keep keystore/faznet.jks + keystore/keystore.properties locally

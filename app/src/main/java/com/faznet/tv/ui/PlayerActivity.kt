@@ -255,7 +255,6 @@ class PlayerActivity : AppCompatActivity() {
         infoEpgProgress = findViewById(R.id.infoEpgProgress)
         listEpg = findViewById(R.id.listEpg)
         pbStart = findViewById(R.id.pbStart)
-        startCover = findViewById(R.id.startCover)
         vlcLayout = findViewById(R.id.vlcLayout)
 
         playerView.useController = false
@@ -417,21 +416,14 @@ class PlayerActivity : AppCompatActivity() {
 
     // ---- clean start: picture and sound stay hidden until the picture runs smoothly ----
     private lateinit var pbStart: View
-    private lateinit var startCover: View
     private var revealed = true
     private var hiddenSince = 0L
 
     private fun hideUntilStable() {
         if (revealed) hiddenSince = SystemClock.elapsedRealtime()
         revealed = false
-        // Experiment: every freeze in the reports stops at 5 pictures while the video view is transparent. With a cover
-        // over it the video surface stays on the screen; to compare, see tools/README.md.
-        if (com.faznet.tv.BuildConfig.HIDE_WITH_COVER) {
-            startCover.visibility = View.VISIBLE
-        } else {
-            playerView.alpha = 0f
-            vlcLayout.alpha = 0f
-        }
+        playerView.alpha = 0f
+        vlcLayout.alpha = 0f
         player?.volume = 0f
         vlc?.volume = 0
         pbStart.visibility = View.VISIBLE
@@ -465,7 +457,6 @@ class PlayerActivity : AppCompatActivity() {
         revealed = true
         // The other engine plays this channel: use it for this channel from now on.
         forcedEngine?.let { e -> channels.getOrNull(index)?.let { EnginePrefs.setOverride(this, it.url, e) } }
-        startCover.visibility = View.GONE
         playerView.alpha = 1f
         vlcLayout.alpha = 1f
         player?.volume = 1f

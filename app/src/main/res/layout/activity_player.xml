@@ -22,14 +22,6 @@
         android:fitsSystemWindows="false"
         android:visibility="gone" />
 
-    <!-- Over the picture while a channel settles, for -PhideWithCover (see PlayerActivity.hideUntilStable) -->
-    <View
-        android:id="@+id/startCover"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@android:color/black"
-        android:visibility="gone" />
-
     <!-- Options bar (Menu key / tap): favorite, channel list, picture size, stats -->
     <LinearLayout
         android:id="@+id/topBar"
