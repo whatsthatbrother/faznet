@@ -97,6 +97,8 @@ class HomeState {
     var empty by mutableStateOf<EmptyInfo?>(null)
     /** Place in the grid of the channel that should get the remote's focus (coming back from the player). */
     var focusIndex by mutableStateOf<Int?>(null)
+    /** The open group takes the remote's focus: its last channel is going away. */
+    var focusOpenGroup by mutableStateOf(false)
     /** Increase to scroll the channel grid back to the top. */
     var scrollTop by mutableIntStateOf(0)
     /** Increase after a channel check so "not working" labels are redrawn. */
@@ -189,9 +191,9 @@ private fun TopBar(state: HomeState, actions: HomeActions, wide: Boolean) {
             onClick = { actions.playlists() },
             modifier = Modifier.height(42.dp).widthIn(max = 260.dp),
             shape = RoundedCornerShape(21.dp),
-        ) {
+        ) { focused ->
             Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(R.drawable.ic_playlist), null, tint = Fz.accent, modifier = Modifier.size(18.dp))
+                Icon(painterResource(R.drawable.ic_playlist), null, tint = if (focused) Color.White else Fz.accent, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(state.playlistName.ifEmpty { stringResource(R.string.add_playlist) }, color = Fz.text, fontSize = 14.sp,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -202,13 +204,13 @@ private fun TopBar(state: HomeState, actions: HomeActions, wide: Boolean) {
             onClick = { actions.search() },
             modifier = Modifier.height(42.dp).weight(1f),
             shape = RoundedCornerShape(21.dp),
-        ) {
+        ) { focused ->
             Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(R.drawable.ic_search), null, tint = Fz.dim, modifier = Modifier.size(18.dp))
+                Icon(painterResource(R.drawable.ic_search), null, tint = if (focused) Color.White else Fz.dim, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
                     state.query.ifEmpty { stringResource(R.string.search_hint) },
-                    color = if (state.query.isEmpty()) Fz.dim else Fz.text, fontSize = 14.sp, maxLines = 1,
+                    color = if (state.query.isEmpty() && !focused) Fz.dim else Fz.text, fontSize = 14.sp, maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -281,17 +283,24 @@ private fun GroupList(state: HomeState, actions: HomeActions, vertical: Boolean,
 private fun GroupChip(g: GroupItem, state: HomeState, actions: HomeActions, vertical: Boolean) {
     // Read through derivedStateOf: moving over the groups then redraws two of them, not all that are on screen.
     val selected by remember(g.key) { derivedStateOf { g.key == state.selectedGroup } }
+    val requester = remember { FocusRequester() }
+    if (selected && state.focusOpenGroup) {
+        LaunchedEffect(Unit) {
+            runCatching { requester.requestFocus() }
+            state.focusOpenGroup = false
+        }
+    }
     FocusBox(
         onClick = { actions.selectGroup(g.key, true) },
         onLongClick = { actions.checkGroup(g.key) },
         // TV: moving over a category opens it, like a TV guide
         onFocus = { f -> if (f && vertical && g.key != state.selectedGroup) actions.selectGroup(g.key, false) },
         selected = selected,
-        modifier = if (vertical) Modifier.fillMaxWidth().height(42.dp) else Modifier.height(38.dp),
+        modifier = (if (vertical) Modifier.fillMaxWidth().height(42.dp) else Modifier.height(38.dp)).focusRequester(requester),
         shape = RoundedCornerShape(10.dp),
         color = if (vertical) Color.Transparent else Fz.surface,
         focusScale = 1.02f,
-    ) {
+    ) { focused ->
         Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             if (selected) {
                 Box(Modifier.size(width = 3.dp, height = 18.dp).background(Fz.accent, RoundedCornerShape(2.dp)))
@@ -305,7 +314,7 @@ private fun GroupChip(g: GroupItem, state: HomeState, actions: HomeActions, vert
             )
             if (g.count >= 0) {
                 Spacer(Modifier.width(8.dp))
-                Text(g.count.toString(), color = Fz.dim, fontSize = 12.sp)
+                Text(g.count.toString(), color = if (focused) Fz.text else Fz.dim, fontSize = 12.sp)
             }
         }
     }

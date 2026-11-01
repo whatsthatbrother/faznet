@@ -71,8 +71,10 @@ sealed class ChannelScope {
         override suspend fun read(db: FaznetDatabase, from: Int, count: Int) =
             db.channels().rangeExcept(ListIds.base(listId), ListIds.last(listId), blocked, count, from).named(names)
 
-        override suspend fun indexOf(db: FaznetDatabase, ch: Channel) =
-            if (ch.id == 0L) null else db.channels().countBefore(ListIds.base(listId), ch.id, blocked)
+        override suspend fun indexOf(db: FaznetDatabase, ch: Channel): Int? {
+            val row = db.channels().byId(ch.id) ?: return null
+            return if (row.groupId in blocked) null else db.channels().countBefore(ListIds.base(listId), ch.id, blocked)
+        }
     }
 }
 

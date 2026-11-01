@@ -375,9 +375,23 @@ class HomeViewModel @Inject constructor(
     fun toggleFavorite(ch: Channel) {
         val p = playlist ?: return
         viewModelScope.launch {
+            stepOffLastFavorite(ch)
             val added = channels.toggleFavorite(p, ch)
             events_.trySend(Event.Toast(context.getString(if (added) R.string.fav_added else R.string.fav_removed)))
         }
+    }
+
+    /**
+     * Removing a favourite takes its tile away. Another channel moves into its place, except at the end of the list:
+     * there the focus steps back first, or it would land on the first thing on the screen.
+     */
+    private suspend fun stepOffLastFavorite(ch: Channel) {
+        val current = scope.value ?: return
+        if (!tv || selectedGroup != KEY_FAV || ui.query.isNotBlank()) return
+        val place = channels.indexIn(current, ch) ?: return
+        if (place != current.size - 1) return
+        if (place > 0) ui.focusIndex = place - 1 else ui.focusOpenGroup = true
+        delay(FOCUS_STEP_MS)
     }
 
     /** The title of a group and its channels, for testing them one by one. */
@@ -424,6 +438,7 @@ class HomeViewModel @Inject constructor(
         private const val SEARCH_DELAY_MS = 120L
         private const val BACKGROUND_REFRESH_MS = 3 * 60 * 60 * 1000L
         private const val GROUP_DELAY_MS = 220L
+        private const val FOCUS_STEP_MS = 60L
         private const val CLEAN_UP_DELAY_MS = 8_000L
     }
 }
