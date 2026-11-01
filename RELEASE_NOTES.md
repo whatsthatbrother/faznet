@@ -1,3 +1,17 @@
+## Faznet v4.1.1
+
+**Shqip:** Kanali nuk nis, ndalet dhe nis përsëri në TV stick. Kanalet interlaced qëndrojnë pas rrethit të ngarkimit derisa fotoja të luajë vërtet, rreth 3 s në stick-et ku dekoderi ngec me to; kanalet e tjera hapen rreth 0.2 s më ngadalë se në 4.1.0.
+
+### Fix
+- Mi TV Stick: the video decoder stopped on 17 of 21 first openings of interlaced channels (0 of 19 progressive), usually at 5 pictures, and the next opening played. The picture now appears after 10 pictures, so the viewer no longer sees the channel start, stop and start again. In a test with 18 channels, 12 froze and none showed it. The decoder's freeze itself is not fixed: those channels take 2.8-3.2 s to appear, others 1.25-1.3 s
+- The opening log timed a later re-open from the first key press
+
+### Under the hood
+- The player's freeze checks moved out of the player screen, with 23 new unit tests (46 in all)
+
+### How it was tested
+- Mi TV Stick: this build with ExoPlayer and VLC, and the freeze numbers above from the same code. Not tried on a real phone
+
 ## Faznet v4.1.0
 
 **Shqip:** Shumë më e shpejtë dhe më e lehtë. Kanalet hapen për rreth 1.2 s në vend të 2 s, një dekoder video i bllokuar vërehet dhe rregullohet më shpejt, dhe aplikacioni niset më shpejt. Listat e kanaleve tani ruhen në një databazë, kështu që playlist-at me dhjetëra mijëra kanale lëvizin butë. Playlist-at dhe favoritet mbeten.
