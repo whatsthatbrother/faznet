@@ -51,11 +51,14 @@ import com.faznet.tv.data.ChannelCheck
 import com.faznet.tv.data.Epg
 import com.faznet.tv.data.Repository
 import com.faznet.tv.data.safeMessage
+import com.faznet.tv.player.ExoWatch
 import com.faznet.tv.player.PlayerFactory
+import com.faznet.tv.player.ProgressWatch
 import com.faznet.tv.player.StreamProbe
 import com.faznet.tv.player.StreamType
 import com.faznet.tv.player.Throughput
 import com.faznet.tv.player.VlcEngine
+import com.faznet.tv.player.VlcWatch
 import org.videolan.libvlc.util.VLCVideoLayout
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
@@ -120,18 +123,10 @@ class PlayerActivity : AppCompatActivity() {
     private var retries = 0
     private var numberBuffer = ""
 
-    // ---- frozen-picture watchdog state ----
-    private var readySince = 0L
-    private var firstFrameSeen = false
-    private var lastRendered = -1
-    private var lastRenderedAt = 0L
-    private var lastPos = -1L
-    private var lastPosAt = 0L
+    private val exoWatch = ExoWatch(com.faznet.tv.BuildConfig.PLAYER_TRACE_WATCH)
     /** Written on the player's thread: the time of the last picture and the distance between the last two. */
     @Volatile private var lastFramePtsUs = -1L
     @Volatile private var frameIntervalUs = 0L
-    private var lastDecoderActivity = -1L
-    private var lastDecoderActiveAt = 0L
     private var recoveries = 0
     private var httpRetries = 0
     /** Engine chosen for this channel only after the other one gave up; remembered once it really plays. */
@@ -453,6 +448,7 @@ class PlayerActivity : AppCompatActivity() {
                 "engine=${if (vlc != null) "vlc" else "exo"} forced=${now - hiddenSince > MAX_HIDDEN_MS} ch=${ch.number} ${ch.name}"
         )
         openPressAt = 0L
+        openAt = 0L
     }
 
     private fun reveal() {
@@ -482,15 +478,11 @@ class PlayerActivity : AppCompatActivity() {
                         tvError.visibility = View.GONE
                         retries = 0
                         handler.removeCallbacks(stallWatchdog)
-                        val now = SystemClock.elapsedRealtime()
-                        readySince = now
-                        lastPosAt = now
-                        lastRenderedAt = now
-                        lastDecoderActiveAt = now
+                        exoWatch.onReady(SystemClock.elapsedRealtime())
                     }
                     Player.STATE_BUFFERING -> {
                         stallCount++
-                        readySince = 0L
+                        exoWatch.onNotReady()
                         handler.removeCallbacks(stallWatchdog)
                         handler.postDelayed(stallWatchdog, STALL_TIMEOUT_MS)
                     }
@@ -510,14 +502,13 @@ class PlayerActivity : AppCompatActivity() {
                             channels.getOrNull(index)?.let { ProblemLog.add(this@PlayerActivity, it.name, "stream ended $MAX_RETRIES times") }
                         }
                     }
-                    else -> readySince = 0L
+                    else -> exoWatch.onNotReady()
                 }
             }
 
             override fun onRenderedFirstFrame() {
                 if (openFrameAt == 0L) openFrameAt = Perf.now()
-                firstFrameSeen = true
-                lastRenderedAt = SystemClock.elapsedRealtime()
+                exoWatch.onFirstFrame(SystemClock.elapsedRealtime())
             }
 
             override fun onPlayerError(error: PlaybackException) = handleError(error)
@@ -588,7 +579,7 @@ class PlayerActivity : AppCompatActivity() {
         recoveries = 0
         enginesTried.clear()
         forcedEngine = null
-        resetHardWatch()
+        progressWatch.reset(SystemClock.elapsedRealtime())
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
         val ch = channels[index]
@@ -629,7 +620,7 @@ class PlayerActivity : AppCompatActivity() {
     private val vlcListener = object : VlcEngine.Listener {
         override fun onVlcPlaying() {
             retries = 0
-            if (vlcPlayingAt == 0L) vlcPlayingAt = SystemClock.elapsedRealtime()
+            vlcWatch.onPlaying(SystemClock.elapsedRealtime())
             tvError.visibility = View.GONE
             // Audio-only channels never get a video output: show them after a moment anyway.
             handler.removeCallbacks(vlcReveal)
@@ -637,7 +628,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         override fun onVlcVideo() {
-            vlcVideo = true
+            vlcWatch.onVideo()
             // VLC shows a few damaged frames until the first key frame arrives: keep them behind the
             // loading circle a little longer so the channel appears clean.
             handler.removeCallbacks(vlcReveal)
@@ -663,78 +654,29 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    // ---- VLC freeze watchdog: VLC has no frame callbacks, so its decoding counters are compared every 0.5 s ----
-    private var vlcPlayingAt = 0L
-    private var vlcVideo = false
-    private var vlcPicturesSeen = false
-    private var vlcLast: VlcEngine.Progress? = null
-    private var vlcPicAt = 0L
-    private var vlcAudioAt = 0L
-    private var vlcTimeAt = 0L
-    private var vlcHealthySince = 0L
-    private var vlcOpenAt = 0L
-
-    private fun resetVlcWatch() {
-        val now = SystemClock.elapsedRealtime()
-        vlcPlayingAt = 0L
-        vlcVideo = false
-        vlcPicturesSeen = false
-        vlcLast = null
-        vlcPicAt = now
-        vlcAudioAt = now
-        vlcTimeAt = now
-        vlcHealthySince = now
-        vlcOpenAt = now
-    }
+    private val vlcWatch = VlcWatch()
 
     private fun checkVlc() {
         val v = vlc ?: return
         val now = SystemClock.elapsedRealtime()
         if (!revealed && now - hiddenSince > MAX_HIDDEN_MS) reveal()
         if (pendingZap >= 0) return
-        val ch0 = channels.getOrNull(index) ?: return
-        if (vlcPlayingAt == 0L) {
-            // Never started: the server accepted the connection but sends nothing usable. Re-open.
-            if (now - vlcOpenAt > VLC_OPEN_TIMEOUT_MS) vlcRecover(ch0, "no start")
+        val ch = channels.getOrNull(index) ?: return
+        if (!vlcWatch.hasStarted) {
+            if (vlcWatch.neverStarted(now)) vlcRecover(ch, VlcWatch.Problem.NO_START.text)
             return
         }
         val pr = v.progress() ?: return
-        val last = vlcLast
-        vlcLast = pr
-        if (last == null) {
-            // Counting starts now, not when the channel was requested (opening can take a while).
-            vlcPicAt = now; vlcAudioAt = now; vlcTimeAt = now
+        val result = vlcWatch.check(now, pr.pictures, pr.audio, pr.time, revealed)
+        val problem = result.problem
+        if (problem == null) {
+            if (result.healthy) recoveries = 0
             return
         }
-        if (pr.pictures != last.pictures) {
-            vlcPicAt = now
-            if (pr.pictures > 0) vlcPicturesSeen = true
-        }
-        if (pr.audio != last.audio) vlcAudioAt = now
-        if (pr.time != last.time) vlcTimeAt = now
-        val ch = channels.getOrNull(index) ?: return
-        val audioRuns = now - vlcAudioAt < 1_500
-        val early = now - vlcPlayingAt < 8_000
-        val reason = when {
-            // The TV's decoder gives nothing (black picture, sound plays): decode this channel with the CPU.
-            vlcVideo && !vlcPicturesSeen && audioRuns && now - vlcPlayingAt > VLC_NO_PICTURE_MS -> {
-                if (!EnginePrefs.vlcSoftware(this, ch.url)) {
-                    EnginePrefs.setVlcSoftware(this, ch.url, true)
-                    "no picture → software decoder"
-                } else "no picture"
-            }
-            vlcPicturesSeen && audioRuns && now - vlcPicAt > (if (early) VLC_EARLY_FROZEN_MS else VLC_FROZEN_MS) ->
-                if (early) "picture frozen at start" else "picture frozen"
-            // Still behind the loading circle: the provider's first seconds are bad, re-open quickly (it fixes it).
-            !revealed && now - vlcTimeAt > VLC_EARLY_STUCK_MS && now - vlcAudioAt > VLC_EARLY_STUCK_MS -> "stuck at start"
-            now - vlcTimeAt > VLC_STUCK_MS && now - vlcAudioAt > VLC_STUCK_MS -> "playback stuck"
-            else -> {
-                // Healthy for a while: forgive earlier recoveries on this channel.
-                if (recoveries > 0 && now - vlcHealthySince > 30_000) recoveries = 0
-                return
-            }
-        }
-        vlcRecover(ch, reason)
+        // No picture from the TV's decoder: decode this channel with the CPU.
+        val software = problem == VlcWatch.Problem.NO_PICTURE && !EnginePrefs.vlcSoftware(this, ch.url)
+        if (software) EnginePrefs.setVlcSoftware(this, ch.url, true)
+        vlcRecover(ch, if (software) "no picture → software decoder" else problem.text)
     }
 
     private fun vlcRecover(ch: Channel, reason: String) {
@@ -815,6 +757,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun startCurrent() {
+        // A re-open long after the channel appeared is timed by itself.
+        if (openAt == 0L) openAt = Perf.now()
         openCount++
         openPreparedAt = 0L
         openReadyAt = 0L
@@ -825,7 +769,7 @@ class PlayerActivity : AppCompatActivity() {
             hideUntilStable()
             handler.removeCallbacks(vlcReveal)
             v.stop()
-            resetVlcWatch()
+            vlcWatch.onOpen(SystemClock.elapsedRealtime())
             v.play(ch.url, ch.userAgent ?: repo.userAgent, ch.referrer, hardware = !EnginePrefs.vlcSoftware(this, ch.url))
             return
         }
@@ -833,13 +777,9 @@ class PlayerActivity : AppCompatActivity() {
         val ch = channels[index]
         val token = ++playToken
         tvError.visibility = View.GONE
-        firstFrameSeen = false
-        readySince = 0L
-        lastRendered = -1
-        lastPos = -1L
+        exoWatch.onOpen()
         lastFramePtsUs = -1L
         frameIntervalUs = 0L
-        lastDecoderActivity = -1L
         hideUntilStable()
         val ua = ch.userAgent ?: repo.userAgent
         probeJob?.cancel()
@@ -857,41 +797,15 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    // ---- last-resort watchdog: whatever the reason (error screen, endless buffering, every other fix used up),
-    // a channel whose picture and clock stand still is opened again: after 15 s, then 30, 60, 120 s… ----
-    private var hardPos = -1L
-    private var hardFrames = -1L
-    private var hardAt = 0L
-    private var hardDelay = HARD_STUCK_MS
+    private val progressWatch = ProgressWatch()
 
-    private fun resetHardWatch() {
-        hardPos = -1L
-        hardFrames = -1L
-        hardAt = SystemClock.elapsedRealtime()
-        hardDelay = HARD_STUCK_MS
-    }
-
-    /**
-     * @return true if it re-opened the channel.
-     * Channels with a picture count as moving only while new pictures come (a frozen picture with the sound
-     * still playing is caught here too, even after the other fixes were used up); radio uses the clock.
-     */
+    /** @return true if it re-opened the channel. */
     private fun hardWatch(pos: Long, frames: Long): Boolean {
         val now = SystemClock.elapsedRealtime()
-        if (pendingZap >= 0) { hardAt = now; return false }
-        val moving = if (frames > 0 || hardFrames > 0) frames != hardFrames else pos != hardPos
-        if (moving) {
-            if (hardAt != 0L && revealed) hardDelay = HARD_STUCK_MS // playing again: start counting from 15 s
-            hardPos = pos; hardFrames = frames; hardAt = now
-            return false
-        }
-        hardPos = pos
-        if (now - hardAt < hardDelay) return false
+        val waited = progressWatch.check(now, pos, frames, revealed, pendingZap >= 0) ?: return false
         val ch = channels.getOrNull(index) ?: return false
-        ProblemLog.add(this, ch.name, "no progress for ${hardDelay / 1000} s → re-open")
+        ProblemLog.add(this, ch.name, "no progress for ${waited / 1000} s → re-open")
         lastWarning = "watchdog re-open"
-        hardAt = now
-        hardDelay = (hardDelay * 2).coerceAtMost(HARD_STUCK_MAX_MS)
         retries = 0
         recoveries = 0
         httpRetries = 0
@@ -915,66 +829,40 @@ class PlayerActivity : AppCompatActivity() {
             if (hardWatch(p.currentPosition, frames)) return
         }
         // Never keep a channel hidden for long: if it can't settle, show it anyway.
-        if (!revealed && SystemClock.elapsedRealtime() - hiddenSince > MAX_HIDDEN_MS) reveal()
-        if (p.playbackState != Player.STATE_READY || !p.playWhenReady ||
-            p.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE || readySince == 0L
-        ) return
         val now = SystemClock.elapsedRealtime()
-        val hasVideo = p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)
+        if (!revealed && now - hiddenSince > MAX_HIDDEN_MS) reveal()
+        if (p.playbackState != Player.STATE_READY || !p.playWhenReady ||
+            p.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE || !exoWatch.isReady
+        ) return
         val counters = p.videoDecoderCounters?.also { it.ensureUpdated() }
         val rendered = counters?.renderedOutputBufferCount ?: 0
-        // Anything the decoder does: a frame taken in, a picture shown, a late one dropped.
         val activity = if (counters == null) 0L else counters.queuedInputBufferCount.toLong() + rendered +
             counters.skippedOutputBufferCount + counters.droppedBufferCount + counters.droppedInputBufferCount
-        if (activity != lastDecoderActivity) {
-            lastDecoderActivity = activity
-            lastDecoderActiveAt = now
-        }
-        if (rendered != lastRendered) {
-            lastRendered = rendered
-            lastRenderedAt = now
-            // Healthy for a while: forgive earlier recoveries on this channel.
-            if (firstFrameSeen && now - readySince > 30_000) recoveries = 0
-        }
-        val pos = p.currentPosition
-        if (pos != lastPos) { lastPos = pos; lastPosAt = now }
-        if (!revealed) {
-            val running = rendered >= STABLE_FRAMES && now - lastRenderedAt < 400
-            if (running || (!hasVideo && now - readySince > 500)) reveal()
-        }
-
-        // Right after a channel opens is when the Mi TV Stick's video decoder sometimes stops dead: it shows a few
-        // pictures, then takes nothing in and gives nothing out while the sound plays on. A new decoder fixes it, so
-        // this reacts within half a second, and only to that: a picture that is merely late is not touched.
-        val early = now - readySince < EARLY_WINDOW_MS
-        val watching = com.faznet.tv.BuildConfig.PLAYER_TRACE_WATCH
-        val framePts = lastFramePtsUs / 1000
-        val behind = if (lastFramePtsUs >= 0) pos - framePts else 0L
-        val wedged = !watching && hasVideo && firstFrameSeen && now - lastDecoderActiveAt > DECODER_IDLE_MS &&
-            behind > maxOf(DECODER_BEHIND_MS, 3 * frameIntervalUs / 1000) && (early || now - lastRenderedAt > LATE_WEDGED_MS)
-        val frozenLimit = if (watching) 60_000L else if (early) EARLY_FROZEN_MS else FROZEN_TIMEOUT_MS
-        val reason = when {
-            hasVideo && !firstFrameSeen && now - readySince > FIRST_FRAME_TIMEOUT_MS -> "no picture"
-            wedged || (hasVideo && firstFrameSeen && now - lastRenderedAt > frozenLimit && now - lastPosAt < 1_000) ->
-                if (early) "picture frozen at start" else "picture frozen"
-            now - lastPosAt > STUCK_TIMEOUT_MS -> "playback stuck"
-            else -> return
-        }
+        val result = exoWatch.check(
+            ExoWatch.Sample(
+                now, p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO), rendered, activity, p.currentPosition,
+                lastFramePtsUs, frameIntervalUs,
+            )
+        )
+        if (result.healthy) recoveries = 0
+        if (!revealed && result.canShow) reveal()
+        val problem = result.problem ?: return
+        val reason = problem.reason
         // The numbers say what really happened; they reach the developer with the problem log.
-        val detail = "wedged=$wedged in=${counters?.queuedInputBufferCount} out=$rendered behind=$behind buf=${p.totalBufferedDuration}"
+        val detail = "wedged=${problem.wedged} in=${counters?.queuedInputBufferCount} out=$rendered behind=${problem.behindMs} buf=${p.totalBufferedDuration}"
         Perf.log("freeze $reason $detail ch=${channels.getOrNull(index)?.number}")
         if (recoveries >= MAX_RECOVERIES) {
             tryOtherEngine("ExoPlayer: $reason")
             return
         }
         // No picture at all in strict key-frame mode: this stream probably never sends IDR frames.
-        if (reason == "no picture") channels.getOrNull(index)?.let { PlayerFactory.looseKeyframes.add(it.url) }
+        if (problem.noPicture) channels.getOrNull(index)?.let { PlayerFactory.looseKeyframes.add(it.url) }
         recoveries++
         totalRecoveries++
         lastWarning = "auto-fix: $reason"
         channels.getOrNull(index)?.let { ch ->
             // A freeze right at the start says nothing about the channel, so don't switch decoders for it.
-            if (!reason.endsWith("at start")) ChannelMemory.addFix(this, ch.url)
+            if (!problem.atStart) ChannelMemory.addFix(this, ch.url)
             p.videoFormat?.let { ChannelMemory.rememberHeight(this, ch.url, it.height) }
             ProblemLog.add(this, ch.name, reason + (if (softwareVideo) " (software)" else "") + " [$detail]")
         }
@@ -1621,27 +1509,8 @@ class PlayerActivity : AppCompatActivity() {
     companion object {
         private const val STALL_TIMEOUT_MS = 8_000L
         private const val MAX_RETRIES = 5
-        private const val FIRST_FRAME_TIMEOUT_MS = 2_500L
-        private const val FROZEN_TIMEOUT_MS = 2_500L
-        private const val EARLY_WINDOW_MS = 6_000L
-        // No new picture for this long right after the start, even though the decoder still looks busy.
-        private const val EARLY_FROZEN_MS = 1_500L
-        // The decoder is wedged when it has done nothing at all for this long and the clock has passed the last picture.
-        private const val DECODER_IDLE_MS = 400L
-        private const val DECODER_BEHIND_MS = 500L
-        private const val LATE_WEDGED_MS = 1_500L
-        private const val STABLE_FRAMES = 5
         private const val MAX_HIDDEN_MS = 9_000L
         private const val VLC_REVEAL_MS = 900L
-        private const val VLC_NO_PICTURE_MS = 6_000L
-        private const val VLC_FROZEN_MS = 4_000L
-        private const val VLC_EARLY_FROZEN_MS = 2_000L
-        private const val VLC_STUCK_MS = 12_000L
-        private const val HARD_STUCK_MS = 15_000L
-        private const val HARD_STUCK_MAX_MS = 120_000L
-        private const val VLC_EARLY_STUCK_MS = 3_000L
-        private const val VLC_OPEN_TIMEOUT_MS = 8_000L
-        private const val STUCK_TIMEOUT_MS = 8_000L
         private const val MAX_RECOVERIES = 4
         private const val INFO_MS = 4_000L
         private const val OPTIONS_MS = 8_000L
