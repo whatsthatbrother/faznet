@@ -103,11 +103,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     if (releaseFlag) {
-        sourceSets.getByName("debug").assets.setSrcDirs(emptyList<String>())
+        sourceSets.getByName("debug").assets.directories.clear()
     }
     if (bench) {
         sourceSets.getByName("debug") {
-            java.srcDir("src/bench/java")
+            kotlin.directories.add("src/bench/java")
             manifest.srcFile("src/bench/AndroidManifest.xml")
         }
     }

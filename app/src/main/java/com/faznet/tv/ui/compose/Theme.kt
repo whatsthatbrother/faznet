@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -49,7 +50,6 @@ import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.LayoutModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
-import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.node.invalidatePlacement
 import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalContext
@@ -215,6 +215,10 @@ private class FocusLookNode(
         scaleX = scale.floatValue
         scaleY = scale.floatValue
     }
+
+    // draw() is recorded inside the layer placed below, which invalidateDraw() doesn't reach: it goes to the coordinator
+    // around that layer. A state read while drawing redraws whichever layer read it.
+    private val look = mutableIntStateOf(0)
     private var outlineFor = Size.Unspecified
     private var cachedOutline: Outline? = null
 
@@ -236,14 +240,22 @@ private class FocusLookNode(
         selected = newSelected
         focusedBrush = newBrush
         outline = newOutline
-        invalidateDraw()
+        look.intValue++
+    }
+
+    /** A box taken back from the lazy list's pool starts over, even if it left the screen focused or still growing. */
+    override fun onReset() {
+        growing?.cancel()
+        focused = false
+        scale.floatValue = 1f
+        look.intValue++
     }
 
     override fun onFocusEvent(focusState: FocusState) {
         if (focusState.isFocused == focused) return
         focused = focusState.isFocused
         onFocusChanged(focused)
-        invalidateDraw()
+        look.intValue++
         invalidatePlacement() // the focused box is drawn above its neighbours
         growing?.cancel()
         val target = if (focused) focusScale else 1f
@@ -263,6 +275,7 @@ private class FocusLookNode(
     }
 
     override fun ContentDrawScope.draw() {
+        look.intValue
         val shapeOutline = cachedOutline?.takeIf { outlineFor == size }
             ?: shape.createOutline(size, layoutDirection, this).also { cachedOutline = it; outlineFor = size }
         val rounded = (shapeOutline as? Outline.Rounded)?.roundRect
