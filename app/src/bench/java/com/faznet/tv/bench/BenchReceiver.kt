@@ -36,7 +36,11 @@ class BenchReceiver : BroadcastReceiver() {
                     }
                 }
             }.onFailure { Log.e(TAG, "FAILED", it) }
-            Log.i(TAG, "DONE $mode")
+            // The stick's log is small and the kernel fills it quickly: once could be gone before anyone looks.
+            repeat(5) {
+                Log.i(TAG, "DONE $mode")
+                Thread.sleep(1000)
+            }
         }
     }
 

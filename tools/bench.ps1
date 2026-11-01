@@ -25,7 +25,7 @@ try {
     $mode = if ($Data) { 'data' } else { 'add' }
     Sh "am broadcast -n $pkg/com.faznet.tv.bench.BenchReceiver --es list $name --es mode $mode --ei rounds $Rounds" | Out-Null
     $deadline = (Get-Date).AddSeconds(240)
-    do { Start-Sleep 3; $done = [int](Sh "logcat -d -s FZB:I FZB:E | grep -c 'DONE'") } while ($done -lt 1 -and (Get-Date) -lt $deadline)
+    do { Start-Sleep 1; $done = [int](Sh "logcat -d -s FZB:I FZB:E | grep -c 'DONE'") } while ($done -lt 1 -and (Get-Date) -lt $deadline)
     Sh 'logcat -d -s FZB:I FZB:E' | Where-Object { $_ -match 'FZB' } | ForEach-Object { ($_ -split 'FZB\s*:\s*', 2)[1] }
 } finally {
     & $script:adb -s $script:Serial reverse --remove tcp:8765 | Out-Null

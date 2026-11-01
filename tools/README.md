@@ -20,3 +20,7 @@ The bench app (`com.faznet.tv.bench`) sits next to the real one: same code and R
 icon, no server, no updates. Its output goes to `app/build-bench/`, so the release mapping in `app/build/` stays intact.
 
 `gen_m3u.py` writes the synthetic lists. They hold no real channels, addresses or accounts.
+
+Screenshots of the player come out white on the stick (the video plane), and panels hide after a few seconds. To see what
+the player shows, read the texts with `uiautomator dump` right after the key press and the opened channel from the
+`open ...` lines in the log.

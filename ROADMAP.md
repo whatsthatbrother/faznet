@@ -3,8 +3,8 @@
 Work happens on branch `v5`; `main` is what users run. Nothing is published without Diar's OK.
 
 1. [x] Phase 0: real git working copy, 4.0.3 source on GitHub, timing logs, measuring tools (`tools/`)
-2. [ ] Phase 1: quick wins without restructuring (library upgrades, byte M3U parser, channel opening, freezes, Home)
-3. [ ] Phase 2: data layer (Hilt, Room, streaming import, migration of favourites, recents, playlists, MAC + PIN)
+2. [x] Phase 1: quick wins without restructuring (library upgrades, byte M3U parser, channel opening, freezes, Home)
+3. [x] Phase 2: data layer (Hilt, Room, streaming import, migration of favourites and recents; playlists, MAC + PIN stay in preferences)
 4. [ ] Phase 3: player split in pieces with tests (engines, watchdog, ViewModel, Compose overlay)
 5. [ ] Phase 4: redesign, one design system, every screen in Compose (2-3 looks to choose from on the TV)
 6. [ ] Phase 5: baseline profile from the emulator, phones and tablets, clean-up, 5.0.0
@@ -42,6 +42,41 @@ What a real freeze looks like (KLAN HEVC, trace build): after 5 pictures the vid
 more output (`vIn=87 vOut=5` for 8 s) while sound and clock run on. A new decoder fixes it. Providers send 25-30 s at
 once when a channel opens, and the first picture comes within 0.2 s of the first timestamp, so the start itself is clean.
 Reports (8 days, 5 devices): no crashes; 38 of 80 problem lines are "picture frozen at start", all on the Mi Stick.
+
+## After phases 1 and 2, same stick, 2026-11-01
+
+Real playlist (5978 channels), Compose 1.12. The Compose update shortened the scroll animation, so a late-frame percentage
+is of fewer frames than before: compare the milliseconds.
+
+| | 4.0.3 | Now |
+|---|---|---|
+| Cold start to first frame | 740-1200 ms | 617 ms |
+| List on screen | 550-870 ms | 346-363 ms |
+| Remote, one press at a time | 4% late frames, p99 21 ms | 11-12% late frames, p99 28-31 ms: **target of 5% not met** |
+| Keys as fast as adb sends them | p99 500-600 ms | p90 27-29 ms, p99 46-48 ms |
+| Moving over the groups | p95 65 ms, p99 90-105 ms | p95 31-34 ms, p99 57-69 ms |
+| Channel switch, press to picture (20 channels) | median 1.76-2.05 s, p90 up to 5.7 s | median 1.21 s, p90 1.35 s, worst 1.44 s |
+| Channels that re-opened themselves | 1 of 15, 8 of 20, 0 of 95 | 0 of 20; it comes in waves, so one run proves little |
+| Memory (PSS) after start, after use | 54-96 MB | 44-45 MB, 60-78 MB |
+
+Synthetic 50 000 channels, measured before the last focus fix (a state read while drawing, nothing else on that path):
+
+| | 4.0.3 | Now |
+|---|---|---|
+| First load | 9.2 s | 5.9 s (the parser is 1 s of it; the rest is writing to the database) |
+| Load from the device | 0.64 s, main thread stalls of 100-190 ms | 340-516 ms |
+| Key really held down | 36-86% late frames, p99 1.5-4.7 s | 1.1% late frames, p99 17 ms |
+| Moving over the groups | not measured | p95 32 ms, p99 61 ms |
+| One press at a time | 2-3% late frames, p99 22 ms | 7-9% late frames, p99 26-31 ms |
+| Memory (PSS), Java heap | not measured | 46-64 MB, about 6 MB |
+
+Checked by hand on the stick: focus look, coming back from the player, favourites from Home and the player, search, the
+player's channel list, number entry, TV guide, Device and Settings screens, playlist switch, parental lock with a wrong and a
+right PIN. After using all of those: 1 Activity and 1 ViewRootImpl left, no crash in the log. VLC plays too (2.2-2.7 s to picture, 88 MB). Not checked: playback through a
+weak network, phones.
+
+Known for later: the TV guide opens with the focus on Back at channel 1, and Search keeps the group highlighted. The player
+still reads a whole group into memory (Phase 3).
 
 # Faznet — next release (1.1.4)
 
