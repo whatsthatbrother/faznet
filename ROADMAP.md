@@ -13,6 +13,24 @@ Targets with 50 000 channels on the Mi TV Stick: under 5% late frames, 99% of fr
 1 s, channel switch around 1.5 s. Decide about keeping VLC in Phase 3 (it is 80% of the APK; in the reports ExoPlayer
 fell back to it once).
 
+## Freezes at the start: what is known (2026-11-01)
+
+Comparison on the stick, channels 4-103, four rounds of 100 switches, 22:41-23:18 (reports from the stick in that time are
+this test, not use). Each round about 80 channels opened clean in 1.03-1.09 s (median).
+
+| | Clean | Froze once, then fine | Never ran, shown after 9 s |
+|---|---|---|---|
+| Video view transparent while opening (as published) | 82-83 | 19-21 | 14-15 |
+| Black cover over a visible video surface | 83 | 23 | 14-15 |
+
+- Hiding the picture is **not** the cause: the cover did not help, so it was taken out again.
+- Frozen channels stop at 5 pictures in 88 of 98 logged cases (also 4, 6, 9), and usually after the picture appeared, since
+  it appears at 5. So the viewer sees it start, stop, and start again.
+- It reproduces at about 20% in this range of channels, so a fix can be measured. Earlier runs (0 of 20, 0 of 95) came from
+  other conditions not yet understood.
+- The 14-15 that never ran were the same number every round and never reached READY. Probably dead or refused channels, not
+  confirmed: `zap-test` output should keep the channel names to tell. They keep the viewer behind the circle for 9 s.
+
 ## Baseline: 4.0.3 on the Mi TV Stick, 2026-11-01
 
 Real playlist (5978 channels), Compose 1.7:
