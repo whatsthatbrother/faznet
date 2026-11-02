@@ -1,3 +1,19 @@
+## Faznet v4.2.0
+
+**Shqip:** Aplikacioni është rreth 6 herë më i vogël, 4 MB në vend të 25 MB. Motori VLC është hequr: kanalet i luan ExoPlayer, dhe cilësimi i VLC-së nuk është më. Playlist-at dhe favoritet mbeten.
+
+### Changes
+- APK of about 4 MB instead of 25 MB
+- VLC removed, with its setting, the engine button in the player and the per-channel engine memory. A channel ExoPlayer cannot play now shows an error, with no second engine to try
+- `#EXTVLCOPT` lines in playlists are still read
+
+### Why
+- In the problem reports VLC shows 15 lines, all from old versions, and one automatic switch to it, after a network error. That does not prove it never helped anyone
+
+### How it was tested
+- Mi TV Stick: 15 channel switches, list of options and the FFmpeg sound decoder, with the same code before the version number changed
+- Not tried without VLC on a real phone with real channels
+
 ## Faznet v4.1.2
 
 **Shqip:** Me playlist të mëdha, player-i hapet dhe ndërron kanale menjëherë, me shumë më pak memorie. Në telefon, shiriti i sipërm, filmat, serialet dhe TV Guide përshtaten me ekranin, dhe player-i hapet horizontalisht. Kanali që serveri e refuzon tani e thotë këtë dhe nuk provohet më pa fund.

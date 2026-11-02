@@ -19,7 +19,7 @@ built-in lists). Talk to Diar in **Albanian**; code, comments and commit message
 
 ## Test device
 Xiaomi Mi TV Stick (MiTV-AYFR0), Android 11, armeabi-v7a, 384 MB heap, Amlogic decoder. Use adb over Wi-Fi
-(`adb connect <tv-ip>:5555`), `adb install -r`, `adb logcat | grep -i -E "faznet|exoplayer|mediacodec|vlc"`.
+(`adb connect <tv-ip>:5555`), `adb install -r`, `adb logcat | grep -i -E "faznet|exoplayer|mediacodec"`.
 Known provider behaviour: Full HD channels often send a bad first second (picture frozen at start, fixed by
 re-opening); HTTP 403 when zapping fast (account connection limit).
 
@@ -38,7 +38,7 @@ re-opening); HTTP 403 when zapping fast (account connection limit).
 - `data/ChannelRepository.kt` — every read of a channel list, favourites, history, bringing lists up to date, and taking
   over what versions before the database saved. `data/ChannelScope.kt` — the kinds of list and their paging source.
 - `data/Repository.kt` (prefs, playlists, stable MAC/PIN from ANDROID_ID), `data/M3uParser.kt` (streaming byte parser),
-  `data/Xtream.kt` (VOD/series/EPG/catch-up), `data/Extras.kt` (ChannelMemory, ProblemLog, Parental, EnginePrefs),
+  `data/Xtream.kt` (VOD/series/EPG/catch-up), `data/Extras.kt` (ChannelMemory, ProblemLog, Parental),
   `data/Reports.kt` (problem/crash reports to the server), `data/RemoteSync.kt`. `di/AppModule.kt` — Hilt.
 - `tools/` + `app/src/bench` — measuring on the stick, see `tools/README.md`.
 - "Open last channel on start" is off by default.
