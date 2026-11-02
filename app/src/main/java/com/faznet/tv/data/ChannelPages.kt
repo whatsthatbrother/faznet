@@ -17,6 +17,9 @@ class ChannelPages(private val db: FaznetDatabase, val scope: ChannelScope) {
     /** The channel at [i] if its page is here. */
     fun peek(i: Int): Channel? = pages[i / PAGE]?.getOrNull(i % PAGE)
 
+    /** True if the page of [i] has been read: [peek] then says all there is to know about that place. */
+    fun isRead(i: Int): Boolean = pages.containsKey(i / PAGE)
+
     /** The channel at [i], reading its page if needed. */
     suspend fun get(i: Int): Channel? {
         if (i !in 0 until size) return null

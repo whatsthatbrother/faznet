@@ -60,6 +60,7 @@ import com.faznet.tv.player.StreamType
 import com.faznet.tv.player.Throughput
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -1348,13 +1349,17 @@ internal class OverlayChannelAdapter(
     }
 
     private fun read(list: ChannelPages, position: Int) {
+        // Its page came without this row (the list is shorter than it said): nothing more will arrive for it.
+        if (list.isRead(position)) return
         val page = position / ChannelPages.PAGE
         if (!reading.add(page)) return
-        scope.launch {
+        // Not Main.immediate: this is called while the list is laid out, and a page that is there at once (search
+        // results, a very quick read) would then change the list in the middle of that, which RecyclerView refuses.
+        scope.launch(Dispatchers.Main) {
             list.get(position)
             if (pages !== list) return@launch
             reading.remove(page)
-            notifyItemRangeChanged(page * ChannelPages.PAGE, ChannelPages.PAGE)
+            if (list.isRead(position)) notifyItemRangeChanged(page * ChannelPages.PAGE, ChannelPages.PAGE)
         }
     }
 
