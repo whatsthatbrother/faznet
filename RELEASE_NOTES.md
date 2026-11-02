@@ -1,3 +1,25 @@
+## Faznet v4.1.2
+
+**Shqip:** Me playlist të mëdha, player-i hapet dhe ndërron kanale menjëherë, me shumë më pak memorie. Në telefon, shiriti i sipërm, filmat, serialet dhe TV Guide përshtaten me ekranin, dhe player-i hapet horizontalisht. Kanali që serveri e refuzon tani e thotë këtë dhe nuk provohet më pa fund.
+
+### Big playlists (measured on a Redmi Note 7 with 174 838 channels)
+- The player and the TV guide read channels a page at a time: 0 ms instead of 2.2-4.1 s before Up/Down worked, 10-16 MB of Java heap instead of 70-86 MB
+
+### Phones
+- Top bar in two rows: search shows its text, and Settings stays on the screen
+- Movies and Series: categories in a row above full-width posters
+- TV guide: channels above their programmes, opening at the channel last played
+- "Upload from the web": the MAC on one line and buttons that fit
+- Live and VOD players open in landscape
+
+### Fixes
+- A channel the server refuses (HTTP 4xx): after the retries the message stays on the screen and nothing tries again until the viewer moves on. It used to vanish and keep opening connections, which is what an account's connection limit counts. It can still take about 15 s to appear
+- Channel names written for a web page ("&amp;") show as plain text
+
+### How it was tested
+- Redmi Note 7 (Android 10): all screens, with an earlier build of these changes; the refused-channel fix was not tried there
+- Mi TV Stick: this build, with the refused-channel fix; channels, list, number entry and guide with the build just before it. Freezes on interlaced channels are not fixed, and were absent in that day's test
+
 ## Faznet v4.1.1
 
 **Shqip:** Kanali nuk nis, ndalet dhe nis përsëri në TV stick. Kanalet interlaced qëndrojnë pas rrethit të ngarkimit derisa fotoja të luajë vërtet, rreth 3 s në stick-et ku dekoderi ngec me to; kanalet e tjera hapen rreth 0.2 s më ngadalë se në 4.1.0.
