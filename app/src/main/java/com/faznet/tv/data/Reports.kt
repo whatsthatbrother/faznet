@@ -39,7 +39,7 @@ object Reports {
     private fun summary(c: Context, repo: Repository): String = buildString {
         append("Faznet ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n")
         append("Device ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.SUPPORTED_ABIS.joinToString()}\n")
-        append("Engine ${if (repo.useVlc) "VLC" else "ExoPlayer"} · FFmpeg ${repo.useFfmpeg} · SW-SD ${repo.softwareSd} · playlists ${repo.playlists().size}\n")
+        append("Engine ExoPlayer · FFmpeg ${repo.useFfmpeg} · SW-SD ${repo.softwareSd} · playlists ${repo.playlists().size}\n")
         val rt = Runtime.getRuntime()
         append("Memory max ${rt.maxMemory() / 1048576} MB\n")
         val log = ProblemLog.read(c)

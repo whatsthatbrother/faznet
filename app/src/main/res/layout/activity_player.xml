@@ -14,14 +14,6 @@
         android:focusable="false"
         app:show_buffering="always" />
 
-    <!-- Picture of the VLC engine (Settings → player engine) -->
-    <org.videolan.libvlc.util.VLCVideoLayout
-        android:id="@+id/vlcLayout"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fitsSystemWindows="false"
-        android:visibility="gone" />
-
     <!-- Options bar (Menu key / tap): favorite, channel list, picture size, stats -->
     <LinearLayout
         android:id="@+id/topBar"
@@ -83,12 +75,6 @@
             style="@style/IconButton"
             android:contentDescription="@string/playlists_switch"
             android:src="@drawable/ic_playlist" />
-
-        <ImageButton
-            android:id="@+id/btnEngine"
-            style="@style/IconButton"
-            android:contentDescription="@string/engine"
-            android:src="@drawable/ic_engine" />
 
         <ImageButton
             android:id="@+id/btnStats"

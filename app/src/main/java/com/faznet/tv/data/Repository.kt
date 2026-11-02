@@ -237,12 +237,6 @@ class Repository private constructor(private val ctx: Context) {
         get() = prefs.getBoolean("software_sd", false)
         set(v) = prefs.edit().putBoolean("software_sd", v).apply()
 
-    /** Player engine: false = ExoPlayer (Media3), true = VLC (more tolerant of broken IPTV streams). */
-    var useVlc: Boolean
-        // ExoPlayer is the default everywhere (it proved the most reliable on the Mi TV Stick); VLC is optional
-        // and is also used by itself for single channels that ExoPlayer cannot play.
-        get() = prefs.getBoolean("use_vlc", false)
-        set(v) = prefs.edit().putBoolean("use_vlc", v).apply()
 
     /** Send crash reports to the Faznet server automatically (no playlist data). */
     var autoReports: Boolean

@@ -121,7 +121,7 @@ class ExoWatch(private val traceWatching: Boolean = false) {
 }
 
 /**
- * The last resort, for both engines: whatever the reason (error screen, endless buffering, every other fix used up), a
+ * The last resort: whatever the reason (error screen, endless buffering, every other fix used up), a
  * channel whose picture and clock stand still is opened again after 15 s, then 30, 60, 120 s.
  */
 class ProgressWatch {
@@ -166,106 +166,5 @@ class ProgressWatch {
     private companion object {
         const val FIRST_MS = 15_000L
         const val MAX_MS = 120_000L
-    }
-}
-
-/** VLC has no frame callbacks, so its decoding counters are compared on every look. */
-class VlcWatch {
-
-    enum class Problem(val text: String) {
-        NO_START("no start"),
-        /** The TV's decoder gives nothing (black picture, sound plays). */
-        NO_PICTURE("no picture"),
-        FROZEN_AT_START("picture frozen at start"),
-        FROZEN("picture frozen"),
-        /** Still behind the loading circle: the provider's first seconds are bad, re-opening quickly fixes it. */
-        STUCK_AT_START("stuck at start"),
-        STUCK("playback stuck"),
-    }
-
-    class Result(val problem: Problem?, val healthy: Boolean)
-
-    private var playingAt = 0L
-    private var hasVideo = false
-    private var picturesSeen = false
-    private var counted = false
-    private var lastPictures = 0L
-    private var lastAudio = 0L
-    private var lastTime = 0L
-    private var pictureAt = 0L
-    private var audioAt = 0L
-    private var timeAt = 0L
-    private var openedAt = 0L
-
-    fun onOpen(now: Long) {
-        playingAt = 0L
-        hasVideo = false
-        picturesSeen = false
-        counted = false
-        pictureAt = now
-        audioAt = now
-        timeAt = now
-        openedAt = now
-    }
-
-    fun onPlaying(now: Long) {
-        if (playingAt == 0L) playingAt = now
-    }
-
-    fun onVideo() {
-        hasVideo = true
-    }
-
-    /** Never started: the server accepted the connection but sends nothing usable. */
-    fun neverStarted(now: Long): Boolean = playingAt == 0L && now - openedAt > OPEN_TIMEOUT_MS
-
-    val hasStarted get() = playingAt != 0L
-
-    fun check(now: Long, pictures: Long, audio: Long, time: Long, shown: Boolean): Result {
-        if (!counted) {
-            // Counting starts now, not when the channel was requested (opening can take a while).
-            counted = true
-            remember(pictures, audio, time)
-            pictureAt = now
-            audioAt = now
-            timeAt = now
-            return Result(null, false)
-        }
-        if (pictures != lastPictures) {
-            pictureAt = now
-            if (pictures > 0) picturesSeen = true
-        }
-        if (audio != lastAudio) audioAt = now
-        if (time != lastTime) timeAt = now
-        remember(pictures, audio, time)
-        val audioRuns = now - audioAt < AUDIO_RUNS_MS
-        val early = now - playingAt < EARLY_MS
-        val problem = when {
-            hasVideo && !picturesSeen && audioRuns && now - playingAt > NO_PICTURE_MS -> Problem.NO_PICTURE
-            picturesSeen && audioRuns && now - pictureAt > (if (early) EARLY_FROZEN_MS else FROZEN_MS) ->
-                if (early) Problem.FROZEN_AT_START else Problem.FROZEN
-            !shown && now - timeAt > EARLY_STUCK_MS && now - audioAt > EARLY_STUCK_MS -> Problem.STUCK_AT_START
-            now - timeAt > STUCK_MS && now - audioAt > STUCK_MS -> Problem.STUCK
-            else -> null
-        }
-        return Result(problem, problem == null && now - openedAt > HEALTHY_MS)
-    }
-
-    private fun remember(pictures: Long, audio: Long, time: Long) {
-        lastPictures = pictures
-        lastAudio = audio
-        lastTime = time
-    }
-
-    private companion object {
-        const val OPEN_TIMEOUT_MS = 8_000L
-        const val AUDIO_RUNS_MS = 1_500L
-        const val EARLY_MS = 8_000L
-        const val NO_PICTURE_MS = 6_000L
-        const val FROZEN_MS = 4_000L
-        const val EARLY_FROZEN_MS = 2_000L
-        const val EARLY_STUCK_MS = 3_000L
-        const val STUCK_MS = 12_000L
-        const val HEALTHY_MS = 30_000L
     }
 }

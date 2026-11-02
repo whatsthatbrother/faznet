@@ -47,7 +47,6 @@ import com.faznet.tv.data.ChannelPages
 import com.faznet.tv.data.ChannelRepository
 import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.ChannelMemory
-import com.faznet.tv.data.EnginePrefs
 import com.faznet.tv.data.ProblemLog
 import com.faznet.tv.data.ChannelCheck
 import com.faznet.tv.data.Epg
@@ -59,9 +58,6 @@ import com.faznet.tv.player.ProgressWatch
 import com.faznet.tv.player.StreamProbe
 import com.faznet.tv.player.StreamType
 import com.faznet.tv.player.Throughput
-import com.faznet.tv.player.VlcEngine
-import com.faznet.tv.player.VlcWatch
-import org.videolan.libvlc.util.VLCVideoLayout
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -133,8 +129,6 @@ class PlayerActivity : AppCompatActivity() {
     @Volatile private var frameIntervalUs = 0L
     private var recoveries = 0
     private var httpRetries = 0
-    /** Engine chosen for this channel only after the other one gave up; remembered once it really plays. */
-    private var forcedEngine: String? = null
     private var okLong = false
     private var totalRecoveries = 0
 
@@ -167,14 +161,6 @@ class PlayerActivity : AppCompatActivity() {
             if (!lost) return
             lost = false
             handler.post {
-                if (vlc != null) {
-                    if (pendingZap < 0 && (tvError.visibility == View.VISIBLE || vlc?.isPlaying == false)) {
-                        retries = 0
-                        freshPlayer()
-                        startCurrent()
-                    }
-                    return@post
-                }
                 val p = player ?: return@post
                 if (pendingZap < 0 && (p.playerError != null || p.playbackState == Player.STATE_BUFFERING ||
                         p.playbackState == Player.STATE_IDLE || tvError.visibility == View.VISIBLE)
@@ -265,7 +251,6 @@ class PlayerActivity : AppCompatActivity() {
         infoEpgProgress = findViewById(R.id.infoEpgProgress)
         listEpg = findViewById(R.id.listEpg)
         pbStart = findViewById(R.id.pbStart)
-        vlcLayout = findViewById(R.id.vlcLayout)
 
         playerView.useController = false
         playerView.resizeMode = aspectModes[repo.aspectMode.coerceIn(0, aspectModes.size - 1)]
@@ -287,15 +272,6 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnTracks).setOnClickListener { hideOptions(); showTracks() }
         findViewById<View>(R.id.btnSleep).setOnClickListener { hideOptions(); showSleep() }
         findViewById<View>(R.id.btnPlaylistSwitch).setOnClickListener { hideOptions(); switchPlaylist() }
-        findViewById<View>(R.id.btnEngine).setOnClickListener {
-            hideOptions()
-            val wasVlc = vlc != null
-            repo.useVlc = !wasVlc
-            // The user chose: forget what the app had learned for this channel.
-            current?.let { EnginePrefs.setOverride(this, it.url, null) }
-            toast(getString(R.string.engine_now, if (repo.useVlc) "VLC" else "ExoPlayer"))
-            current?.let { play(it, index) }
-        }
 
         gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
@@ -324,7 +300,6 @@ class PlayerActivity : AppCompatActivity() {
             }
         })
         playerView.setOnTouchListener { _, ev -> gestures.onTouchEvent(ev); true }
-        vlcLayout.setOnTouchListener { _, ev -> gestures.onTouchEvent(ev); true }
 
         hideSystemUi()
         loadLists()
@@ -356,7 +331,7 @@ class PlayerActivity : AppCompatActivity() {
         runCatching { (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(netCallback) }
         pendingZap = -1
         handler.removeCallbacksAndMessages(null)
-        releaseEngines()
+        releasePlayer()
         PlayerFactory.freeBuffers()
     }
 
@@ -433,9 +408,7 @@ class PlayerActivity : AppCompatActivity() {
         if (revealed) hiddenSince = SystemClock.elapsedRealtime()
         revealed = false
         playerView.alpha = 0f
-        vlcLayout.alpha = 0f
         player?.volume = 0f
-        vlc?.volume = 0
         pbStart.visibility = View.VISIBLE
     }
 
@@ -455,7 +428,7 @@ class PlayerActivity : AppCompatActivity() {
         Perf.log(
             "open total=${now - press} wait=${openAt - press} prepare=${after(openPreparedAt)} ready=${after(openReadyAt)} " +
                 "frame=${after(openFrameAt)} show=${now - openAt} reopens=${(openCount - 1).coerceAtLeast(0)} " +
-                "engine=${if (vlc != null) "vlc" else "exo"} forced=${now - hiddenSince > MAX_HIDDEN_MS} ch=${ch.number} ${ch.name}"
+                "forced=${now - hiddenSince > MAX_HIDDEN_MS} ch=${ch.number} ${ch.name}"
         )
         openPressAt = 0L
         openAt = 0L
@@ -465,12 +438,8 @@ class PlayerActivity : AppCompatActivity() {
         if (revealed) return
         logOpen()
         revealed = true
-        // The other engine plays this channel: use it for this channel from now on.
-        forcedEngine?.let { e -> current?.let { EnginePrefs.setOverride(this, it.url, e) } }
         playerView.alpha = 1f
-        vlcLayout.alpha = 1f
         player?.volume = 1f
-        vlc?.volume = 100
         pbStart.visibility = View.GONE
         // Shown because it waited too long: an error on the screen has to stay readable.
         if (player?.playerError == null) tvError.visibility = View.GONE
@@ -590,8 +559,6 @@ class PlayerActivity : AppCompatActivity() {
         retries = 0
         httpRetries = 0
         recoveries = 0
-        enginesTried.clear()
-        forcedEngine = null
         progressWatch.reset(SystemClock.elapsedRealtime())
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
@@ -628,148 +595,20 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- VLC engine (Settings → player engine) ----------
-    private var vlc: VlcEngine? = null
-    private lateinit var vlcLayout: VLCVideoLayout
-    private val vlcReveal = Runnable { reveal() }
-
-    private val vlcListener = object : VlcEngine.Listener {
-        override fun onVlcPlaying() {
-            retries = 0
-            vlcWatch.onPlaying(SystemClock.elapsedRealtime())
-            tvError.visibility = View.GONE
-            // Audio-only channels never get a video output: show them after a moment anyway.
-            handler.removeCallbacks(vlcReveal)
-            handler.postDelayed(vlcReveal, 2000)
-        }
-
-        override fun onVlcVideo() {
-            vlcWatch.onVideo()
-            // VLC shows a few damaged frames until the first key frame arrives: keep them behind the
-            // loading circle a little longer so the channel appears clean.
-            handler.removeCallbacks(vlcReveal)
-            handler.postDelayed(vlcReveal, VLC_REVEAL_MS)
-        }
-
-        override fun onVlcError() = vlcFailed("error")
-        override fun onVlcEnded() = vlcFailed("stream ended")
-    }
-
-    private fun vlcFailed(what: String) {
-        val ch = current ?: return
-        if (retries < MAX_RETRIES) {
-            retries++
-            handler.removeCallbacks(retry)
-            handler.postDelayed(retry, (1000L * retries).coerceAtMost(5000L))
-        } else {
-            if (tryOtherEngine("VLC: $what")) return
-            pbStart.visibility = View.GONE
-            tvError.text = getString(R.string.err_stream, "VLC")
-            tvError.visibility = View.VISIBLE
-            ProblemLog.add(this, ch.name, "VLC: $what")
-        }
-    }
-
-    private val vlcWatch = VlcWatch()
-
-    private fun checkVlc() {
-        val v = vlc ?: return
-        val now = SystemClock.elapsedRealtime()
-        if (!revealed && now - hiddenSince > MAX_HIDDEN_MS) reveal()
-        if (pendingZap >= 0) return
-        val ch = current ?: return
-        if (!vlcWatch.hasStarted) {
-            if (vlcWatch.neverStarted(now)) vlcRecover(ch, VlcWatch.Problem.NO_START.text)
-            return
-        }
-        val pr = v.progress() ?: return
-        val result = vlcWatch.check(now, pr.pictures, pr.audio, pr.time, revealed)
-        val problem = result.problem
-        if (problem == null) {
-            if (result.healthy) recoveries = 0
-            return
-        }
-        // No picture from the TV's decoder: decode this channel with the CPU.
-        val software = problem == VlcWatch.Problem.NO_PICTURE && !EnginePrefs.vlcSoftware(this, ch.url)
-        if (software) EnginePrefs.setVlcSoftware(this, ch.url, true)
-        vlcRecover(ch, if (software) "no picture → software decoder" else problem.text)
-    }
-
-    private fun vlcRecover(ch: Channel, reason: String) {
-        if (recoveries >= MAX_RECOVERIES) {
-            tryOtherEngine("VLC: $reason")
-            return
-        }
-        recoveries++
-        totalRecoveries++
-        lastWarning = "auto-fix: $reason"
-        ProblemLog.add(this, ch.name, "VLC: $reason")
-        showReconnecting()
-        freshPlayer()
-        startCurrent()
-    }
-
-    /** Which engine opens this channel: the one that worked for it before, otherwise the one in Settings. */
-    private fun useVlcFor(ch: Channel?): Boolean = when (forcedEngine ?: ch?.let { EnginePrefs.override(this, it.url) }) {
-        EnginePrefs.VLC -> true
-        EnginePrefs.EXO -> false
-        else -> repo.useVlc
-    }
-
-    private val enginesTried = HashSet<String>()
-
-    /**
-     * The current engine gave up on this channel: open it once with the other engine and, if that one plays,
-     * keep using it for this channel. @return false when both engines were already tried.
-     */
-    private fun tryOtherEngine(why: String): Boolean {
-        val ch = current ?: return false
-        val engine = if (vlc != null) EnginePrefs.VLC else EnginePrefs.EXO
-        val other = if (engine == EnginePrefs.VLC) EnginePrefs.EXO else EnginePrefs.VLC
-        enginesTried.add(engine)
-        if (other in enginesTried) return false
-        enginesTried.add(other)
-        // Only for this opening; it is remembered for the channel when the picture really comes (reveal()).
-        forcedEngine = other
-        ProblemLog.add(this, ch.name, "$why → ${if (other == EnginePrefs.VLC) "VLC" else "ExoPlayer"}")
-        lastWarning = "switched engine: $why"
-        retries = 0
-        recoveries = 0
-        httpRetries = 0
-        showReconnecting()
-        // Posted: this can be called from inside the old engine's own callbacks.
-        handler.post {
-            if (current?.url != ch.url) return@post
-            freshPlayer()
-            startCurrent()
-        }
-        return true
-    }
-
-    private fun releaseEngines() {
+    private fun releasePlayer() {
         probeJob?.cancel()
         player?.let {
             playerView.player = null
             it.release()
         }
         player = null
-        vlc?.release()
-        vlc = null
     }
 
     private fun freshPlayer() {
-        releaseEngines()
+        releasePlayer()
         videoDecoder = ""
         audioDecoder = ""
-        if (useVlcFor(current)) {
-            playerView.visibility = View.GONE
-            vlcLayout.visibility = View.VISIBLE
-            vlc = VlcEngine(this, vlcLayout, vlcListener).also { it.setScale(repo.aspectMode) }
-        } else {
-            vlcLayout.visibility = View.GONE
-            playerView.visibility = View.VISIBLE
-            initPlayer()
-        }
+        initPlayer()
     }
 
     private fun startCurrent() {
@@ -780,16 +619,6 @@ class PlayerActivity : AppCompatActivity() {
         openPreparedAt = 0L
         openReadyAt = 0L
         openFrameAt = 0L
-        vlc?.let { v ->
-            val ch = current ?: return
-            tvError.visibility = View.GONE
-            hideUntilStable()
-            handler.removeCallbacks(vlcReveal)
-            v.stop()
-            vlcWatch.onOpen(SystemClock.elapsedRealtime())
-            v.play(ch.url, ch.userAgent ?: repo.userAgent, ch.referrer, hardware = !EnginePrefs.vlcSoftware(this, ch.url))
-            return
-        }
         val p = player ?: return
         val ch = current ?: return
         val token = ++playToken
@@ -839,11 +668,6 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun checkFrames() {
         if (refused) return
-        if (vlc != null) {
-            vlc?.progress()?.let { if (hardWatch(it.time, it.pictures)) return }
-            checkVlc()
-            return
-        }
         val p = player ?: return
         if (p.playWhenReady) {
             val frames = p.videoDecoderCounters?.let { it.ensureUpdated(); it.renderedOutputBufferCount.toLong() } ?: 0L
@@ -872,10 +696,8 @@ class PlayerActivity : AppCompatActivity() {
         // The numbers say what really happened; they reach the developer with the problem log.
         val detail = "wedged=${problem.wedged} in=${counters?.queuedInputBufferCount} out=$rendered behind=${problem.behindMs} buf=${p.totalBufferedDuration}"
         Perf.log("freeze $reason $detail ch=${current?.number}")
-        if (recoveries >= MAX_RECOVERIES) {
-            tryOtherEngine("ExoPlayer: $reason")
-            return
-        }
+        // Enough quick fixes on this channel: from here the last-resort watch opens it again, less often.
+        if (recoveries >= MAX_RECOVERIES) return
         // No picture at all in strict key-frame mode: this stream probably never sends IDR frames.
         if (problem.noPicture) current?.let { PlayerFactory.looseKeyframes.add(it.url) }
         recoveries++
@@ -946,10 +768,6 @@ class PlayerActivity : AppCompatActivity() {
             handler.postDelayed(retry, (1500L * retries).coerceAtMost(6000L))
             return
         }
-        // Network errors (no connection, timeout, HTTP) are the server or the line, not the engine:
-        // switching engines then only adds more failed attempts.
-        val network = error.errorCode in 2000..2999
-        if (!network && tryOtherEngine("ExoPlayer: ${error.errorCodeName}")) return
         tvError.text = getString(R.string.err_stream, error.errorCodeName)
         pbStart.visibility = View.GONE
         current?.let { ProblemLog.add(this, it.name, "error ${error.errorCodeName}") }
@@ -960,18 +778,6 @@ class PlayerActivity : AppCompatActivity() {
 
     private val statsTick = object : Runnable {
         override fun run() {
-            val v0 = vlc
-            if (v0 != null) {
-                tvStats.text = buildString {
-                    append("Engine  VLC\n")
-                    append("Net     %.2f Mbps\n".format(Throughput.sampleMbps()))
-                    v0.videoSize()?.let { append("Video   $it\n") }
-                    append("State   ${if (v0.isPlaying) "PLAYING" else "OPENING"}   Fixes $totalRecoveries\n")
-                    val rt = Runtime.getRuntime()
-                    append("Memory  ${(rt.totalMemory() - rt.freeMemory()) / 1048576}/${rt.maxMemory() / 1048576} MB")
-                    if (lastWarning.isNotEmpty()) append("\nWarn    $lastWarning")
-                }
-            }
             val p = player
             if (p != null) {
                 val v = p.videoFormat
@@ -1051,7 +857,6 @@ class PlayerActivity : AppCompatActivity() {
         handler.removeCallbacks(retry)
         probeJob?.cancel()
         player?.stop()
-        vlc?.stop()
         tvError.visibility = View.GONE
         handler.removeCallbacks(zapCommit)
         val now = Perf.now()
@@ -1164,32 +969,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /** Sound language and subtitles of the current channel. */
-    private fun showVlcTracks(v: VlcEngine) {
-        val labels = ArrayList<String>()
-        val actions = ArrayList<() -> Unit>()
-        var checked = -1
-        for ((id, name) in v.audioTracks()) {
-            labels.add(getString(R.string.track_audio, name))
-            if (id == v.audioTrack) checked = labels.size - 1
-            actions.add { v.audioTrack = id }
-        }
-        labels.add(getString(R.string.track_subs_off))
-        if (v.subtitleTrack < 0 && checked < 0) checked = labels.size - 1
-        actions.add { v.subtitleTrack = -1 }
-        for ((id, name) in v.subtitleTracks()) {
-            labels.add(getString(R.string.track_subs, name))
-            if (id == v.subtitleTrack) checked = labels.size - 1
-            actions.add { v.subtitleTrack = id }
-        }
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.tracks)
-            .setSingleChoiceItems(labels.toTypedArray(), checked) { d, which -> actions[which](); d.dismiss() }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
     private fun showTracks() {
-        vlc?.let { showVlcTracks(it); return }
         val p = player ?: return
         val labels = ArrayList<String>()
         val actions = ArrayList<() -> Unit>()
@@ -1284,7 +1064,6 @@ class PlayerActivity : AppCompatActivity() {
         val next = (repo.aspectMode + 1) % aspectModes.size
         repo.aspectMode = next
         playerView.resizeMode = aspectModes[next]
-        vlc?.setScale(next)
         toast(getString(R.string.picture, getString(aspectLabels[next])))
     }
 
@@ -1535,7 +1314,6 @@ class PlayerActivity : AppCompatActivity() {
         private const val STALL_TIMEOUT_MS = 8_000L
         private const val MAX_RETRIES = 5
         private const val MAX_HIDDEN_MS = 9_000L
-        private const val VLC_REVEAL_MS = 900L
         private const val MAX_RECOVERIES = 4
         private const val INFO_MS = 4_000L
         private const val OPTIONS_MS = 8_000L

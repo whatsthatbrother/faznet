@@ -78,7 +78,7 @@ android {
         }
     }
 
-    // One APK per processor type (VLC is big): armeabi-v7a (~25 MB) for TV sticks such as the Mi TV Stick,
+    // One APK per processor type: armeabi-v7a for TV sticks such as the Mi TV Stick,
     // arm64-v8a for newer 64-bit-only devices.
     splits {
         abi {
@@ -90,7 +90,7 @@ android {
         }
     }
 
-    // Compress native libraries (VLC is ~85 MB uncompressed): the APK stays around 40 MB instead of 100 MB.
+    // Compress native libraries: a smaller APK, and they are unpacked on the device.
     packaging {
         jniLibs { useLegacyPackaging = true }
     }
@@ -150,8 +150,6 @@ dependencies {
     implementation("io.coil-kt:coil:2.7.0")
     // Installs the ahead-of-time (baseline) profiles also for APKs installed outside Google Play
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
-    // Second player engine (Settings → VLC): tolerant of badly started / damaged IPTV streams
-    implementation("org.videolan.android:libvlc-all:3.7.6")
     // 2.0: the screens are drawn with Jetpack Compose (made for the TV remote and for touch)
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)

@@ -49,12 +49,6 @@ class MainActivity : AppCompatActivity(), HomeActions {
                 m.edit().putBoolean("v30", true).apply()
             }
         }
-        getSharedPreferences("faznet_migrate", MODE_PRIVATE).let { m ->
-            if (!m.getBoolean("v303", false)) {
-                com.faznet.tv.data.EnginePrefs.clearOverrides(this)
-                m.edit().putBoolean("v303", true).apply()
-            }
-        }
         lifecycleScope.launch {
             vm.events.collect { e ->
                 when (e) {
@@ -72,8 +66,6 @@ class MainActivity : AppCompatActivity(), HomeActions {
                 com.faznet.tv.data.Reports.sendPendingCrash(this@MainActivity, repo)
                 com.faznet.tv.data.Reports.sendNewProblems(this@MainActivity, repo)
             }
-            // The VLC engine is prepared in the background, so the first channel opens sooner.
-            if (repo.useVlc) com.faznet.tv.player.VlcEngine.warmUp(applicationContext)
         }
         if (BuildConfig.DEBUG && repo.playlists().none { it.name == "Test2 (debug)" } &&
             runCatching { assets.open("test.m3u").close() }.isSuccess) addDebugTestPlaylist()

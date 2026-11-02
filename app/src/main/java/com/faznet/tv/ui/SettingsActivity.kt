@@ -99,7 +99,6 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun buildItems(): List<Item> = listOf(
         Item.Header(getString(R.string.section_player)),
-        Item.Toggle(getString(R.string.use_vlc), { repo.useVlc }, { repo.useVlc = it }),
         Item.Toggle(getString(R.string.use_ffmpeg), { repo.useFfmpeg }, { repo.useFfmpeg = it }),
         Item.Toggle(getString(R.string.software_sd), { repo.softwareSd }, { repo.softwareSd = it }),
         Item.Toggle(getString(R.string.show_stats), { repo.showStats }, { repo.showStats = it }),

@@ -10,7 +10,7 @@ built-in lists). Talk to Diar in **Albanian**; code, comments and commit message
 - `./gradlew assembleDebug` (Windows: `gradlew.bat assembleDebug`). With `release.flag` in the project root the
   debug variant is a real release: R8 + shrink + release signing (key in `keystore/`, never committed).
 - ABI splits → `app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk` (the **TV** APK: Mi TV Stick is 32-bit)
-  and `app-arm64-v8a-debug.apk` (phones). No universal APK. VLC makes the APKs ~25/29 MB.
+  and `app-arm64-v8a-debug.apk` (phones). No universal APK.
 - `./gradlew testDebugUnitTest`: parser, import and repository tests, no device needed (Robolectric).
 - Every release: bump `versionCode` / `versionName` in `app/build.gradle.kts` (4.0.0 = code 40) and keep R8's `mapping.txt`
   as `archive/<version>/mapping.txt` (not in git), or crash reports can't be read.
@@ -25,9 +25,9 @@ re-opening); HTTP 403 when zapping fast (account connection limit).
 
 ## Code map (app/src/main/java/com/faznet/tv)
 - `ui/PlayerActivity.kt` — live player. Fresh player per channel, clean start (hidden until the picture runs),
-  watchdogs: early freeze (1 s), frozen picture, stuck playback, stall, 403 retries, per-channel engine fallback
-  (ExoPlayer ↔ VLC, remembered only once it plays), last-resort `hardWatch` (15→30→60→120 s, counts frames).
-- `player/PlayerFactory.kt` (ExoPlayer/Media3 1.9 + Jellyfin FFmpeg audio), `player/VlcEngine.kt` (shared LibVLC).
+  watchdogs in `player/PlaybackWatch.kt`: frozen picture, stuck playback, stall, 403 retries, last-resort re-open
+  (15→30→60→120 s, counts frames). The channel list reads pages (`data/ChannelPages.kt`).
+- `player/PlayerFactory.kt` (ExoPlayer/Media3 1.9 + Jellyfin FFmpeg audio). VLC was removed: it almost never helped and was 80% of the APK.
 - `ui/MainActivity.kt` (thin host), `ui/HomeViewModel.kt`, `ui/compose/HomeScreen.kt` — Compose home (groups, channel grid
   from Paging, top bar, update button). `ui/compose/Theme.kt` — colours, `FocusBox` (remote + touch), `PivotScroll`
   (tvOS-style scrolling). `ui/compose/Logo.kt` — logos drawn straight from Coil, without composition.
@@ -41,7 +41,7 @@ re-opening); HTTP 403 when zapping fast (account connection limit).
   `data/Xtream.kt` (VOD/series/EPG/catch-up), `data/Extras.kt` (ChannelMemory, ProblemLog, Parental, EnginePrefs),
   `data/Reports.kt` (problem/crash reports to the server), `data/RemoteSync.kt`. `di/AppModule.kt` — Hilt.
 - `tools/` + `app/src/bench` — measuring on the stick, see `tools/README.md`.
-- Default engine is **ExoPlayer** (VLC optional). "Open last channel on start" is off by default.
+- "Open last channel on start" is off by default.
 
 ## Website, updates, server
 - `docs/` = GitHub Pages (https://whatsthatbrother.github.io/faznet/): landing page (EN default + SQ switch),
