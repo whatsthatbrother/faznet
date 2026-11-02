@@ -91,6 +91,7 @@ class BenchReceiver : BroadcastReceiver() {
         val importer = ChannelImporter(db)
         repeat(rounds) { n ->
             val r = timed("import #${n + 1}") { file.inputStream().use { importer.import("benchdata", it, "Other", false, "$n", null, 0) } }
+            importer.removeUnusedLists()
             Log.i(TAG, "list ${r.listId}: ${r.channels} channels, ${r.groups} groups, database ${c.getDatabasePath("faznet.db").length() / 1024} KB")
         }
         db.close()

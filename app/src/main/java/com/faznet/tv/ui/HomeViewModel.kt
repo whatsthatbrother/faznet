@@ -76,17 +76,14 @@ class HomeViewModel @Inject constructor(
     private var hintShown = false
     private var loadJob: Job? = null
     private var pollJob: Job? = null
+    private var cleanUpJob: Job? = null
+    private var refreshJob: Job? = null
     private var observeJob: Job? = null
     private var filterJob: Job? = null
     private var groupJob: Job? = null
 
     init {
         viewModelScope.launch { channels.importProgress.collect { ui.importing = it } }
-        viewModelScope.launch {
-            // Not while the first screen is being drawn.
-            delay(CLEAN_UP_DELAY_MS)
-            runCatching { channels.cleanUp() }
-        }
     }
 
     /** Coming from a cold start: "open the last channel" applies. */
@@ -100,10 +97,18 @@ class HomeViewModel @Inject constructor(
         refreshState()
         syncFromWeb(force = false)
         startWelcomePolling()
+        // Only with this screen in front: a player or a guide above it reads the list it was opened with, even if a
+        // newer one has come since. And not while the screen is being drawn.
+        cleanUpJob?.cancel()
+        cleanUpJob = viewModelScope.launch {
+            delay(CLEAN_UP_DELAY_MS)
+            runCatching { channels.cleanUp() }
+        }
     }
 
     fun onPause() {
         pollJob?.cancel()
+        cleanUpJob?.cancel()
     }
 
     /** Pull playlists uploaded on the website (MAC + PIN). Quiet: errors only matter on the device screen. */
@@ -201,6 +206,7 @@ class HomeViewModel @Inject constructor(
 
     private fun load(p: Playlist, force: Boolean) {
         loadJob?.cancel()
+        refreshJob?.cancel()
         ui.empty = null
         ui.loading = true
         loadJob = viewModelScope.launch {
@@ -239,7 +245,8 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun refreshInBackground(p: Playlist) {
-        viewModelScope.launch {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
             val result = try { channels.ensureList(p, forceRefresh(p)) } catch (e: CancellationException) { throw e } catch (e: Exception) { return@launch }
             if (playlist?.id != p.id || loadedPlaylistId != p.id || !result.changed) return@launch
             show(p, result.listId, keepSelection = true)

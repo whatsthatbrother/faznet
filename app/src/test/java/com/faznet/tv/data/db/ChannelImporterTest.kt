@@ -77,6 +77,8 @@ class ChannelImporterTest {
         assertTrue(second.listId > first.listId)
         assertEquals(second.listId, db.library().stateNow("p")?.listId)
         assertEquals("2", db.library().stateNow("p")?.fingerprint)
+        assertEquals("a player may still be on it", 2, db.channels().range(ListIds.base(first.listId), 1, 100).size)
+        importer.removeUnusedLists()
         assertEquals(emptyList<Any>(), db.channels().range(ListIds.base(first.listId), 1, 100))
         assertEquals(emptyList<Any>(), db.channels().groupsNow(first.listId))
         assertEquals(listOf("X"), db.channels().range(ListIds.base(second.listId), 1, 100).map { it.name })

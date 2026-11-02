@@ -5,7 +5,14 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.faznet.tv.data.db.FaznetDatabase
+import com.faznet.tv.data.db.ListIds
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -133,6 +140,86 @@ class ChannelRepositoryTest {
         assertTrue(changed.changed)
         assertEquals(2, changed.channels)
         assertNotEquals(first.listId, changed.listId)
+    }
+
+    private fun big(n: Int) = buildString {
+        append("#EXTM3U\n")
+        for (i in 1..n) append("#EXTINF:-1 group-title=\"G${i % 7}\",C$i\n${url(i)}\n")
+    }
+
+    private fun rows(listId: Long) = db.openHelper.readableDatabase
+        .query("SELECT COUNT(*) FROM channel WHERE id > ${ListIds.base(listId)} AND id <= ${ListIds.last(listId)}")
+        .use { it.moveToFirst(); it.getInt(0) }
+
+    @Test
+    fun theCleanUpWaitsForARunningImport() = runBlocking {
+        val p = filePlaylist(big(20_000))
+        repo.addPlaylist(p)
+        val running = async(Dispatchers.IO) { channels.ensureList(p, false) }
+        withTimeoutOrNull(5_000) { channels.importProgress.first { it != null && it > 0 } }
+        channels.cleanUp()
+        val list = running.await()
+        assertEquals(20_000, rows(list.listId))
+        assertEquals("C1", db.channels().byId(ListIds.base(list.listId) + 1)?.name)
+    }
+
+    @Test
+    fun twoImportsAtOnceLeaveBothListsWhole() = runBlocking {
+        val a = filePlaylist(big(6_000), "a")
+        val b = filePlaylist(big(6_000), "b")
+        val first = async(Dispatchers.IO) { channels.ensureList(a, false) }
+        val second = async(Dispatchers.IO) { channels.ensureList(b, false) }
+        val listA = first.await()
+        val listB = second.await()
+        assertNotEquals(listA.listId, listB.listId)
+        assertEquals(6_000, rows(listA.listId))
+        assertEquals(6_000, rows(listB.listId))
+    }
+
+    @Test
+    fun aListAlreadyThereOpensWhileAnotherIsImported() = runBlocking {
+        val here = filePlaylist(big(10), "here")
+        val done = channels.ensureList(here, false)
+        val busy = filePlaylist(big(20_000), "busy")
+        val running = async(Dispatchers.IO) { channels.ensureList(busy, false) }
+        withTimeoutOrNull(5_000) { channels.importProgress.first { it != null && it > 0 } }
+        assertEquals(done.listId, channels.ensureList(here, false).listId)
+        assertTrue("it did not have to wait", channels.importProgress.value != null)
+        running.await()
+        Unit
+    }
+
+    @Test
+    fun theOldListCanBeReadUntilTheCleanUp() = runBlocking {
+        val p = filePlaylist(big(100))
+        repo.addPlaylist(p)
+        val old = channels.ensureList(p, false)
+        val pages = channels.pagesOf(channels.listView(old.listId).all())
+
+        repo.cacheFile("p").writeText(big(120))
+        val new = channels.ensureList(p, true)
+        assertNotEquals(old.listId, new.listId)
+        assertEquals("a player opened before the new list goes on", "C50", pages.get(49)?.name)
+        assertEquals(new.listId, db.library().stateNow("p")?.listId)
+
+        channels.cleanUp()
+        assertEquals(0, rows(old.listId))
+        assertEquals(120, rows(new.listId))
+    }
+
+    @Test
+    fun aCancelledImportStopsAndLeavesTheOldList() = runBlocking {
+        val p = filePlaylist(big(100))
+        repo.addPlaylist(p)
+        val old = channels.ensureList(p, false)
+        repo.cacheFile("p").writeText(big(60_000))
+        val running = launch(Dispatchers.IO) { channels.ensureList(p, true) }
+        withTimeoutOrNull(5_000) { channels.importProgress.first { it != null && it > 0 } }
+        running.cancelAndJoin()
+        assertEquals(old.listId, db.library().stateNow("p")?.listId)
+        assertEquals(100, rows(old.listId))
+        channels.cleanUp()
+        assertEquals("nothing of the stopped one stays", 100, db.imports().highestChannelId()!! - ListIds.base(old.listId))
     }
 
     @Test

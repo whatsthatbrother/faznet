@@ -5,7 +5,8 @@ import java.io.InputStream
 
 /**
  * Reads a playlist into a new list, then makes it the playlist's list in one step, so that the screens see either the
- * old list or the whole new one. Channels go in as they are read, without the list ever being in memory.
+ * old list or the whole new one. Channels go in as they are read, without the list ever being in memory. The old list
+ * stays until [removeUnusedLists]: a player open on it has to go on working. One import at a time, see ChannelRepository.
  */
 class ChannelImporter(private val db: FaznetDatabase) {
 
@@ -78,7 +79,6 @@ class ChannelImporter(private val db: FaznetDatabase) {
                 PlaylistStateEntity(playlistId, listId, total, fingerprint, checkedAt, previous?.lastChannelKey, sourceTag)
             )
         }
-        previous?.listId?.let { deleteList(it) }
         return Result(listId, total, groups.size)
     }
 

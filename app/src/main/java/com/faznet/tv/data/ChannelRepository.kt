@@ -16,12 +16,16 @@ import com.faznet.tv.data.db.HistoryEntity
 import com.faznet.tv.data.db.ListIds
 import com.faznet.tv.data.db.PlaylistStateEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
@@ -41,6 +45,12 @@ class ChannelRepository @Inject constructor(
     private val channels = db.channels()
     private val library = db.library()
     private val importer = ChannelImporter(db)
+
+    /**
+     * What changes which lists exist goes one at a time. Two imports at once would take the same list number and wipe
+     * each other's channels, and to the clean-up a running import looks like what an interrupted one left behind.
+     */
+    private val listLock = Mutex()
 
     /** How far the running import has come, in channels read; null when none is running. */
     private val importing = MutableStateFlow<Int?>(null)
@@ -196,18 +206,27 @@ class ChannelRepository @Inject constructor(
      * if the server sent something new.
      * @return the list, and whether it changed. A failed download throws and leaves the old list in place.
      */
-    suspend fun ensureList(p: Playlist, force: Boolean): ListResult = withContext(Dispatchers.IO) {
+    suspend fun ensureList(p: Playlist, force: Boolean): ListResult {
+        // A list that is there needs nothing, so it does not have to wait for another playlist's import.
+        if (!force) {
+            val state = library.stateNow(p.id)
+            val list = state?.listId
+            if (list != null && state.sourceTag == sourceTag(p)) return ListResult(list, state.channelCount, changed = false)
+        }
+        return listLock.withLock { withContext(Dispatchers.IO) { bringUpToDate(p, force) } }
+    }
+
+    private suspend fun CoroutineScope.bringUpToDate(p: Playlist, force: Boolean): ListResult {
         migrateFromPreferences(p)
         var state = library.stateNow(p.id)!!
         // The address or the account changed: the old list is another playlist's, favourites stay.
         val tag = sourceTag(p)
         if (state.sourceTag != tag) {
-            state.listId?.let { importer.deleteList(it) }
             state = state.copy(listId = null, channelCount = 0, fingerprint = null, checkedAt = 0, sourceTag = tag)
             library.saveState(state)
         }
         val existing = state.listId
-        if (!force && existing != null) return@withContext ListResult(existing, state.channelCount, changed = false)
+        if (!force && existing != null) return ListResult(existing, state.channelCount, changed = false)
 
         val file = repo.cacheFile(p.id)
         val url = p.m3uUrl()
@@ -219,7 +238,7 @@ class ChannelRepository @Inject constructor(
         if (existing != null && state.fingerprint == fingerprint) {
             library.setChecked(p.id, now)
             if (url != null) file.delete()
-            return@withContext ListResult(existing, state.channelCount, changed = false)
+            return ListResult(existing, state.channelCount, changed = false)
         }
 
         importing.value = 0
@@ -229,31 +248,39 @@ class ChannelRepository @Inject constructor(
                     importer.import(
                         p.id, input, context.getString(R.string.group_uncategorized), XtreamAccount.from(p) != null,
                         fingerprint, tag, now,
-                    ) { importing.value = it }
+                    ) {
+                        ensureActive() // another playlist was chosen: stop here, it would only have to wait
+                        importing.value = it
+                    }
                 }
             }
             Perf.log("import ${result.channels} channels, ${result.groups} groups")
             // A list that can be downloaded again needs no copy of the file: the database is the copy.
             if (url != null) file.delete()
             repo.deleteOldCopy(p.id)
-            ListResult(result.listId, result.channels, changed = true)
+            return ListResult(result.listId, result.channels, changed = true)
         } finally {
             importing.value = null
         }
     }
 
-    /** What an interrupted import left behind, and everything of playlists that no longer exist. */
-    suspend fun cleanUp() = withContext(Dispatchers.IO) {
-        val known = repo.playlists().mapTo(HashSet()) { it.id }
-        for (id in library.playlistsWithState()) {
-            if (id !in known) {
-                library.stateNow(id)?.listId?.let { importer.deleteList(it) }
-                library.deleteFavorites(id)
-                library.deleteHistory(id)
-                library.deleteState(id)
+    /**
+     * What an interrupted import left behind, lists a newer one replaced, and everything of playlists that no longer
+     * exist. Only while no screen is reading an older list: the player and the guide keep the one they were opened with.
+     */
+    suspend fun cleanUp() = listLock.withLock {
+        withContext(Dispatchers.IO) {
+            val known = repo.playlists().mapTo(HashSet()) { it.id }
+            for (id in library.playlistsWithState()) {
+                if (id !in known) {
+                    library.stateNow(id)?.listId?.let { importer.deleteList(it) }
+                    library.deleteFavorites(id)
+                    library.deleteHistory(id)
+                    library.deleteState(id)
+                }
             }
+            importer.removeUnusedLists()
         }
-        importer.removeUnusedLists()
     }
 
     /** Favourites and recents of a playlist from before there was a database, once. The old values are left alone. */
