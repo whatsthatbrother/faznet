@@ -48,7 +48,7 @@ re-opening); HTTP 403 when zapping fast (account connection limit).
   playlist upload with MAC + PIN (do not change its behaviour), PayPal donate (paypal.me/EgzonFazliu).
 - Publishing a version: copy the two APKs to `docs/download/Faznet-TV.apk` and `docs/download/Faznet-arm64.apk`,
   update `docs/version.json` (`version`, `code`, `notes` + `notes_en` in English, `notes_sq` in Albanian) and the
-  version badge in `docs/index.html` (`<b>x.y.z</b>`, EN + SQ), add `RELEASE_NOTES.md`, commit, push to `main`, tag `vx.y.z`, then make a GitHub Release from that tag with both APKs
+  version badge and the download sizes in `docs/index.html` (`<b>x.y.z</b>`, `~N MB`, EN + SQ), add `RELEASE_NOTES.md`, commit, push to `main`, tag `vx.y.z`, then make a GitHub Release from that tag with both APKs
   and the version's notes (the releases page stood at 1.1.1 until 4.1.0).
   The app checks `version.json` on every start (30 min throttle) and offers "Update now".
 - `worker/` = Cloudflare Worker + KV (faznet.diarfazliu.workers.dev): device register, playlists, `/api/report`,
