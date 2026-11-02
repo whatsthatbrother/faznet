@@ -11,7 +11,8 @@ built-in lists). Talk to Diar in **Albanian**; code, comments and commit message
   debug variant is a real release: R8 + shrink + release signing (key in `keystore/`, never committed).
 - ABI splits → `app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk` (the **TV** APK: Mi TV Stick is 32-bit)
   and `app-arm64-v8a-debug.apk` (phones). No universal APK.
-- `./gradlew testDebugUnitTest`: parser, import and repository tests, no device needed (Robolectric).
+- `./gradlew testDebugUnitTest`: parser, import, repository and channel-list tests, no device needed (Robolectric).
+- `./gradlew lintDebug` before every release: an error stops it, and is usually a crash on some device (minSdk 23).
 - Every release: bump `versionCode` / `versionName` in `app/build.gradle.kts` (4.0.0 = code 40) and keep R8's `mapping.txt`
   as `archive/<version>/mapping.txt` (not in git), or crash reports can't be read.
 - This folder is the git repository. `main` is what users run; `v5` is the restructure (plan and measurements in

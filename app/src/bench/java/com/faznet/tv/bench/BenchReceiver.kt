@@ -30,6 +30,7 @@ class BenchReceiver : BroadcastReceiver() {
             runCatching {
                 when (mode) {
                     "hold" -> hold(i.getIntExtra("key", KeyEvent.KEYCODE_DPAD_DOWN), i.getIntExtra("ms", 5000))
+                    "addurl" -> addUrl(app, i.getStringExtra("list") ?: return@runCatching)
                     else -> {
                         val file = fetch(app, i.getStringExtra("list") ?: return@runCatching)
                         if (mode == "data") data(app, file, i.getIntExtra("rounds", 3)) else add(app, file)
@@ -69,6 +70,14 @@ class BenchReceiver : BroadcastReceiver() {
         val id = "bench" + file.name.hashCode().toString(36)
         file.copyTo(repo.cacheFile(id), overwrite = true)
         if (repo.playlists().none { it.id == id }) repo.addPlaylist(Playlist(id, file.name, Playlist.TYPE_FILE, file.name))
+        repo.activeId = id
+    }
+
+    /** A playlist that is downloaded from the PC, for trying what a server may answer. */
+    private fun addUrl(c: Context, name: String) {
+        val repo = Repository.get(c)
+        val id = "url" + name.hashCode().toString(36)
+        if (repo.playlists().none { it.id == id }) repo.addPlaylist(Playlist(id, name, Playlist.TYPE_URL, "http://127.0.0.1:8765/$name"))
         repo.activeId = id
     }
 
