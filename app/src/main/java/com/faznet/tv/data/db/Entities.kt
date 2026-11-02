@@ -41,7 +41,7 @@ data class ChannelEntity(
     val userAgent: String?,
     val referrer: String?,
 ) {
-    fun toChannel(groupName: String) = Channel(number, name, url, logo, groupName, userAgent, referrer, id)
+    fun toChannel(groupName: String) = Channel(number, ChannelKeys.plainName(name), url, logo, groupName, userAgent, referrer, id)
 }
 
 @Entity(tableName = "channel_group", indices = [Index(value = ["listId", "position"], unique = true)])

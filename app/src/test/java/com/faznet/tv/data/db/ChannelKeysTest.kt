@@ -34,4 +34,13 @@ class ChannelKeysTest {
         assertEquals("camëria".replace("ë", "e"), ChannelKeys.searchName("Çamëria"))
         assertEquals("✦●✦ gjenerale ✦●✦", ChannelKeys.searchName("✦●✦ GJENERALE ✦●✦"))
     }
+
+    @Test
+    fun namesWrittenForAWebPageAreMadePlain() {
+        assertEquals("Secret Royal Inspector & Joy", ChannelKeys.plainName("Secret Royal Inspector &amp; Joy"))
+        assertEquals("A & B", ChannelKeys.plainName("A &amp;amp; B"))
+        assertEquals("It's \"on\"", ChannelKeys.plainName("It&#39;s &quot;on&quot;"))
+        assertEquals("R&B", ChannelKeys.plainName("R&B"))
+        assertEquals("KLAN", ChannelKeys.plainName("KLAN"))
+    }
 }

@@ -39,4 +39,12 @@ object ChannelKeys {
         for (c in decomposed) if (Character.getType(c) != Character.NON_SPACING_MARK.toInt()) out.append(c)
         return out.toString()
     }
+
+    /** Some providers write their names for a web page: "Tom &amp; Jerry". */
+    fun plainName(name: String): String {
+        if ('&' !in name) return name
+        var out = name
+        while ("&amp;" in out) out = out.replace("&amp;", "&")
+        return out.replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'").replace("&lt;", "<").replace("&gt;", ">")
+    }
 }
