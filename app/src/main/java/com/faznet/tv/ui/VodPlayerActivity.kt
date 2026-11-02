@@ -47,6 +47,7 @@ class VodPlayerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!isTv()) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         setContentView(R.layout.activity_vod_player)
         repo = Repository.get(this)
         url = intent.getStringExtra(EXTRA_URL) ?: run { finish(); return }

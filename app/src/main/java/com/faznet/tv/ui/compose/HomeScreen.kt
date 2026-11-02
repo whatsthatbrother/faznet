@@ -180,63 +180,92 @@ private fun HomeContent(state: HomeState, pages: Flow<PagingData<Channel>>, acti
 
 @Composable
 private fun TopBar(state: HomeState, actions: HomeActions, wide: Boolean) {
-    Row(
-        Modifier.fillMaxWidth().height(64.dp).padding(start = 12.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Image(painterResource(R.drawable.logo), null, Modifier.size(34.dp))
-        if (wide) {
-            Spacer(Modifier.width(10.dp))
-            Text("Faznet", color = Fz.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.width(12.dp))
-        // Playlist name (opens the playlists) and search
-        FocusBox(
-            onClick = { actions.playlists() },
-            modifier = Modifier.height(42.dp).widthIn(max = 260.dp),
-            shape = RoundedCornerShape(21.dp),
-        ) { focused ->
-            Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(R.drawable.ic_playlist), null, tint = if (focused) Color.White else Fz.accent, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(state.playlistName.ifEmpty { stringResource(R.string.add_playlist) }, color = Fz.text, fontSize = 14.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        Spacer(Modifier.width(8.dp))
-        FocusBox(
-            onClick = { actions.search() },
-            modifier = Modifier.height(42.dp).weight(1f),
-            shape = RoundedCornerShape(21.dp),
-        ) { focused ->
-            Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(R.drawable.ic_search), null, tint = if (focused) Color.White else Fz.dim, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    state.query.ifEmpty { stringResource(R.string.search_hint) },
-                    color = if (state.query.isEmpty() && !focused) Fz.dim else Fz.text, fontSize = 14.sp, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        if (wide) state.updateVersion?.let { v ->
-            Spacer(Modifier.width(8.dp))
-            UpdateButton(v, actions, Modifier)
-        }
-        if (wide) Clock()
+    if (wide) {
         Row(
-            Modifier.widthIn(max = if (wide) 480.dp else 200.dp).horizontalScroll(rememberScrollState()),
+            Modifier.fillMaxWidth().height(64.dp).padding(start = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (state.xtream) {
-                IconAction(R.drawable.ic_guide, stringResource(R.string.guide), actions::guide)
-                if (state.hasMovies) IconAction(R.drawable.ic_movie, stringResource(R.string.movies), actions::movies)
-                if (state.hasSeries) IconAction(R.drawable.ic_series, stringResource(R.string.series), actions::series)
+            Image(painterResource(R.drawable.logo), null, Modifier.size(34.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Faznet", color = Fz.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(12.dp))
+            PlaylistPill(state, actions, Modifier.widthIn(max = 260.dp))
+            Spacer(Modifier.width(8.dp))
+            SearchPill(state, actions, Modifier.weight(1f))
+            state.updateVersion?.let { v ->
+                Spacer(Modifier.width(8.dp))
+                UpdateButton(v, actions, Modifier)
             }
-            IconAction(R.drawable.ic_device, stringResource(R.string.device_title), actions::device)
-            IconAction(R.drawable.ic_refresh, stringResource(R.string.refresh), actions::refresh, onLongClick = { actions.debugPlaylist() })
-            IconAction(R.drawable.ic_settings, stringResource(R.string.settings), actions::settings)
+            Clock()
+            TopIcons(state, actions, Modifier.widthIn(max = 480.dp).horizontalScroll(rememberScrollState()))
         }
+    } else {
+        // A phone has no room for all of it in one row: search would shrink to an icon and Settings leave the screen.
+        Row(
+            Modifier.fillMaxWidth().height(56.dp).padding(start = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(painterResource(R.drawable.logo), null, Modifier.size(34.dp))
+            Spacer(Modifier.weight(1f))
+            TopIcons(state, actions, Modifier.horizontalScroll(rememberScrollState()))
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PlaylistPill(state, actions, Modifier.widthIn(max = 150.dp))
+            Spacer(Modifier.width(8.dp))
+            SearchPill(state, actions, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun PlaylistPill(state: HomeState, actions: HomeActions, modifier: Modifier) {
+    FocusBox(
+        onClick = { actions.playlists() },
+        modifier = modifier.height(42.dp),
+        shape = RoundedCornerShape(21.dp),
+    ) { focused ->
+        Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_playlist), null, tint = if (focused) Color.White else Fz.accent, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(state.playlistName.ifEmpty { stringResource(R.string.add_playlist) }, color = Fz.text, fontSize = 14.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun SearchPill(state: HomeState, actions: HomeActions, modifier: Modifier) {
+    FocusBox(
+        onClick = { actions.search() },
+        modifier = modifier.height(42.dp),
+        shape = RoundedCornerShape(21.dp),
+    ) { focused ->
+        Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_search), null, tint = if (focused) Color.White else Fz.dim, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                state.query.ifEmpty { stringResource(R.string.search_hint) },
+                color = if (state.query.isEmpty() && !focused) Fz.dim else Fz.text, fontSize = 14.sp, maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopIcons(state: HomeState, actions: HomeActions, modifier: Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (state.xtream) {
+            IconAction(R.drawable.ic_guide, stringResource(R.string.guide), actions::guide)
+            if (state.hasMovies) IconAction(R.drawable.ic_movie, stringResource(R.string.movies), actions::movies)
+            if (state.hasSeries) IconAction(R.drawable.ic_series, stringResource(R.string.series), actions::series)
+        }
+        IconAction(R.drawable.ic_device, stringResource(R.string.device_title), actions::device)
+        IconAction(R.drawable.ic_refresh, stringResource(R.string.refresh), actions::refresh, onLongClick = { actions.debugPlaylist() })
+        IconAction(R.drawable.ic_settings, stringResource(R.string.settings), actions::settings)
     }
 }
 

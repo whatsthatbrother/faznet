@@ -2,6 +2,7 @@ package com.faznet.tv.ui
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -56,16 +57,17 @@ class LibraryActivity : AppCompatActivity() {
         search = findViewById(R.id.libSearch)
         search.doAfterTextChanged { applyFilter() }
 
-        categories = GroupAdapter(horizontal = false, selectOnFocus = true, onSelect = { key, fromClick -> loadItems(key, fromClick) })
+        val portrait = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        categories = GroupAdapter(horizontal = portrait, selectOnFocus = !portrait, onSelect = { key, fromClick -> loadItems(key, fromClick) })
         findViewById<RecyclerView>(R.id.libCategories).apply {
-            layoutManager = LinearLayoutManager(this@LibraryActivity)
+            layoutManager = LinearLayoutManager(this@LibraryActivity, if (portrait) RecyclerView.HORIZONTAL else RecyclerView.VERTICAL, false)
             adapter = categories
             itemAnimator = null
         }
         grid = PosterAdapter()
-        val widthDp = resources.configuration.screenWidthDp - 260
+        val widthDp = resources.configuration.screenWidthDp - if (portrait) 20 else 260
         findViewById<RecyclerView>(R.id.libItems).apply {
-            layoutManager = GridLayoutManager(this@LibraryActivity, (widthDp / 150).coerceIn(2, 8))
+            layoutManager = GridLayoutManager(this@LibraryActivity, (widthDp / 120).coerceIn(2, 8))
             adapter = grid
             itemAnimator = null
         }

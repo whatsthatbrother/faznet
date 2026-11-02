@@ -172,3 +172,58 @@ class ChannelRepositoryTest {
         assertEquals("Late 1", channels.lastChannel(p, open)?.name)
     }
 }
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [34])
+class ChannelPagesTest {
+
+    private lateinit var db: FaznetDatabase
+
+    @Before
+    fun open() {
+        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), FaznetDatabase::class.java).allowMainThreadQueries().build()
+    }
+
+    @After
+    fun close() = db.close()
+
+    private fun channels(n: Int) = (1..n).map { Channel(it, "C$it", "http://a.test/$it.ts", null, "G", null, null) }
+
+    private fun pages(n: Int) = ChannelPages(db, ChannelScope.Fixed(channels(n)))
+
+    @Test
+    fun aChannelIsThereOnlyAfterItsPageWasRead() = runBlocking {
+        val list = pages(500)
+        assertEquals(500, list.size)
+        assertNull(list.peek(130))
+        assertEquals("C131", list.get(130)?.name)
+        assertEquals("C131", list.peek(130)?.name)
+        assertEquals("the same page", "C121", list.peek(120)?.name)
+        assertNull("the next page", list.peek(180))
+    }
+
+    @Test
+    fun placesOutsideTheListAreEmpty() = runBlocking {
+        val list = pages(10)
+        assertNull(list.get(-1))
+        assertNull(list.get(10))
+        assertEquals("C10", list.get(9)?.name)
+    }
+
+    @Test
+    fun onlyPagesNearWhereItIsStayInMemory() = runBlocking {
+        val list = pages(ChannelPages.PAGE * 40)
+        for (p in 0 until 40) list.get(p * ChannelPages.PAGE)
+        assertNull("the oldest went away", list.peek(0))
+        assertEquals("the newest stayed", "C${39 * ChannelPages.PAGE + 1}", list.peek(39 * ChannelPages.PAGE)?.name)
+        assertEquals("it can be read again", "C1", list.get(0)?.name)
+    }
+
+    @Test
+    fun theLastPlaceOfAChannelIsFound() = runBlocking {
+        val all = channels(300)
+        val list = ChannelPages(db, ChannelScope.Fixed(all))
+        assertEquals(250, list.indexOf(all[250]))
+        assertNull(list.indexOf(channels(301).last()))
+    }
+}

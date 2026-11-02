@@ -14,8 +14,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
+import com.faznet.tv.data.ChannelPages
 import com.faznet.tv.data.ChannelRepository
-import com.faznet.tv.data.ChannelScope
 import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.Repository
 import com.faznet.tv.data.XProgramme
@@ -39,7 +39,7 @@ class GuideActivity : AppCompatActivity() {
     @Inject lateinit var channelRepo: ChannelRepository
 
     private lateinit var account: XtreamAccount
-    private var channels: List<Channel> = emptyList()
+    private var channels: ChannelPages? = null
     private lateinit var progAdapter: ProgrammeAdapter
     private lateinit var progress: View
     private lateinit var empty: TextView
@@ -65,8 +65,8 @@ class GuideActivity : AppCompatActivity() {
         empty = findViewById(R.id.guideEmpty)
         title = findViewById(R.id.guideChannel)
 
-        val chAdapter = OverlayChannelAdapter { pos -> showChannel(pos) }
-        findViewById<RecyclerView>(R.id.guideChannels).apply {
+        val chAdapter = OverlayChannelAdapter(lifecycleScope) { pos -> showChannel(pos) }
+        val rvChannels = findViewById<RecyclerView>(R.id.guideChannels).apply {
             layoutManager = LinearLayoutManager(this@GuideActivity)
             adapter = chAdapter
             itemAnimator = null
@@ -78,20 +78,27 @@ class GuideActivity : AppCompatActivity() {
         rvProg.itemAnimator = null
 
         lifecycleScope.launch {
-            channelRepo.activeList(playlistId)?.let { listId ->
-                channels = channelRepo.channelsOf(channelRepo.listView(listId).all()).filter { XtreamAccount.liveStreamId(it.url) != null }
+            val list = channelRepo.activeList(playlistId)?.let { channelRepo.pagesOf(channelRepo.listView(it).all()) }
+            channels = list
+            if (list == null || list.size == 0) {
+                empty.setText(R.string.guide_none)
+                empty.visibility = View.VISIBLE
+                return@launch
             }
-            chAdapter.submit(channels, null)
+            val last = ChannelStore.lastPlayed
+            chAdapter.submit(list, last?.url)
+            val start = last?.let { list.indexOf(it) } ?: 0
+            (rvChannels.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(start, 0)
+            list.get(start)
             serverTz = XtreamApi.serverTimeZone(account)
             archive = XtreamApi.archiveDays(account)
-            val start = channels.indexOfFirst { it.url == ChannelStore.lastPlayed?.url }.coerceAtLeast(0)
-            if (channels.isNotEmpty()) showChannel(start)
-            else { empty.setText(R.string.guide_none); empty.visibility = View.VISIBLE }
+            showChannel(start)
         }
     }
 
     private fun showChannel(pos: Int) {
-        val ch = channels.getOrNull(pos) ?: return
+        val list = channels ?: return
+        val ch = list.peek(pos) ?: return
         val id = XtreamAccount.liveStreamId(ch.url) ?: return
         title.text = ch.name + if (archive.containsKey(id)) "  ·  " + getString(R.string.catchup_days, archive[id]) else ""
         job?.cancel()
@@ -114,7 +121,8 @@ class GuideActivity : AppCompatActivity() {
         when {
             p.start <= now && now < p.end -> {
                 // On air: the live channel
-                ChannelStore.start(playlistId, ch, ChannelScope.Fixed(channels), null, getString(R.string.group_all))
+                val list = channels ?: return
+                ChannelStore.start(playlistId, ch, list.scope, null, getString(R.string.group_all))
                 startActivity(Intent(this, PlayerActivity::class.java))
             }
             p.end <= now && (p.hasArchive || archive.containsKey(streamId)) ->

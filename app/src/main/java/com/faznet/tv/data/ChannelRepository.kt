@@ -118,7 +118,9 @@ class ChannelRepository @Inject constructor(
             pagingSourceFactory = { ChannelPagingSource(db, scope) },
         ).flow
 
-    /** A whole list, for what still works on lists: the player's channel list and checking a group. */
+    fun pagesOf(scope: ChannelScope) = ChannelPages(db, scope)
+
+    /** A whole list, for what needs all of it at once: checking a group. */
     suspend fun channelsOf(scope: ChannelScope): List<Channel> = withContext(Dispatchers.IO) {
         val out = ArrayList<Channel>(scope.size)
         while (out.size < scope.size) {

@@ -1,5 +1,7 @@
 package com.faznet.tv.ui
 
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -41,8 +43,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.faznet.tv.Perf
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
+import com.faznet.tv.data.ChannelPages
 import com.faznet.tv.data.ChannelRepository
-import com.faznet.tv.data.ChannelScope
 import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.ChannelMemory
 import com.faznet.tv.data.EnginePrefs
@@ -61,6 +63,7 @@ import com.faznet.tv.player.VlcEngine
 import com.faznet.tv.player.VlcWatch
 import org.videolan.libvlc.util.VLCVideoLayout
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -72,10 +75,8 @@ class PlayerActivity : AppCompatActivity() {
 
     @Inject lateinit var channelRepo: ChannelRepository
 
-    /** A browsable group in the in-player channel list; its channels are read when they are first needed. */
-    private class Group(val key: String?, val title: String, val scope: ChannelScope) {
-        var channels: List<Channel>? = null
-    }
+    /** A browsable group in the in-player channel list. */
+    private class Group(val key: String?, val title: String, val pages: ChannelPages)
 
     private lateinit var repo: Repository
     private lateinit var playerView: PlayerView
@@ -117,7 +118,10 @@ class PlayerActivity : AppCompatActivity() {
     private var playGroup = 0
     /** Group shown in the channel list (may differ while browsing with Left/Right). */
     private var listGroupIndex = 0
-    private var channels: List<Channel> = emptyList()
+    /** The list Up/Down moves through. */
+    private lateinit var zapList: ChannelPages
+    private var current: Channel? = null
+    /** Place of [current] in [zapList]. */
     private var index = 0
     private var forceHls = false
     private var retries = 0
@@ -144,8 +148,12 @@ class PlayerActivity : AppCompatActivity() {
     private var pendingZap = -1
     private val zapCommit = Runnable {
         val i = pendingZap
-        pendingZap = -1
-        if (i >= 0) play(i)
+        if (i >= 0) lifecycleScope.launch {
+            val ch = zapList.get(i)
+            if (pendingZap != i) return@launch
+            pendingZap = -1
+            ch?.let { play(it, i) }
+        }
     }
 
     /** Wi-Fi/network came back: re-open a channel that was stuck or failed instead of waiting for the watchdog. */
@@ -223,6 +231,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!isTv()) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         setContentView(R.layout.activity_player)
         repo = Repository.get(this)
 
@@ -230,8 +239,9 @@ class PlayerActivity : AppCompatActivity() {
         val startScope = ChannelStore.scope
         if (startChannel == null || startScope == null) { finish(); return }
         // The channel opens at once; the list it belongs to follows from the database (see loadLists).
-        groups = listOf(Group(ChannelStore.groupKey, ChannelStore.groupTitle, startScope))
-        channels = listOf(startChannel)
+        zapList = channelRepo.pagesOf(startScope)
+        groups = listOf(Group(ChannelStore.groupKey, ChannelStore.groupTitle, zapList))
+        current = startChannel
         index = 0
 
         playerView = findViewById(R.id.playerView)
@@ -260,7 +270,7 @@ class PlayerActivity : AppCompatActivity() {
         playerView.useController = false
         playerView.resizeMode = aspectModes[repo.aspectMode.coerceIn(0, aspectModes.size - 1)]
 
-        listAdapter = OverlayChannelAdapter { pos -> onListPick(pos) }
+        listAdapter = OverlayChannelAdapter(lifecycleScope) { pos -> onListPick(pos) }
         listChannels.layoutManager = LinearLayoutManager(this)
         listChannels.adapter = listAdapter
         listChannels.itemAnimator = null
@@ -282,9 +292,9 @@ class PlayerActivity : AppCompatActivity() {
             val wasVlc = vlc != null
             repo.useVlc = !wasVlc
             // The user chose: forget what the app had learned for this channel.
-            channels.getOrNull(index)?.let { EnginePrefs.setOverride(this, it.url, null) }
+            current?.let { EnginePrefs.setOverride(this, it.url, null) }
             toast(getString(R.string.engine_now, if (repo.useVlc) "VLC" else "ExoPlayer"))
-            channels.getOrNull(index)?.let { play(index) }
+            current?.let { play(it, index) }
         }
 
         gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
@@ -324,14 +334,13 @@ class PlayerActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         // Restart in the group being watched, at the channel being watched.
         val group = groups.getOrNull(playGroup) ?: return
-        val ch = channels.getOrNull(index) ?: return
-        ChannelStore.start(ChannelStore.playlistId, ch, group.scope, group.key, group.title)
+        val ch = current ?: return
+        ChannelStore.start(ChannelStore.playlistId, ch, group.pages.scope, group.key, group.title)
     }
 
     override fun onStart() {
         super.onStart()
-        if (channels.isEmpty()) return
-        play(index)
+        play(current ?: return, index)
         runCatching {
             (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).registerNetworkCallback(
                 NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), netCallback
@@ -351,6 +360,11 @@ class PlayerActivity : AppCompatActivity() {
         PlayerFactory.freeBuffers()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        sizeListPanel()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemUi()
@@ -368,6 +382,7 @@ class PlayerActivity : AppCompatActivity() {
 
     /** Becomes true when the list the channel was opened from is here: only then the next channel is known. */
     private var listReady = false
+    private var listView: ChannelRepository.ListView? = null
     private val playlist by lazy { repo.playlists().firstOrNull { it.id == ChannelStore.playlistId } }
 
     /**
@@ -377,21 +392,16 @@ class PlayerActivity : AppCompatActivity() {
     private fun loadLists() {
         lifecycleScope.launch {
             val first = groups[0]
-            val list = Perf.measure("player.list") { channelRepo.channelsOf(first.scope) }
-            first.channels = list
-            val at = channels.getOrNull(index)?.let { playing -> list.indexOfFirst { it.url == playing.url } } ?: -1
-            if (at >= 0) {
-                channels = list
-                index = at
-            }
+            Perf.measure("player.list") { current?.let { first.pages.indexOf(it) } }?.let { index = it }
             listReady = true
             val p = playlist ?: return@launch
             val view = channelRepo.listView(channelRepo.activeList(p.id) ?: return@launch)
+            listView = view
             val all = ArrayList<Group>(view.groups.size + 3)
-            all.add(Group(MainActivity.KEY_ALL, getString(R.string.group_all), view.all()))
-            view.favorites(p).takeIf { it.size > 0 }?.let { all.add(Group(MainActivity.KEY_FAV, getString(R.string.group_favorites), it)) }
-            view.recents(p).takeIf { it.size > 0 }?.let { all.add(Group(MainActivity.KEY_RECENT, getString(R.string.group_recent), it)) }
-            for (g in view.openGroups) view.group(g.name)?.let { all.add(Group(g.name, g.name, it)) }
+            all.add(Group(MainActivity.KEY_ALL, getString(R.string.group_all), channelRepo.pagesOf(view.all())))
+            view.favorites(p).takeIf { it.size > 0 }?.let { all.add(Group(MainActivity.KEY_FAV, getString(R.string.group_favorites), channelRepo.pagesOf(it))) }
+            view.recents(p).takeIf { it.size > 0 }?.let { all.add(Group(MainActivity.KEY_RECENT, getString(R.string.group_recent), channelRepo.pagesOf(it))) }
+            for (g in view.openGroups) view.group(g.name)?.let { all.add(Group(g.name, g.name, channelRepo.pagesOf(it))) }
             // The first group stays what it is; one that is no group (search results) goes in front.
             val same = if (first.key == null) -1 else all.indexOfFirst { it.key == first.key }
             if (same >= 0) all[same] = first else all.add(0, first)
@@ -438,7 +448,7 @@ class PlayerActivity : AppCompatActivity() {
     private var openCount = 0
 
     private fun logOpen() {
-        val ch = channels.getOrNull(index) ?: return
+        val ch = current ?: return
         val now = Perf.now()
         val press = if (openPressAt != 0L) openPressAt else openAt
         fun after(t: Long) = if (t == 0L) -1 else t - openAt
@@ -456,7 +466,7 @@ class PlayerActivity : AppCompatActivity() {
         logOpen()
         revealed = true
         // The other engine plays this channel: use it for this channel from now on.
-        forcedEngine?.let { e -> channels.getOrNull(index)?.let { EnginePrefs.setOverride(this, it.url, e) } }
+        forcedEngine?.let { e -> current?.let { EnginePrefs.setOverride(this, it.url, e) } }
         playerView.alpha = 1f
         vlcLayout.alpha = 1f
         player?.volume = 1f
@@ -468,7 +478,7 @@ class PlayerActivity : AppCompatActivity() {
     private var trace: com.faznet.tv.player.PlayerTrace? = null
 
     private fun initPlayer() {
-        softwareVideo = wantsSoftwareVideo(channels.getOrNull(index))
+        softwareVideo = wantsSoftwareVideo(current)
         val p = PlayerFactory.create(this, repo.useFfmpeg, tunneling = false, softwareVideo = softwareVideo)
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -499,7 +509,7 @@ class PlayerActivity : AppCompatActivity() {
                             pbStart.visibility = View.GONE
                             tvError.text = getString(R.string.err_stream, "ENDED")
                             tvError.visibility = View.VISIBLE
-                            channels.getOrNull(index)?.let { ProblemLog.add(this@PlayerActivity, it.name, "stream ended $MAX_RETRIES times") }
+                            current?.let { ProblemLog.add(this@PlayerActivity, it.name, "stream ended $MAX_RETRIES times") }
                         }
                     }
                     else -> exoWatch.onNotReady()
@@ -521,7 +531,7 @@ class PlayerActivity : AppCompatActivity() {
                 videoDecoder = decoderName
             }
             override fun onVideoInputFormatChanged(t: AnalyticsListener.EventTime, format: androidx.media3.common.Format, decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?) {
-                channels.getOrNull(index)?.let { ChannelMemory.rememberHeight(this@PlayerActivity, it.url, format.height) }
+                current?.let { ChannelMemory.rememberHeight(this@PlayerActivity, it.url, format.height) }
             }
             override fun onAudioDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
                 audioDecoder = decoderName
@@ -541,7 +551,7 @@ class PlayerActivity : AppCompatActivity() {
         if (com.faznet.tv.BuildConfig.DEBUG) p.addAnalyticsListener(EventLogger("FaznetPlayer"))
         if (com.faznet.tv.BuildConfig.PLAYER_TRACE) {
             trace?.stop()
-            trace = com.faznet.tv.player.PlayerTrace(p, handler, channels.getOrNull(index)?.let { "${it.number} ${it.name}" } ?: "")
+            trace = com.faznet.tv.player.PlayerTrace(p, handler, current?.let { "${it.number} ${it.name}" } ?: "")
         }
         p.setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
             if (lastFramePtsUs >= 0) frameIntervalUs = presentationTimeUs - lastFramePtsUs
@@ -558,7 +568,7 @@ class PlayerActivity : AppCompatActivity() {
                 if (playWhenReady || player !== p) return
                 // Paused by the system anyway (audio focus, a remote, …): open the channel again at the live edge,
                 // since the picture in the buffer is old by now.
-                channels.getOrNull(index)?.let { ProblemLog.add(this@PlayerActivity, it.name, "paused by the system ($reason) → re-open") }
+                current?.let { ProblemLog.add(this@PlayerActivity, it.name, "paused by the system ($reason) → re-open") }
                 handler.post { if (player === p) { freshPlayer(); startCurrent() } }
             }
         })
@@ -567,12 +577,13 @@ class PlayerActivity : AppCompatActivity() {
         player = p
     }
 
-    private fun play(i: Int) {
+    private fun play(ch: Channel, i: Int) {
         openAt = Perf.now()
         openCount = 0
         handler.removeCallbacks(zapCommit)
         pendingZap = -1
         index = i
+        current = ch
         forceHls = false
         retries = 0
         httpRetries = 0
@@ -582,7 +593,6 @@ class PlayerActivity : AppCompatActivity() {
         progressWatch.reset(SystemClock.elapsedRealtime())
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
-        val ch = channels[index]
         ChannelStore.lastPlayed = ch
         stallCount = 0
         underruns = 0
@@ -603,12 +613,16 @@ class PlayerActivity : AppCompatActivity() {
 
     /** Resolve the servers of the previous/next channels in advance, so zapping to them starts sooner. */
     private fun warmNeighbours() {
-        val n = channels.size
+        val list = zapList
+        val n = list.size
         if (n < 2) return
-        val hosts = listOf(channels[(index + 1) % n], channels[(index - 1 + n) % n])
-            .mapNotNull { runCatching { java.net.URI(it.url).host }.getOrNull() }.distinct()
-        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            hosts.forEach { h -> runCatching { java.net.InetAddress.getAllByName(h) } }
+        val at = index
+        lifecycleScope.launch {
+            val hosts = listOfNotNull(list.get((at + 1) % n), list.get((at - 1 + n) % n))
+                .mapNotNull { runCatching { java.net.URI(it.url).host }.getOrNull() }.distinct()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                hosts.forEach { h -> runCatching { java.net.InetAddress.getAllByName(h) } }
+            }
         }
     }
 
@@ -640,7 +654,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun vlcFailed(what: String) {
-        val ch = channels.getOrNull(index) ?: return
+        val ch = current ?: return
         if (retries < MAX_RETRIES) {
             retries++
             handler.removeCallbacks(retry)
@@ -661,7 +675,7 @@ class PlayerActivity : AppCompatActivity() {
         val now = SystemClock.elapsedRealtime()
         if (!revealed && now - hiddenSince > MAX_HIDDEN_MS) reveal()
         if (pendingZap >= 0) return
-        val ch = channels.getOrNull(index) ?: return
+        val ch = current ?: return
         if (!vlcWatch.hasStarted) {
             if (vlcWatch.neverStarted(now)) vlcRecover(ch, VlcWatch.Problem.NO_START.text)
             return
@@ -707,10 +721,10 @@ class PlayerActivity : AppCompatActivity() {
      * keep using it for this channel. @return false when both engines were already tried.
      */
     private fun tryOtherEngine(why: String): Boolean {
-        val ch = channels.getOrNull(index) ?: return false
-        val current = if (vlc != null) EnginePrefs.VLC else EnginePrefs.EXO
-        val other = if (current == EnginePrefs.VLC) EnginePrefs.EXO else EnginePrefs.VLC
-        enginesTried.add(current)
+        val ch = current ?: return false
+        val engine = if (vlc != null) EnginePrefs.VLC else EnginePrefs.EXO
+        val other = if (engine == EnginePrefs.VLC) EnginePrefs.EXO else EnginePrefs.VLC
+        enginesTried.add(engine)
         if (other in enginesTried) return false
         enginesTried.add(other)
         // Only for this opening; it is remembered for the channel when the picture really comes (reveal()).
@@ -723,7 +737,7 @@ class PlayerActivity : AppCompatActivity() {
         showReconnecting()
         // Posted: this can be called from inside the old engine's own callbacks.
         handler.post {
-            if (channels.getOrNull(index)?.url != ch.url) return@post
+            if (current?.url != ch.url) return@post
             freshPlayer()
             startCurrent()
         }
@@ -745,7 +759,7 @@ class PlayerActivity : AppCompatActivity() {
         releaseEngines()
         videoDecoder = ""
         audioDecoder = ""
-        if (useVlcFor(channels.getOrNull(index))) {
+        if (useVlcFor(current)) {
             playerView.visibility = View.GONE
             vlcLayout.visibility = View.VISIBLE
             vlc = VlcEngine(this, vlcLayout, vlcListener).also { it.setScale(repo.aspectMode) }
@@ -764,7 +778,7 @@ class PlayerActivity : AppCompatActivity() {
         openReadyAt = 0L
         openFrameAt = 0L
         vlc?.let { v ->
-            val ch = channels[index]
+            val ch = current ?: return
             tvError.visibility = View.GONE
             hideUntilStable()
             handler.removeCallbacks(vlcReveal)
@@ -774,7 +788,7 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
         val p = player ?: return
-        val ch = channels[index]
+        val ch = current ?: return
         val token = ++playToken
         tvError.visibility = View.GONE
         exoWatch.onOpen()
@@ -803,7 +817,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun hardWatch(pos: Long, frames: Long): Boolean {
         val now = SystemClock.elapsedRealtime()
         val waited = progressWatch.check(now, pos, frames, revealed, pendingZap >= 0) ?: return false
-        val ch = channels.getOrNull(index) ?: return false
+        val ch = current ?: return false
         ProblemLog.add(this, ch.name, "no progress for ${waited / 1000} s → re-open")
         lastWarning = "watchdog re-open"
         retries = 0
@@ -850,17 +864,17 @@ class PlayerActivity : AppCompatActivity() {
         val reason = problem.reason
         // The numbers say what really happened; they reach the developer with the problem log.
         val detail = "wedged=${problem.wedged} in=${counters?.queuedInputBufferCount} out=$rendered behind=${problem.behindMs} buf=${p.totalBufferedDuration}"
-        Perf.log("freeze $reason $detail ch=${channels.getOrNull(index)?.number}")
+        Perf.log("freeze $reason $detail ch=${current?.number}")
         if (recoveries >= MAX_RECOVERIES) {
             tryOtherEngine("ExoPlayer: $reason")
             return
         }
         // No picture at all in strict key-frame mode: this stream probably never sends IDR frames.
-        if (problem.noPicture) channels.getOrNull(index)?.let { PlayerFactory.looseKeyframes.add(it.url) }
+        if (problem.noPicture) current?.let { PlayerFactory.looseKeyframes.add(it.url) }
         recoveries++
         totalRecoveries++
         lastWarning = "auto-fix: $reason"
-        channels.getOrNull(index)?.let { ch ->
+        current?.let { ch ->
             // A freeze right at the start says nothing about the channel, so don't switch decoders for it.
             if (!problem.atStart) ChannelMemory.addFix(this, ch.url)
             p.videoFormat?.let { ChannelMemory.rememberHeight(this, ch.url, it.height) }
@@ -886,7 +900,7 @@ class PlayerActivity : AppCompatActivity() {
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED -> if (!forceHls) {
                 // Extension-less URLs are often HLS: retry as HLS once and remember it
                 forceHls = true
-                channels.getOrNull(index)?.let { StreamProbe.remember(it.url, StreamType.HLS) }
+                current?.let { StreamProbe.remember(it.url, StreamType.HLS) }
                 startCurrent()
                 return
             }
@@ -910,7 +924,7 @@ class PlayerActivity : AppCompatActivity() {
             } else {
                 tvError.text = getString(R.string.err_refused, http)
                 pbStart.visibility = View.GONE
-                channels.getOrNull(index)?.let { ProblemLog.add(this, it.name, "refused by server (HTTP $http)") }
+                current?.let { ProblemLog.add(this, it.name, "refused by server (HTTP $http)") }
                 tvError.visibility = View.VISIBLE
             }
             return
@@ -929,7 +943,7 @@ class PlayerActivity : AppCompatActivity() {
         if (!network && tryOtherEngine("ExoPlayer: ${error.errorCodeName}")) return
         tvError.text = getString(R.string.err_stream, error.errorCodeName)
         pbStart.visibility = View.GONE
-        channels.getOrNull(index)?.let { ProblemLog.add(this, it.name, "error ${error.errorCodeName}") }
+        current?.let { ProblemLog.add(this, it.name, "error ${error.errorCodeName}") }
         tvError.visibility = View.VISIBLE
     }
 
@@ -971,7 +985,7 @@ class PlayerActivity : AppCompatActivity() {
                         })
                         append("\n")
                     }
-                    val keyMode = if (channels.getOrNull(index)?.url?.let { it in PlayerFactory.looseKeyframes } == true) "loose" else "IDR"
+                    val keyMode = if (current?.url?.let { it in PlayerFactory.looseKeyframes } == true) "loose" else "IDR"
                     append("Frames  $frames   Drops $dropped   Fixes $totalRecoveries   Start $keyMode\n")
                     if (counters != null) append("Late    skip ${counters.skippedOutputBufferCount}  toKey ${counters.droppedToKeyframeCount}  inDrop ${counters.droppedInputBufferCount}  maxRun ${counters.maxConsecutiveDroppedBufferCount}\n")
                     append("Stalls  ${(stallCount - 1).coerceAtLeast(0)}   Underruns $underruns\n")
@@ -1014,14 +1028,16 @@ class PlayerActivity : AppCompatActivity() {
      * presses stop. The old stream is stopped at once so the server sees a single connection.
      */
     private fun zap(delta: Int) {
-        if (channels.isEmpty() || !listReady) return
+        val n = zapList.size
+        if (n == 0 || !listReady) return
         openPressAt = Perf.now()
-        val n = channels.size
         val from = if (pendingZap >= 0) pendingZap else index
-        pendingZap = ((from + delta) % n + n) % n
-        val ch = channels[pendingZap]
-        showInfo(ch)
-        tvTitle.text = "${ch.number}. ${ch.name}"
+        val at = ((from + delta) % n + n) % n
+        pendingZap = at
+        zapList.peek(at)?.let(::showZapTarget) ?: lifecycleScope.launch {
+            val ch = zapList.get(at)
+            if (ch != null && pendingZap == at) showZapTarget(ch)
+        }
         handler.removeCallbacks(stallWatchdog)
         handler.removeCallbacks(retry)
         probeJob?.cancel()
@@ -1032,6 +1048,11 @@ class PlayerActivity : AppCompatActivity() {
         val now = Perf.now()
         handler.postDelayed(zapCommit, if (now - lastZapPressAt > ZAP_IDLE_MS) ZAP_FIRST_DELAY_MS else ZAP_DELAY_MS)
         lastZapPressAt = now
+    }
+
+    private fun showZapTarget(ch: Channel) {
+        showInfo(ch)
+        tvTitle.text = "${ch.number}. ${ch.name}"
     }
 
     private var lastZapPressAt = 0L
@@ -1115,7 +1136,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun toggleFavorite() {
-        val ch = channels.getOrNull(index) ?: return
+        val ch = current ?: return
         val p = playlist ?: return
         lifecycleScope.launch {
             val added = channelRepo.toggleFavorite(p, ch)
@@ -1125,7 +1146,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun updateFavIcon() {
-        val ch = channels.getOrNull(index) ?: return
+        val ch = current ?: return
         val p = playlist ?: return
         lifecycleScope.launch {
             val fav = channelRepo.isFavorite(p, ch)
@@ -1279,8 +1300,8 @@ class PlayerActivity : AppCompatActivity() {
         hideOptions()
         infoPanel.visibility = View.GONE
         listGroupIndex = playGroup
-        fillList(focusUrl = channels.getOrNull(index)?.url)
         listPanel.visibility = View.VISIBLE
+        fillList()
         bumpList()
     }
 
@@ -1300,29 +1321,24 @@ class PlayerActivity : AppCompatActivity() {
         if (groups.isEmpty()) return
         val n = groups.size
         listGroupIndex = ((listGroupIndex + delta) % n + n) % n
-        fillList(focusUrl = channels.getOrNull(index)?.url)
+        fillList()
         bumpList()
     }
 
-    private fun fillList(focusUrl: String?) {
+    private fun fillList() {
         val g = groups[listGroupIndex]
+        val ch = current
         listGroup.text = g.title
-        val list = g.channels
-        if (list == null) {
-            // Read when first needed: the groups of a big playlist would not all fit in memory.
-            listAdapter.submit(emptyList(), null)
-            listCount.text = ""
-            lifecycleScope.launch {
-                g.channels = channelRepo.channelsOf(g.scope)
-                if (groups.getOrNull(listGroupIndex) === g && listPanel.visibility == View.VISIBLE) fillList(focusUrl)
-            }
-            return
+        listCount.text = ""
+        listAdapter.submit(g.pages, ch?.url)
+        lifecycleScope.launch {
+            val pos = ch?.let { g.pages.indexOf(it) } ?: 0
+            val focused = g.pages.get(pos)
+            if (groups.getOrNull(listGroupIndex) !== g || listPanel.visibility != View.VISIBLE) return@launch
+            listCount.text = getString(R.string.list_count, pos + 1, g.pages.size)
+            focusListRow(pos)
+            showListEpg(focused)
         }
-        listAdapter.submit(list, channels.getOrNull(index)?.url)
-        val pos = focusUrl?.let { u -> list.indexOfFirst { it.url == u } }?.takeIf { it >= 0 } ?: 0
-        listCount.text = getString(R.string.list_count, pos + 1, list.size)
-        focusListRow(pos)
-        showListEpg(list.getOrNull(pos))
     }
 
     private fun focusListRow(pos: Int) {
@@ -1338,16 +1354,15 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun onListPick(pos: Int) {
         val g = groups[listGroupIndex]
-        val list = g.channels ?: return
-        val ch = list.getOrNull(pos) ?: return
-        if (listGroupIndex == playGroup && channels.getOrNull(index)?.url == ch.url) {
+        val ch = g.pages.peek(pos) ?: return
+        if (listGroupIndex == playGroup && current?.url == ch.url) {
             hideChannelList()
             return
         }
         playGroup = listGroupIndex
-        channels = list
+        zapList = g.pages
         hideChannelList()
-        play(pos)
+        play(ch, pos)
     }
 
     private fun onListFocusMoved() {
@@ -1355,7 +1370,7 @@ class PlayerActivity : AppCompatActivity() {
         val pos = listChannels.getChildAdapterPosition(focused)
         if (pos >= 0) {
             listCount.text = getString(R.string.list_count, pos + 1, listAdapter.itemCount)
-            showListEpg(groups.getOrNull(listGroupIndex)?.channels?.getOrNull(pos))
+            showListEpg(groups.getOrNull(listGroupIndex)?.pages?.peek(pos))
         }
     }
 
@@ -1376,25 +1391,26 @@ class PlayerActivity : AppCompatActivity() {
         numberBuffer = ""
         tvNumberEntry.visibility = View.GONE
         if (num == null) return
-        val i = channels.indexOfFirst { it.number == num }
-        if (i >= 0) {
-            play(i)
-            return
-        }
-        // Not in this group: channel numbers are those of the whole list.
-        val allIdx = groups.indexOfFirst { it.key == MainActivity.KEY_ALL }
-        val whole = groups.getOrNull(allIdx)
-        if (whole == null) {
-            toast(getString(R.string.channel_not_found, num))
-            return
-        }
         lifecycleScope.launch {
-            val all = whole.channels ?: channelRepo.channelsOf(whole.scope).also { whole.channels = it }
-            val at = all.indexOfFirst { it.number == num }
-            if (at >= 0) {
+            val view = listView
+            val ch = view?.let { v -> channelRepo.channelByNumber(v.listId, num, v.groups.associate { it.id to it.name }) }
+            if (ch == null) {
+                toast(getString(R.string.channel_not_found, num))
+                return@launch
+            }
+            val here = zapList.indexOf(ch)
+            if (here != null) {
+                play(ch, here)
+                return@launch
+            }
+            // Not in this group: channel numbers are those of the whole list.
+            val allIdx = groups.indexOfFirst { it.key == MainActivity.KEY_ALL }
+            val whole = groups.getOrNull(allIdx)
+            val at = whole?.let { it.pages.indexOf(ch) }
+            if (whole != null && at != null) {
                 playGroup = allIdx
-                channels = all
-                play(at)
+                zapList = whole.pages
+                play(ch, at)
             } else toast(getString(R.string.channel_not_found, num))
         }
     }
@@ -1459,7 +1475,7 @@ class PlayerActivity : AppCompatActivity() {
                 return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_GUIDE -> {
-                if (first) channels.getOrNull(index)?.let { showInfo(it) }; return true
+                if (first) current?.let { showInfo(it) }; return true
             }
             KeyEvent.KEYCODE_MENU -> {
                 if (first) showOptions(); return true
@@ -1522,24 +1538,37 @@ class PlayerActivity : AppCompatActivity() {
     }
 }
 
-/** Compact channel rows for the list over the picture. */
-internal class OverlayChannelAdapter(private val onPick: (Int) -> Unit) : RecyclerView.Adapter<OverlayChannelAdapter.VH>() {
+/** Compact channel rows for the list over the picture; the channels come a page at a time as the list reaches them. */
+internal class OverlayChannelAdapter(
+    private val scope: CoroutineScope,
+    private val onPick: (Int) -> Unit,
+) : RecyclerView.Adapter<OverlayChannelAdapter.VH>() {
 
-    private var items: List<Channel> = emptyList()
+    private var pages: ChannelPages? = null
     private var playingUrl: String? = null
+    private val reading = HashSet<Int>()
 
-    fun submit(list: List<Channel>, playing: String?) {
-        items = list
+    fun submit(list: ChannelPages, playing: String?) {
+        pages = list
         playingUrl = playing
+        reading.clear()
         notifyDataSetChanged()
     }
 
     fun setPlaying(url: String) {
-        val old = items.indexOfFirst { it.url == playingUrl }
         playingUrl = url
-        val now = items.indexOfFirst { it.url == url }
-        if (old >= 0) notifyItemChanged(old)
-        if (now >= 0) notifyItemChanged(now)
+        notifyDataSetChanged()
+    }
+
+    private fun read(list: ChannelPages, position: Int) {
+        val page = position / ChannelPages.PAGE
+        if (!reading.add(page)) return
+        scope.launch {
+            list.get(position)
+            if (pages !== list) return@launch
+            reading.remove(page)
+            notifyItemRangeChanged(page * ChannelPages.PAGE, ChannelPages.PAGE)
+        }
     }
 
     class VH(v: View) : RecyclerView.ViewHolder(v) {
@@ -1552,10 +1581,21 @@ internal class OverlayChannelAdapter(private val onPick: (Int) -> Unit) : Recycl
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         VH(LayoutInflater.from(parent.context).inflate(R.layout.item_overlay_channel, parent, false))
 
-    override fun getItemCount() = items.size
+    override fun getItemCount() = pages?.size ?: 0
 
     override fun onBindViewHolder(h: VH, position: Int) {
-        val ch = items[position]
+        val list = pages ?: return
+        val ch = list.peek(position)
+        if (ch == null) {
+            read(list, position)
+            h.number.text = (position + 1).toString()
+            h.name.text = ""
+            h.logo.setImageDrawable(null)
+            h.playing.visibility = View.GONE
+            h.itemView.isSelected = false
+            h.itemView.setOnClickListener(null)
+            return
+        }
         val isPlaying = ch.url == playingUrl
         h.number.text = ch.number.toString()
         h.name.text = ch.name
