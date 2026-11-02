@@ -59,8 +59,8 @@ class ChannelImporter(private val db: FaznetDatabase) {
                 g.count++
                 if (favorites.isNotEmpty() || watched.isNotEmpty()) {
                     val key = ChannelKeys.of(c.url, xtream)
-                    if (key in favorites) favoriteLinks.putIfAbsent(key, id)
-                    if (key in watched) historyLinks.putIfAbsent(key, id)
+                    if (key in favorites && key !in favoriteLinks) favoriteLinks[key] = id
+                    if (key in watched && key !in historyLinks) historyLinks[key] = id
                 }
                 if (batch.size >= BATCH) {
                     flush()

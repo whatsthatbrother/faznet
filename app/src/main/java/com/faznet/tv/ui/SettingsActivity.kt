@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.faznet.tv.BuildConfig
 import com.faznet.tv.R
+import com.faznet.tv.data.DbErrors
 import com.faznet.tv.data.Parental
 import com.faznet.tv.data.ProblemLog
 import com.faznet.tv.data.Reports
@@ -309,7 +310,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun chooseLockedGroups(pin: String) {
-        lifecycleScope.launch {
+        lifecycleScope.launch(DbErrors) {
             val listId = repo.activePlaylist()?.let { channelRepo.activeList(it.id) }
             val groups = listId?.let { channelRepo.listView(it).groups.map { g -> g.name } }.orEmpty()
             if (groups.isEmpty()) Toast.makeText(this@SettingsActivity, R.string.no_channels, Toast.LENGTH_SHORT).show()

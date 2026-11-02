@@ -2,6 +2,7 @@ package com.faznet.tv.ui
 
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.database.sqlite.SQLiteException
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -49,6 +50,7 @@ import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.ChannelMemory
 import com.faznet.tv.data.ProblemLog
 import com.faznet.tv.data.ChannelCheck
+import com.faznet.tv.data.DbErrors
 import com.faznet.tv.data.Epg
 import com.faznet.tv.data.Repository
 import com.faznet.tv.data.safeMessage
@@ -143,11 +145,11 @@ class PlayerActivity : AppCompatActivity() {
     private var pendingZap = -1
     private val zapCommit = Runnable {
         val i = pendingZap
-        if (i >= 0) lifecycleScope.launch {
+        if (i >= 0) lifecycleScope.launch(DbErrors) {
             val ch = zapList.get(i)
             if (pendingZap != i) return@launch
             pendingZap = -1
-            ch?.let { play(it, i) }
+            if (ch != null) play(ch, i) else listGone()
         }
     }
 
@@ -366,7 +368,7 @@ class PlayerActivity : AppCompatActivity() {
      * is already opening: on a TV stick this must not hold it up, whatever the size of the list.
      */
     private fun loadLists() {
-        lifecycleScope.launch {
+        lifecycleScope.launch(DbErrors) {
             val first = groups[0]
             Perf.measure("player.list") { current?.let { first.pages.indexOf(it) } }?.let { index = it }
             listReady = true
@@ -385,6 +387,26 @@ class PlayerActivity : AppCompatActivity() {
             groups = all
             playGroup = all.indexOf(first)
             listGroupIndex = all.indexOf(browsing).coerceAtLeast(0)
+        }
+    }
+
+    /**
+     * The next channel is not there: the list this screen holds has gone, and a newer one took its place. Zapping has
+     * stopped the player by then, so the channel opens again, and Up/Down go on in the whole of the new list.
+     */
+    private fun listGone() {
+        val ch = current ?: return
+        play(ch, index)
+        lifecycleScope.launch(DbErrors) {
+            val view = channelRepo.listView(channelRepo.activeList(ChannelStore.playlistId) ?: return@launch)
+            val pages = channelRepo.pagesOf(view.all())
+            if (pages.size == 0) return@launch
+            zapList = pages
+            groups = listOf(Group(MainActivity.KEY_ALL, getString(R.string.group_all), pages))
+            playGroup = 0
+            listGroupIndex = 0
+            index = (ch.number - 1).coerceIn(0, pages.size - 1)
+            loadLists()
         }
     }
 
@@ -578,7 +600,7 @@ class PlayerActivity : AppCompatActivity() {
         tvTitle.text = "${ch.number}. ${ch.name}"
         updateFavIcon()
         if (listPanel.visibility == View.VISIBLE) listAdapter.setPlaying(ch.url)
-        playlist?.let { p -> lifecycleScope.launch { channelRepo.markWatched(p, ch) } }
+        playlist?.let { p -> lifecycleScope.launch(DbErrors) { channelRepo.markWatched(p, ch) } }
     }
 
     /** Resolve the servers of the previous/next channels in advance, so zapping to them starts sooner. */
@@ -587,7 +609,7 @@ class PlayerActivity : AppCompatActivity() {
         val n = list.size
         if (n < 2) return
         val at = index
-        lifecycleScope.launch {
+        lifecycleScope.launch(DbErrors) {
             val hosts = listOfNotNull(list.get((at + 1) % n), list.get((at - 1 + n) % n))
                 .mapNotNull { runCatching { java.net.URI(it.url).host }.getOrNull() }.distinct()
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -850,7 +872,7 @@ class PlayerActivity : AppCompatActivity() {
         val from = if (pendingZap >= 0) pendingZap else index
         val at = ((from + delta) % n + n) % n
         pendingZap = at
-        zapList.peek(at)?.let(::showZapTarget) ?: lifecycleScope.launch {
+        zapList.peek(at)?.let(::showZapTarget) ?: lifecycleScope.launch(DbErrors) {
             val ch = zapList.get(at)
             if (ch != null && pendingZap == at) showZapTarget(ch)
         }
@@ -953,8 +975,13 @@ class PlayerActivity : AppCompatActivity() {
     private fun toggleFavorite() {
         val ch = current ?: return
         val p = playlist ?: return
-        lifecycleScope.launch {
-            val added = channelRepo.toggleFavorite(p, ch)
+        lifecycleScope.launch(DbErrors) {
+            val added = try {
+                channelRepo.toggleFavorite(p, ch)
+            } catch (e: SQLiteException) {
+                toast(getString(R.string.err_storage))
+                return@launch
+            }
             toast(getString(if (added) R.string.fav_added else R.string.fav_removed))
             updateFavIcon()
         }
@@ -963,7 +990,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun updateFavIcon() {
         val ch = current ?: return
         val p = playlist ?: return
-        lifecycleScope.launch {
+        lifecycleScope.launch(DbErrors) {
             val fav = channelRepo.isFavorite(p, ch)
             btnFav.setImageResource(if (fav) R.drawable.ic_star else R.drawable.ic_star_border)
         }
@@ -1120,7 +1147,7 @@ class PlayerActivity : AppCompatActivity() {
         listGroup.text = g.title
         listCount.text = ""
         listAdapter.submit(g.pages, ch?.url)
-        lifecycleScope.launch {
+        lifecycleScope.launch(DbErrors) {
             val pos = ch?.let { g.pages.indexOf(it) } ?: 0
             val focused = g.pages.get(pos)
             if (groups.getOrNull(listGroupIndex) !== g || listPanel.visibility != View.VISIBLE) return@launch
@@ -1180,7 +1207,7 @@ class PlayerActivity : AppCompatActivity() {
         numberBuffer = ""
         tvNumberEntry.visibility = View.GONE
         if (num == null) return
-        lifecycleScope.launch {
+        lifecycleScope.launch(DbErrors) {
             val view = listView
             val ch = view?.let { v -> channelRepo.channelByNumber(v.listId, num, v.groups.associate { it.id to it.name }) }
             if (ch == null) {

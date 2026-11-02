@@ -114,8 +114,9 @@ android {
         }
     }
 
+    // `gradlew lintDebug` before every release: an error here is a crash on some device (a call Android 6 does not have).
     lint {
-        abortOnError = false
+        abortOnError = true
         checkReleaseBuilds = false
     }
 

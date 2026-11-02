@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
+import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -83,42 +84,58 @@ object NetTest {
         Ping(avg, jitter, lost * 100 / count)
     }
 
-    /** Downloads for up to [maxMs] and returns Mbit/s (the first half second is warm-up and not counted). */
-    suspend fun speed(maxMs: Long = 6_000, onMbps: (Double) -> Unit = {}): Double? = withContext(Dispatchers.IO) {
-        runCatching {
-            val req = Request.Builder().url(SPEED_URL + "?t=" + System.currentTimeMillis()).header("Cache-Control", "no-cache").build()
-            Http.client.newCall(req).execute().use { r ->
-                val body = r.body ?: return@use null
-                if (!r.isSuccessful) return@use null
-                val input = body.byteStream()
-                val buf = ByteArray(64 * 1024)
-                val start = SystemClock.elapsedRealtime()
-                var countFrom = 0L
-                var bytes = 0L
-                var lastReport = start
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    val now = SystemClock.elapsedRealtime()
-                    if (now - start < 500) continue
-                    if (countFrom == 0L) countFrom = now
-                    bytes += n
-                    if (now - lastReport > 400 && now > countFrom) {
-                        lastReport = now
-                        val mbps = bytes * 8.0 / ((now - countFrom) / 1000.0) / 1_000_000
-                        withContext(Dispatchers.Main) { onMbps(mbps) }
+    /**
+     * Downloads for up to [maxMs] and returns Mbit/s (the first half second is warm-up and not counted). The file is only
+     * a few MB: a fast line would be done with it during the warm-up, so it is fetched again until the time is up, or
+     * until [maxBytes] were counted.
+     */
+    suspend fun speed(
+        maxMs: Long = 6_000,
+        url: String = SPEED_URL,
+        maxBytes: Long = 40L * 1024 * 1024,
+        clock: () -> Long = SystemClock::elapsedRealtime,
+        onMbps: (Double) -> Unit = {},
+    ): Double? = withContext(Dispatchers.IO) {
+        val start = clock()
+        var countFrom = 0L
+        var bytes = 0L
+        var lastReport = start
+        val buf = ByteArray(64 * 1024)
+        try {
+            while (clock() - start < maxMs && bytes < maxBytes) {
+                val req = Request.Builder().url(url + "?t=" + System.nanoTime()).header("Cache-Control", "no-cache").build()
+                Http.client.newCall(req).execute().use { r ->
+                    val body = r.body
+                    if (!r.isSuccessful || body == null) throw IOException("HTTP ${r.code}")
+                    val input = body.byteStream()
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        val now = clock()
+                        if (now - start < 500) continue
+                        if (countFrom == 0L) countFrom = now
+                        bytes += n
+                        if (now - lastReport > 400 && now > countFrom) {
+                            lastReport = now
+                            val mbps = bytes * 8.0 / ((now - countFrom) / 1000.0) / 1_000_000
+                            withContext(Dispatchers.Main) { onMbps(mbps) }
+                        }
+                        if (now - start > maxMs || bytes >= maxBytes) break
                     }
-                    if (now - start > maxMs) break
                 }
-                val secs = (SystemClock.elapsedRealtime() - countFrom) / 1000.0
-                if (countFrom == 0L || secs <= 0.2) null else bytes * 8.0 / secs / 1_000_000
             }
-        }.getOrNull()
+        } catch (e: IOException) {
+            // What was measured until then still says something.
+        }
+        val secs = (clock() - countFrom) / 1000.0
+        if (countFrom == 0L || secs <= 0.2) null else bytes * 8.0 / secs / 1_000_000
     }
 
     fun verdict(conn: Connection, ping: Ping?, mbps: Double?): Verdict = when {
         conn.link == Link.NONE -> Verdict.OFFLINE
-        ping == null || mbps == null -> Verdict.UNSTABLE
+        ping == null -> Verdict.UNSTABLE
+        // The test file could not be fetched: that is about the website, not about this line.
+        mbps == null -> if (ping.lossPct == 0 && (ping.jitterMs ?: 0) < 30 && (ping.avgMs ?: 0) < 150) Verdict.OK else Verdict.UNSTABLE
         ping.lossPct == 0 && (ping.jitterMs ?: 0) < 30 && (ping.avgMs ?: 0) < 150 && mbps >= 15 -> Verdict.STABLE
         ping.lossPct <= 10 && (ping.jitterMs ?: 0) < 70 && mbps >= 8 -> Verdict.OK
         else -> Verdict.UNSTABLE

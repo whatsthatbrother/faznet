@@ -17,6 +17,7 @@ import com.faznet.tv.data.Channel
 import com.faznet.tv.data.ChannelPages
 import com.faznet.tv.data.ChannelRepository
 import com.faznet.tv.data.ChannelStore
+import com.faznet.tv.data.DbErrors
 import com.faznet.tv.data.Repository
 import com.faznet.tv.data.XProgramme
 import com.faznet.tv.data.XtreamAccount
@@ -77,7 +78,7 @@ class GuideActivity : AppCompatActivity() {
         rvProg.adapter = progAdapter
         rvProg.itemAnimator = null
 
-        lifecycleScope.launch {
+        lifecycleScope.launch(DbErrors) {
             val list = channelRepo.activeList(playlistId)?.let { channelRepo.pagesOf(channelRepo.listView(it).all()) }
             channels = list
             if (list == null || list.size == 0) {

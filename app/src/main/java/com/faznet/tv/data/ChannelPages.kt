@@ -1,5 +1,6 @@
 package com.faznet.tv.data
 
+import android.database.sqlite.SQLiteException
 import com.faznet.tv.data.db.FaznetDatabase
 
 /**
@@ -24,11 +25,19 @@ class ChannelPages(private val db: FaznetDatabase, val scope: ChannelScope) {
     suspend fun get(i: Int): Channel? {
         if (i !in 0 until size) return null
         val page = i / PAGE
-        val rows = pages[page] ?: scope.read(db, page * PAGE, PAGE).also { pages[page] = it }
+        val rows = pages[page] ?: try {
+            scope.read(db, page * PAGE, PAGE).also { pages[page] = it }
+        } catch (e: SQLiteException) {
+            return null // not kept as read: it is asked for again next time
+        }
         return rows.getOrNull(i % PAGE)
     }
 
-    suspend fun indexOf(ch: Channel): Int? = scope.indexOf(db, ch)
+    suspend fun indexOf(ch: Channel): Int? = try {
+        scope.indexOf(db, ch)
+    } catch (e: SQLiteException) {
+        null
+    }
 
     companion object {
         const val PAGE = 60

@@ -1,5 +1,6 @@
 package com.faznet.tv.data
 
+import android.database.sqlite.SQLiteException
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import com.faznet.tv.data.db.ChannelEntity
@@ -91,7 +92,11 @@ class ChannelPagingSource(private val db: FaznetDatabase, private val scope: Cha
         // Asked for what lies before a position: read the page that ends there.
         val start = if (params is LoadParams.Prepend) (key - params.loadSize).coerceAtLeast(0) else key
         val end = if (params is LoadParams.Prepend) key else (key + params.loadSize).coerceAtMost(scope.size)
-        val page = if (start < end) scope.read(db, start, end - start) else emptyList()
+        val page = try {
+            if (start < end) scope.read(db, start, end - start) else emptyList()
+        } catch (e: SQLiteException) {
+            return LoadResult.Error(e)
+        }
         return LoadResult.Page(
             data = page,
             prevKey = start.takeIf { it > 0 },

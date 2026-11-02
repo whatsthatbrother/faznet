@@ -1,10 +1,23 @@
 package com.faznet.tv.data
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
+import com.faznet.tv.Perf
+import kotlinx.coroutines.CoroutineExceptionHandler
 import java.io.File
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+/**
+ * For the screens' coroutines that use the database: with the device's storage full or failing, a read or a save does
+ * not happen and the screen carries on without it. Anything else is a bug, and closes the app as it would without this.
+ */
+val DbErrors = CoroutineExceptionHandler { _, e ->
+    if (e is SQLiteException) Perf.log("database: ${e.javaClass.simpleName}")
+    else Thread.currentThread().let { it.uncaughtExceptionHandler?.uncaughtException(it, e) }
+}
 
 /**
  * What the app learned about each channel, kept across restarts:
@@ -65,14 +78,22 @@ object ProblemLog {
     @Synchronized
     fun add(c: Context, channel: String, what: String) {
         val f = file(c)
-        val lines = (if (f.exists()) f.readLines() else emptyList()).takeLast(MAX - 1)
-        val line = "${fmt.format(Date())}  ${channel.take(40)}  —  $what".replace('\n', ' ')
-        f.writeText((lines + line).joinToString("\n"))
+        try {
+            val lines = (if (f.exists()) f.readLines() else emptyList()).takeLast(MAX - 1)
+            val line = "${fmt.format(Date())}  ${channel.take(40)}  —  $what".replace('\n', ' ')
+            f.writeText((lines + line).joinToString("\n"))
+        } catch (e: IOException) {
+            return // the device's storage is full: not a reason to close the channel someone is watching
+        }
         Reports.problemAdded(c)
     }
 
     @Synchronized
-    fun read(c: Context): List<String> = file(c).let { if (it.exists()) it.readLines().reversed() else emptyList() }
+    fun read(c: Context): List<String> = try {
+        file(c).let { if (it.exists()) it.readLines().reversed() else emptyList() }
+    } catch (e: IOException) {
+        emptyList()
+    }
 
     @Synchronized
     fun clear(c: Context) {

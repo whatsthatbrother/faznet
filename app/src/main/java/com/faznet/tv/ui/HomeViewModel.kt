@@ -1,6 +1,7 @@
 package com.faznet.tv.ui
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
@@ -13,6 +14,7 @@ import com.faznet.tv.data.ChannelCheck
 import com.faznet.tv.data.ChannelRepository
 import com.faznet.tv.data.ChannelScope
 import com.faznet.tv.data.ChannelStore
+import com.faznet.tv.data.DbErrors
 import com.faznet.tv.data.Parental
 import com.faznet.tv.data.Playlist
 import com.faznet.tv.data.ProblemLog
@@ -160,7 +162,7 @@ class HomeViewModel @Inject constructor(
     fun locksChanged() {
         val p = playlist ?: return
         val listId = view?.listId ?: return
-        viewModelScope.launch { show(p, listId, keepSelection = true) }
+        viewModelScope.launch(DbErrors) { show(p, listId, keepSelection = true) }
     }
 
     private fun refreshState() {
@@ -203,7 +205,7 @@ class HomeViewModel @Inject constructor(
         if (!tv) return
         val ch = ChannelStore.lastPlayed ?: return
         val current = scope.value ?: return
-        viewModelScope.launch { channels.indexIn(current, ch)?.let { ui.focusIndex = it } }
+        viewModelScope.launch(DbErrors) { channels.indexIn(current, ch)?.let { ui.focusIndex = it } }
     }
 
     private fun load(p: Playlist, force: Boolean) {
@@ -211,7 +213,7 @@ class HomeViewModel @Inject constructor(
         refreshJob?.cancel()
         ui.empty = null
         ui.loading = true
-        loadJob = viewModelScope.launch {
+        loadJob = viewModelScope.launch(DbErrors) {
             try {
                 val result = Perf.measure("home.load") { channels.ensureList(p, force) }
                 Perf.log("home.channels ${result.channels}")
@@ -249,7 +251,7 @@ class HomeViewModel @Inject constructor(
 
     private fun refreshInBackground(p: Playlist) {
         refreshJob?.cancel()
-        refreshJob = viewModelScope.launch {
+        refreshJob = viewModelScope.launch(DbErrors) {
             val result = try {
                 channels.ensureList(p, forceRefresh(p), userAsked = false)
             } catch (e: CancellationException) {
@@ -293,7 +295,7 @@ class HomeViewModel @Inject constructor(
         if (!keepSelection) selectedGroup = KEY_ALL
         applySelection(keepScroll = keepSelection)
         observeJob?.cancel()
-        observeJob = viewModelScope.launch {
+        observeJob = viewModelScope.launch(DbErrors) {
             var first = true
             combine(channels.favoriteIds(p.id), channels.recentIds(p.id)) { f, r -> f to r }.collect { (favorites, recents) ->
                 ui.favIds = favorites.toHashSet()
@@ -335,7 +337,7 @@ class HomeViewModel @Inject constructor(
         selectedGroup = key
         ui.selectedGroup = key
         groupJob?.cancel()
-        groupJob = viewModelScope.launch {
+        groupJob = viewModelScope.launch(DbErrors) {
             // Remote moving over the groups: show the channels of the group it stops on, not of every group it passes.
             if (!fromClick) delay(GROUP_DELAY_MS)
             applySelection(keepScroll = false)
@@ -345,7 +347,7 @@ class HomeViewModel @Inject constructor(
     fun setQuery(text: String) {
         ui.query = text
         filterJob?.cancel()
-        filterJob = viewModelScope.launch {
+        filterJob = viewModelScope.launch(DbErrors) {
             // Typing: for the last letter only.
             if (text.isNotBlank()) delay(SEARCH_DELAY_MS)
             applySelection(keepScroll = false)
@@ -394,9 +396,14 @@ class HomeViewModel @Inject constructor(
 
     fun toggleFavorite(ch: Channel) {
         val p = playlist ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(DbErrors) {
             stepOffLastFavorite(ch)
-            val added = channels.toggleFavorite(p, ch)
+            val added = try {
+                channels.toggleFavorite(p, ch)
+            } catch (e: SQLiteException) {
+                events_.trySend(Event.Toast(context.getString(R.string.err_storage), long = true))
+                return@launch
+            }
             events_.trySend(Event.Toast(context.getString(if (added) R.string.fav_added else R.string.fav_removed)))
         }
     }
@@ -443,7 +450,7 @@ class HomeViewModel @Inject constructor(
     fun unlockedOpen(group: String) {
         val p = playlist ?: return
         val listId = view?.listId ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(DbErrors) {
             show(p, listId, keepSelection = true)
             selectGroup(group, true)
         }

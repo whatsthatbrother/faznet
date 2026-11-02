@@ -13,6 +13,7 @@
     <string name="no_channels">Nuk ka kanale këtu</string>
     <string name="err_load">Playlist-a nuk u ngarkua:\n%1$s</string>
     <string name="err_no_channels">Serveri nuk dërgoi asnjë kanal. Mund të ketë skaduar llogaria.</string>
+    <string name="err_storage">Nuk u ruajt: memoria e pajisjes është plot.</string>
     <string name="retry">Provo sërish</string>
     <string name="refresh">Rifresko</string>
     <string name="settings">Cilësimet</string>

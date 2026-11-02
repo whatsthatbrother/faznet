@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import com.faznet.tv.BuildConfig
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
+import com.faznet.tv.data.DbErrors
 import com.faznet.tv.data.Parental
 import com.faznet.tv.data.Playlist
 import com.faznet.tv.data.Repository
@@ -135,7 +136,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
 
     /** Long-press on a group: test its channels one by one and dim the ones that don't answer. */
     private fun confirmCheck(key: String) {
-        lifecycleScope.launch {
+        lifecycleScope.launch(DbErrors) {
             val (title, list) = vm.channelsForCheck(key) ?: return@launch
             if (list.isEmpty()) return@launch
             MaterialAlertDialogBuilder(this@MainActivity)
