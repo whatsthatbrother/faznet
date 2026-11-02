@@ -51,6 +51,14 @@ Done about it: the picture now appears at 10 frames, not 5. In a round of 18 cha
 start and stop. It costs clean channels about 0.2 s (1.25-1.3 s to picture); interlaced channels that freeze show after 2.8-3.2 s.
 Not tried yet: tunneling on interlaced channels only, the software decoder on them, vendor decoder parameters.
 
+On 2026-11-02 at about 20:28 the same channels showed **0 re-opens in 20** (11 and 14-17 among them) with nothing changed that
+touches the decoder, as at 15:41 the day before; at 22:41-23:58 and in the evening reports they froze at about 80%. So it does
+come in waves, also on interlaced channels, and something outside the app switches it. A fix can only be judged while it is on.
+
+Redmi Note 7 (Android 10, 174 838 channels), 2026-11-02: no freeze in about 15 openings; too few to say it never happens there.
+With pages the player reads its list in 0 ms instead of 2.2-4.1 s and holds 10-16 MB of Java heap instead of 70-86 MB.
+Stick, same day, 20 switches: median 1.5 s, worst 2.4 s (hiding until 10 pictures); list, groups, number entry, guide fine.
+
 ## Baseline: 4.0.3 on the Mi TV Stick, 2026-11-01
 
 Real playlist (5978 channels), Compose 1.7:
