@@ -1,6 +1,7 @@
 package com.faznet.tv.data.db
 
 import com.faznet.tv.data.M3uParser
+import java.io.IOException
 import java.io.InputStream
 
 /**
@@ -12,9 +13,13 @@ class ChannelImporter(private val db: FaznetDatabase) {
 
     class Result(val listId: Long, val channels: Int, val groups: Int)
 
+    /** Too few channels to take the place of a list: an empty answer from an expired account, a web page, a cut-off file. */
+    class ListRefused(val channels: Int) : IOException("A list of $channels channels")
+
     /**
      * Blocks: call it from a background thread.
      * @param xtream the playlist belongs to an Xtream account, see [ChannelKeys]
+     * @param minChannels with fewer than this the list already there stays, and this throws [ListRefused]
      * @param onProgress called now and then with the number of channels read so far
      */
     fun import(
@@ -25,6 +30,7 @@ class ChannelImporter(private val db: FaznetDatabase) {
         fingerprint: String?,
         sourceTag: String?,
         checkedAt: Long,
+        minChannels: Int = 1,
         onProgress: (Int) -> Unit = {},
     ): Result {
         val dao = db.imports()
@@ -67,6 +73,10 @@ class ChannelImporter(private val db: FaznetDatabase) {
             throw e
         }
         flush()
+        if (total < minChannels) {
+            deleteChannelsOf(listId)
+            throw ListRefused(total)
+        }
 
         val previous = dao.stateNow(playlistId)
         db.runInTransaction {

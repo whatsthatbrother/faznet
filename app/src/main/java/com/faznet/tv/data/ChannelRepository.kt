@@ -204,19 +204,21 @@ class ChannelRepository @Inject constructor(
      * Makes sure the playlist has a list: from the database when there is one (nothing to do, however big it is),
      * otherwise from the copy on the device or from the server. With [force] it asks the server, and imports only
      * if the server sent something new.
+     * @param userAsked the user wants this list now. Without that, a list much shorter than the one here is taken for a
+     * bad moment at the provider's or a cut-off file. An empty one is never taken.
      * @return the list, and whether it changed. A failed download throws and leaves the old list in place.
      */
-    suspend fun ensureList(p: Playlist, force: Boolean): ListResult {
+    suspend fun ensureList(p: Playlist, force: Boolean, userAsked: Boolean = force): ListResult {
         // A list that is there needs nothing, so it does not have to wait for another playlist's import.
         if (!force) {
             val state = library.stateNow(p.id)
             val list = state?.listId
             if (list != null && state.sourceTag == sourceTag(p)) return ListResult(list, state.channelCount, changed = false)
         }
-        return listLock.withLock { withContext(Dispatchers.IO) { bringUpToDate(p, force) } }
+        return listLock.withLock { withContext(Dispatchers.IO) { bringUpToDate(p, force, userAsked) } }
     }
 
-    private suspend fun CoroutineScope.bringUpToDate(p: Playlist, force: Boolean): ListResult {
+    private suspend fun CoroutineScope.bringUpToDate(p: Playlist, force: Boolean, userAsked: Boolean): ListResult {
         migrateFromPreferences(p)
         var state = library.stateNow(p.id)!!
         // The address or the account changed: the old list is another playlist's, favourites stay.
@@ -230,7 +232,7 @@ class ChannelRepository @Inject constructor(
 
         val file = repo.cacheFile(p.id)
         val url = p.m3uUrl()
-        if (url != null && (force || !file.exists() || file.length() == 0L)) repo.download(url, file)
+        if (url != null && (force || !file.exists() || file.length() == 0L)) repo.download(url, file) { ensureActive() }
         if (!file.exists()) throw java.io.IOException("Playlist file missing")
 
         val now = System.currentTimeMillis()
@@ -241,13 +243,14 @@ class ChannelRepository @Inject constructor(
             return ListResult(existing, state.channelCount, changed = false)
         }
 
+        val least = if (!userAsked && existing != null) maxOf(1, state.channelCount / 2) else 1
         importing.value = 0
         try {
             val result = Perf.measure("import") {
                 file.inputStream().use { input ->
                     importer.import(
                         p.id, input, context.getString(R.string.group_uncategorized), XtreamAccount.from(p) != null,
-                        fingerprint, tag, now,
+                        fingerprint, tag, now, least,
                     ) {
                         ensureActive() // another playlist was chosen: stop here, it would only have to wait
                         importing.value = it
@@ -259,6 +262,10 @@ class ChannelRepository @Inject constructor(
             if (url != null) file.delete()
             repo.deleteOldCopy(p.id)
             return ListResult(result.listId, result.channels, changed = true)
+        } catch (e: ChannelImporter.ListRefused) {
+            // Not kept: without a list yet, the next start would read this same answer again instead of asking the server.
+            if (url != null) file.delete()
+            throw e
         } finally {
             importing.value = null
         }

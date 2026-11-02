@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.faznet.tv.data.db.ChannelImporter
 import com.faznet.tv.data.db.FaznetDatabase
 import com.faznet.tv.data.db.ListIds
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -220,6 +222,34 @@ class ChannelRepositoryTest {
         assertEquals(100, rows(old.listId))
         channels.cleanUp()
         assertEquals("nothing of the stopped one stays", 100, db.imports().highestChannelId()!! - ListIds.base(old.listId))
+    }
+
+    @Test
+    fun aMuchShorterListIsTakenOnlyWhenTheUserAsksForIt() = runBlocking {
+        val p = filePlaylist(big(100))
+        val old = channels.ensureList(p, false)
+
+        repo.cacheFile("p").writeText(big(30))
+        try {
+            channels.ensureList(p, true, userAsked = false)
+            fail("a cut-off file or a bad moment at the provider's")
+        } catch (e: ChannelImporter.ListRefused) {
+            assertEquals(30, e.channels)
+        }
+        assertEquals(old.listId, db.library().stateNow("p")?.listId)
+        assertEquals("a file of the user's own stays", true, repo.cacheFile("p").exists())
+
+        val asked = channels.ensureList(p, true)
+        assertEquals("Refresh on the screen means it", 30, asked.channels)
+        assertEquals(asked.listId, db.library().stateNow("p")?.listId)
+    }
+
+    @Test
+    fun aListHalfAsLongIsStillAList() = runBlocking {
+        val p = filePlaylist(big(100))
+        channels.ensureList(p, false)
+        repo.cacheFile("p").writeText(big(50))
+        assertEquals(50, channels.ensureList(p, true, userAsked = false).channels)
     }
 
     @Test

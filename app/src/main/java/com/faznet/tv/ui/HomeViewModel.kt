@@ -15,10 +15,12 @@ import com.faznet.tv.data.ChannelScope
 import com.faznet.tv.data.ChannelStore
 import com.faznet.tv.data.Parental
 import com.faznet.tv.data.Playlist
+import com.faznet.tv.data.ProblemLog
 import com.faznet.tv.data.RemoteSync
 import com.faznet.tv.data.Repository
 import com.faznet.tv.data.XtreamAccount
 import com.faznet.tv.data.XtreamApi
+import com.faznet.tv.data.db.ChannelImporter
 import com.faznet.tv.data.safeMessage
 import com.faznet.tv.ui.compose.EmptyInfo
 import com.faznet.tv.ui.compose.HomeState
@@ -227,10 +229,11 @@ class HomeViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 ui.loading = false
+                val why = if (e is ChannelImporter.ListRefused) context.getString(R.string.err_no_channels) else e.safeMessage()
                 // Refresh failed (no internet, server down): keep showing the list on the device and say so.
                 val existing = if (force) channels.activeList(p.id) else null
                 if (existing != null) {
-                    events_.trySend(Event.Toast(context.getString(R.string.err_load, e.safeMessage()), long = true))
+                    events_.trySend(Event.Toast(context.getString(R.string.err_load, why), long = true))
                     if (loadedPlaylistId != p.id) show(p, existing, keepSelection = false)
                     return@launch
                 }
@@ -239,7 +242,7 @@ class HomeViewModel @Inject constructor(
                 observeJob?.cancel()
                 ui.groups = emptyList()
                 scope.value = ChannelScope.Fixed(emptyList())
-                ui.empty = EmptyInfo(p.name, context.getString(R.string.err_load, e.safeMessage()), context.getString(R.string.retry), { load(p, true) })
+                ui.empty = EmptyInfo(p.name, context.getString(R.string.err_load, why), context.getString(R.string.retry), { load(p, true) })
             }
         }
     }
@@ -247,7 +250,17 @@ class HomeViewModel @Inject constructor(
     private fun refreshInBackground(p: Playlist) {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
-            val result = try { channels.ensureList(p, forceRefresh(p)) } catch (e: CancellationException) { throw e } catch (e: Exception) { return@launch }
+            val result = try {
+                channels.ensureList(p, forceRefresh(p), userAsked = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ChannelImporter.ListRefused) {
+                // The list on the device stays, without bothering anyone; but it should be known.
+                ProblemLog.add(context, "Playlist", "refresh refused: ${e.channels} channels")
+                return@launch
+            } catch (e: Exception) {
+                return@launch
+            }
             if (playlist?.id != p.id || loadedPlaylistId != p.id || !result.changed) return@launch
             show(p, result.listId, keepSelection = true)
         }

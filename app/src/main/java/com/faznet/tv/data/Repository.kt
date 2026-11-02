@@ -94,8 +94,12 @@ class Repository private constructor(private val ctx: Context) {
             setRequestProperty("Accept", "*/*")
         }
 
-    /** Downloads to the side and swaps the file in when it is whole, so a failed download changes nothing. */
-    fun download(start: String, dest: File) {
+    /**
+     * Downloads to the side and swaps the file in when it is whole, so a failed download changes nothing. What does not
+     * begin like a playlist is dropped at once: the address of a channel never ends, and would fill the device.
+     * @param keepGoing called now and then, and throws when the download is no longer wanted
+     */
+    fun download(start: String, dest: File, maxBytes: Long = MAX_PLAYLIST_BYTES, keepGoing: () -> Unit = {}) {
         var url = start
         var conn = open(url)
         var redirects = 0
@@ -114,17 +118,40 @@ class Repository private constructor(private val ctx: Context) {
         }
         val tmp = File(dest.parentFile, dest.name + ".part")
         try {
-            conn.inputStream.use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
+            conn.inputStream.use { input ->
+                tmp.outputStream().use { output ->
+                    val head = ByteArray(256)
+                    var headSize = 0
+                    while (headSize < head.size) {
+                        val n = input.read(head, headSize, head.size - headSize)
+                        if (n < 0) break
+                        headSize += n
+                    }
+                    val start = String(head, 0, headSize)
+                    if (!start.contains("#EXT", ignoreCase = true) && !start.contains("://")) {
+                        throw IOException("Response is not an M3U playlist")
+                    }
+                    output.write(head, 0, headSize)
+                    var total = headSize.toLong()
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        keepGoing()
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        total += n
+                        if (total > maxBytes) throw IOException("Playlist too big")
+                        output.write(buffer, 0, n)
+                    }
+                    val expected = if (conn.contentEncoding == null) conn.contentLength else -1
+                    if (expected > 0 && total != expected.toLong()) throw IOException("Download cut off")
+                }
+            }
+            if (dest.exists()) dest.delete()
+            if (!tmp.renameTo(dest)) throw IOException("Cannot save playlist")
         } finally {
             conn.disconnect()
+            tmp.delete() // renamed by now if all went well
         }
-        val head = tmp.inputStream().use { s -> ByteArray(256).let { b -> String(b, 0, maxOf(0, s.read(b))) } }
-        if (!head.contains("#EXT", ignoreCase = true) && !head.contains("://")) {
-            tmp.delete()
-            throw IOException("Response is not an M3U playlist")
-        }
-        if (dest.exists()) dest.delete()
-        if (!tmp.renameTo(dest)) throw IOException("Cannot save playlist")
     }
 
     /** Replace the server-managed playlists with [remote]; local ones are kept. @return true if anything changed. */
@@ -258,6 +285,8 @@ class Repository private constructor(private val ctx: Context) {
 
     companion object {
         const val DEFAULT_UA = "Faznet/1.0 (Linux; Android)"
+        /** A list of 175 000 channels is about 40 MB. */
+        private const val MAX_PLAYLIST_BYTES = 500L * 1024 * 1024
         private const val KEY_PLAYLISTS = "playlists"
         private const val KEY_ACTIVE = "active"
         private const val KEY_UA = "user_agent"

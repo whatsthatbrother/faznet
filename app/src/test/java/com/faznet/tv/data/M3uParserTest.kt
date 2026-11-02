@@ -12,6 +12,38 @@ class M3uParserTest {
     private fun parse(text: String) = M3uParser.parse(text.byteInputStream(), "Other")
 
     @Test
+    fun linesThatAreNoAddressesAreNoChannels() {
+        assertEquals(0, parse("<html>\n<body>\nYour account has expired, see http://a.test\n</body>\n</html>\n").size)
+        assertEquals(0, parse("<!DOCTYPE html PUBLIC \"-//W3C//DTD//EN\" \"http://www.w3.org/TR/x.dtd\">\n").size)
+        assertEquals(0, parse("{\"user_info\":{\"auth\":0}}").size)
+        assertEquals(0, parse("://nothing\n1http://a.test\n").size)
+    }
+
+    @Test
+    fun aStrayLineDoesNotTakeTheNameOfTheNextChannel() {
+        val list = parse("#EXTINF:-1,Named\nnot an address\nhttp://a.test/1.ts\n")
+        assertEquals(listOf("Named"), list.map { it.name })
+        assertEquals(1, list[0].number)
+    }
+
+    @Test
+    fun everyKindOfAddressIsKept() {
+        val urls = listOf("http://a.test/1", "HTTPS://a.test/2", "rtmp://a.test/3", "rtsp://a.test/4", "udp://@239.0.0.1:1234", "rtp+x.y-z://a.test/5")
+        assertEquals(urls, parse(urls.joinToString("\n")).map { it.url })
+    }
+
+    @Test(expected = java.io.IOException::class)
+    fun aFileWithoutLineBreaksDoesNotTakeAllTheMemory() {
+        M3uParser.parse(object : InputStream() {
+            override fun read() = 'x'.code
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                b.fill('x'.code.toByte(), off, off + len)
+                return len
+            }
+        }, "Other") {}
+    }
+
+    @Test
     fun strayPercentInKodiOptionsKeepsTheWholePlaylist() {
         val list = parse(
             """
@@ -83,7 +115,7 @@ class M3uParserTest {
         "#EXTINF:-1 http-user-agent=\"U2\" referer=\"R2\",N\nhttp://a.test/1\n",
         "#EXTINF:-1 referrer=\"R3\" http-referer=\"R4\",N\nhttp://a.test/1\n",
         "#EXTINF:-1,N\nhttp://a.test/1|User-Agent=K&Referer=http%3A%2F%2Fr.test&Other=1\n",
-        "#EXTINF:-1,N\n|odd.ts\n",
+        "#EXTINF:-1,N\nhttp://a.test/odd.ts|\n",
         "#KODIPROP:x=y\n#EXTINF:-1,N\nhttp://a.test/1\n",
         "#EXTINF:-1,First\n#EXTINF:-1,Second wins\nhttp://a.test/1",
         "   #EXTINF:-1,Indented\n\t http://a.test/1  \n",

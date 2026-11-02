@@ -103,6 +103,48 @@ class ChannelImporterTest {
         assertEquals(1, db.imports().highestChannelId()!! - ListIds.base(first.listId))
     }
 
+    /** An expired account often answers with nothing but the header, and status 200. */
+    @Test
+    fun anEmptyAnswerLeavesTheListAndTheFavorites() = runBlocking {
+        val first = import(m3u("A" to "One", "B" to "One"), fingerprint = "1")
+        db.library().addFavorites(listOf(FavoriteEntity("p", "k", ListIds.base(first.listId) + 1, 1L)))
+        try {
+            import("#EXTM3U\n", fingerprint = "2")
+            fail("no channels: this must not take the old list's place")
+        } catch (e: ChannelImporter.ListRefused) {
+            assertEquals(0, e.channels)
+        }
+        assertEquals(first.listId, db.library().stateNow("p")?.listId)
+        assertEquals(2, db.channels().range(ListIds.base(first.listId), 1, 100).size)
+        assertEquals(ListIds.base(first.listId) + 1, db.library().favoritesNow("p")[0].channelId)
+    }
+
+    @Test
+    fun aWebPageIsNoList() = runBlocking {
+        val first = import(m3u("A" to "One"), fingerprint = "1")
+        val page = "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1.dtd\">\n<html>\n<body>\nYour account has expired\n</body>\n</html>\n"
+        try {
+            import(page, fingerprint = "2")
+            fail("a web page must not become channels")
+        } catch (e: ChannelImporter.ListRefused) {
+            assertEquals(0, e.channels)
+        }
+        assertEquals(first.listId, db.library().stateNow("p")?.listId)
+    }
+
+    @Test
+    fun aListBelowTheLimitIsRemovedAgain() = runBlocking {
+        val first = import(m3u("A" to "One", "B" to "One", "C" to "One", "D" to "One"), fingerprint = "1")
+        try {
+            importer.import("p", ByteArrayInputStream(m3u("X" to "One").toByteArray()), "Other", false, "2", "tag", 2L, minChannels = 2)
+            fail("too few")
+        } catch (e: ChannelImporter.ListRefused) {
+            assertEquals(1, e.channels)
+        }
+        assertEquals(first.listId, db.library().stateNow("p")?.listId)
+        assertEquals("nothing of it stays", ListIds.base(first.listId) + 4, db.imports().highestChannelId())
+    }
+
     @Test
     fun favoritesFollowTheChannelEvenWhenTheAccountChanges() = runBlocking {
         val key = ChannelKeys.of("http://a.test/live/olduser/oldpass/777.ts", xtream = true)

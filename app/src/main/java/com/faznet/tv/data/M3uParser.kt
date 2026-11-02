@@ -40,11 +40,17 @@ object M3uParser {
                 len -= start
                 System.arraycopy(buf, start, buf, 0, len)
             }
-            if (len == buf.size) buf = buf.copyOf(buf.size * 2) // one very long line
+            if (len == buf.size) { // one very long line
+                if (buf.size >= MAX_LINE) throw java.io.IOException("Not a playlist")
+                buf = buf.copyOf(buf.size * 2)
+            }
         }
         state.line(buf, 0, len) // the last line may have no line break
         return state.count
     }
+
+    /** No channel has a line this long, and a file without line breaks must not take all the memory. */
+    private const val MAX_LINE = 16 * 1024 * 1024
 
     private const val LF = '\n'.code.toByte()
     private const val CR = '\r'.code.toByte()
@@ -156,11 +162,26 @@ object M3uParser {
                     else if (k == "referer" || k == "referrer") ref = v
                 }
             }
+            // A web page or a message instead of a playlist: its lines must not become channels.
+            if (!isAddress(url)) return
             val title = name?.takeIf { it.isNotEmpty() } ?: url.substringAfterLast('/').substringBefore('?').ifEmpty { url }
             count++
             sink(Channel(count, title, url, logo, group ?: extGroup ?: defaultGroup, ua, ref))
             name = null; logo = null; group = null; extGroup = null; ua = null; ref = null
         }
+
+        /** "scheme://": a letter, then letters, digits, + . or -, as an address begins. */
+        private fun isAddress(s: String): Boolean {
+            val colon = s.indexOf("://")
+            if (colon <= 0 || !isLetter(s[0])) return false
+            for (i in 1 until colon) {
+                val c = s[i]
+                if (!isLetter(c) && c !in '0'..'9' && c != '+' && c != '.' && c != '-') return false
+            }
+            return true
+        }
+
+        private fun isLetter(c: Char) = c in 'a'..'z' || c in 'A'..'Z'
 
         /** Every channel of a group shares one String: a big playlist repeats each name thousands of times. */
         private fun shared(s: String) = groups.getOrPut(s) { s }
