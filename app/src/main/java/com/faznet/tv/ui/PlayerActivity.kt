@@ -472,7 +472,8 @@ class PlayerActivity : AppCompatActivity() {
         player?.volume = 1f
         vlc?.volume = 100
         pbStart.visibility = View.GONE
-        tvError.visibility = View.GONE
+        // Shown because it waited too long: an error on the screen has to stay readable.
+        if (player?.playerError == null) tvError.visibility = View.GONE
     }
 
     private var trace: com.faznet.tv.player.PlayerTrace? = null
@@ -488,6 +489,7 @@ class PlayerActivity : AppCompatActivity() {
                         tvError.visibility = View.GONE
                         retries = 0
                         handler.removeCallbacks(stallWatchdog)
+                        httpRetries = 0
                         exoWatch.onReady(SystemClock.elapsedRealtime())
                     }
                     Player.STATE_BUFFERING -> {
@@ -771,6 +773,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun startCurrent() {
+        refused = false
         // A re-open long after the channel appeared is timed by itself.
         if (openAt == 0L) openAt = Perf.now()
         openCount++
@@ -812,11 +815,14 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private val progressWatch = ProgressWatch()
+    /** The server said no, for good as far as this opening goes: nothing re-opens it until the viewer does something. */
+    private var refused = false
 
     /** @return true if it re-opened the channel. */
     private fun hardWatch(pos: Long, frames: Long): Boolean {
         val now = SystemClock.elapsedRealtime()
-        val waited = progressWatch.check(now, pos, frames, revealed, pendingZap >= 0) ?: return false
+        // Retries after a refusal are under way: starting over here would only make more connections.
+        val waited = progressWatch.check(now, pos, frames, revealed, pendingZap >= 0 || httpRetries > 0) ?: return false
         val ch = current ?: return false
         ProblemLog.add(this, ch.name, "no progress for ${waited / 1000} s → re-open")
         lastWarning = "watchdog re-open"
@@ -832,6 +838,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun checkFrames() {
+        if (refused) return
         if (vlc != null) {
             vlc?.progress()?.let { if (hardWatch(it.time, it.pictures)) return }
             checkVlc()
@@ -922,8 +929,10 @@ class PlayerActivity : AppCompatActivity() {
                 handler.removeCallbacks(retry)
                 handler.postDelayed(retry, 2000L * httpRetries)
             } else {
+                // Say so and leave it: every further try is one more connection on an account that has a limit.
+                refused = true
+                reveal()
                 tvError.text = getString(R.string.err_refused, http)
-                pbStart.visibility = View.GONE
                 current?.let { ProblemLog.add(this, it.name, "refused by server (HTTP $http)") }
                 tvError.visibility = View.VISIBLE
             }
