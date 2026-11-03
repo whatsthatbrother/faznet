@@ -1,3 +1,36 @@
+## Faznet v4.2.1
+
+**Shqip:** Version stabiliteti. Lista e kanaleve në player nuk mbyllet më kur lëviz poshtë, një përgjigje e gabuar e serverit nuk e zëvendëson më listën tënde, dhe një listë e re nuk e pengon më player-in. Rregullohen edhe testi i internetit, një crash në Android 6 dhe sjellja kur memoria e pajisjes është plot. Playlist-at dhe favoritet mbeten.
+
+### Fixes
+- Channel list over the picture: no more crash when scrolling past row 60 of a long list, for example the results of a search
+- A new list can no longer lose channels: clean-up used to delete channels of an import still running, and two imports at once destroyed each other. Now one list changes at a time
+- An empty answer or a web page from the server no longer replaces a good list. The list stays and a message says the server sent no channels
+- The player and the guide keep the list they were opened with until you are back on Home
+- Android 6: a call that does not exist there is gone. `gradlew lintDebug` now stops a build with such an error
+- Internet test: it said "unstable" on fast connections, because the test file was finished too quickly to measure
+- The address of a channel given as a playlist is refused at once instead of downloading without end. A playlist can be at most 500 MB
+- A full device no longer closes the app while it saves, and a favourite that cannot be saved says so
+
+### What you may notice
+- An automatic refresh refuses a list under half the size of the one on the device. The refresh button accepts it, because then you asked for it
+- An old list stays on the device until Home is in front again, so for a moment two lists take up space
+
+### How it was tested
+- 78 automatic tests, Lint with no errors
+- Mi TV Stick with real channels: the search list down to row 105 of 500, 20 channel switches (median 1.4 s, none needed a re-open), internet test, a refresh
+- Redmi Note 7 with 174 873 channels: the search list down to row 81 of 500, 30 channel switches (median 1.3 s), a refresh with the player open
+- Mi TV Stick with the measuring app and 50 000 made-up channels: a new list arriving with the player open, an empty answer, a web page, the address of a channel
+- No crash in any of these
+
+### Not tried
+- Importing a real list that changed: the real lists had not changed on the test days, so this ran only with made-up channels
+- Android 6 on a real device, and a really full device (simulated in the tests)
+- The player when its list has gone completely
+
+### Known, not fixed here
+- A channel the server refuses (HTTP 403) takes about 9 s or more before its message shows, because every attempt is retried
+
 ## Faznet v4.2.0
 
 **Shqip:** Aplikacioni është rreth 6 herë më i vogël, 4 MB në vend të 25 MB. Motori VLC është hequr: kanalet i luan ExoPlayer, dhe cilësimi i VLC-së nuk është më. Playlist-at dhe favoritet mbeten.
