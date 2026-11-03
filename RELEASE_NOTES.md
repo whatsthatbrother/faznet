@@ -1,3 +1,31 @@
+## Faznet v4.3.0
+
+**Shqip:** Kur serveri e refuzon një kanal, mesazhi del pas rreth 3 sekondash në vend të 16, me 5 kërkesa në vend të 12. Nëse refuzimi kalon, kanali fillon vetë dhe mesazhi zhduket. Raportet e problemeve tash thonë si përfundoi çdo ndërprerje dhe çka dinte player-i në atë çast. Playlist-at dhe favoritet mbeten.
+
+### A channel the server refuses (HTTP 4xx)
+- The message appears after about 3.5 s instead of about 16 s
+- 5 requests instead of up to 12, on an account that may already be at its connection limit
+- Two quiet tries still run behind the message, up to 15 s, and the channel starts by itself if the refusal passes
+- Once a channel plays, nothing changes: a refused segment is retried by the player while the buffer covers it
+
+### Problem reports
+- A line now says how it ended: back after, not back after, or left after so many seconds
+- It also says how long the picture, the clock and the decoder had stood still, what was in the buffer, when the network last sent anything, the audio, the format and the kind of load error (one word such as `http403` or `timeout`)
+- A stream that ended, buffering for 8 s and a network error used to re-open without a line. Now they have one
+- No addresses or error texts: numbers and the channel's name, as before
+
+### How it was tested
+- 89 automatic tests, Lint with no errors
+- Mi TV Stick with real channels: 30 channel switches (median 1.35 s), a channel the server really refuses (message at 3.3 s, 5 requests, then it stops), a report reaching the server with no address in it
+- TV emulator with a local server: a channel refused for good, one that starts after 4 refusals with the message gone, a stream that ends every few seconds. Sound only, without video
+
+### Not tried
+- A phone
+- A real channel coming back after a refusal
+
+### Known, not fixed here
+- A channel can take about 9 s to open when the start check re-opens it several times. One report suggests some of these are false alarms; the new reports will show
+
 ## Faznet v4.2.1
 
 **Shqip:** Version stabiliteti. Lista e kanaleve në player nuk mbyllet më kur lëviz poshtë, një përgjigje e gabuar e serverit nuk e zëvendëson më listën tënde, dhe një listë e re nuk e pengon më player-in. Rregullohen edhe testi i internetit, një crash në Android 6 dhe sjellja kur memoria e pajisjes është plot. Playlist-at dhe favoritet mbeten.

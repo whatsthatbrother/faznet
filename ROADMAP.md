@@ -1,6 +1,6 @@
 # 5.0: restructure (agreed with Diar on 2026-11-01)
 
-Work happens on branch `v5`; `main` is what users run. Nothing is published without Diar's OK. Phases 0-2 went out as 4.1.0. 4.1.1 added the first step of Phase 3 (the freeze checks) and the later reveal. 4.1.2 added the paged player list and fitted phones. 4.2.0 removed VLC. 4.2.1 fixed the first nine findings of the stability audit.
+Work happens on branch `v5`; `main` is what users run. Nothing is published without Diar's OK. Phases 0-2 went out as 4.1.0. 4.1.1 added the first step of Phase 3 (the freeze checks) and the later reveal. 4.1.2 added the paged player list and fitted phones. 4.2.0 removed VLC. 4.2.1 fixed the first nine findings of the stability audit. 4.3.0 tells a refused channel sooner and says in the reports how each interruption ended.
 
 1. [x] Phase 0: real git working copy, 4.0.3 source on GitHub, timing logs, measuring tools (`tools/`)
 2. [x] Phase 1: quick wins without restructuring (library upgrades, byte M3U parser, channel opening, freezes, Home)
