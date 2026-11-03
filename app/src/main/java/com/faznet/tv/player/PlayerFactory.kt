@@ -21,6 +21,8 @@ import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultAllocator
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
@@ -120,7 +122,13 @@ object PlayerFactory {
         return mb * 1024 * 1024
     }
 
-    fun mediaSource(context: Context, ch: Channel, userAgent: String, type: StreamType): MediaSource {
+    fun mediaSource(
+        context: Context,
+        ch: Channel,
+        userAgent: String,
+        type: StreamType,
+        errors: LoadErrorHandlingPolicy = DefaultLoadErrorHandlingPolicy(),
+    ): MediaSource {
         val flags = if (ch.url in looseKeyframes) TS_FLAGS_LOOSE else TS_FLAGS_STRICT
         val headers = HashMap<String, String>()
         ch.referrer?.let { headers["Referer"] = it }
@@ -138,10 +146,13 @@ object PlayerFactory {
             StreamType.HLS -> HlsMediaSource.Factory(dataSource)
                 .setExtractorFactory(DefaultHlsExtractorFactory(flags, true))
                 .setAllowChunklessPreparation(true)
+                .setLoadErrorHandlingPolicy(errors)
                 .createMediaSource(item.setMimeType(MimeTypes.APPLICATION_M3U8).build())
             StreamType.DASH -> DashMediaSource.Factory(dataSource)
+                .setLoadErrorHandlingPolicy(errors)
                 .createMediaSource(item.setMimeType(MimeTypes.APPLICATION_MPD).build())
             StreamType.PROGRESSIVE -> ProgressiveMediaSource.Factory(dataSource, extractors(flags))
+                .setLoadErrorHandlingPolicy(errors)
                 .createMediaSource(item.build())
         }
     }

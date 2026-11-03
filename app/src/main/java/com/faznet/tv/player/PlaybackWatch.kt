@@ -17,7 +17,15 @@ class ExoWatch(private val traceWatching: Boolean = false) {
         val frameIntervalUs: Long,
     )
 
-    class Problem(val reason: String, val wedged: Boolean, val behindMs: Long) {
+    /** [sinceFrameMs], [sinceClockMs], [sinceDecoderMs]: how long the picture, the clock and the decoder had stood still. */
+    class Problem(
+        val reason: String,
+        val wedged: Boolean,
+        val behindMs: Long,
+        val sinceFrameMs: Long,
+        val sinceClockMs: Long,
+        val sinceDecoderMs: Long,
+    ) {
         val atStart get() = reason.endsWith("at start")
         val noPicture get() = reason == NO_PICTURE
     }
@@ -96,7 +104,7 @@ class ExoWatch(private val traceWatching: Boolean = false) {
             now - lastPosAt > STUCK_TIMEOUT_MS -> "playback stuck"
             else -> null
         }
-        return Result(canShow, healthy, reason?.let { Problem(it, wedged, behind) })
+        return Result(canShow, healthy, reason?.let { Problem(it, wedged, behind, now - lastRenderedAt, now - lastPosAt, now - lastActiveAt) })
     }
 
     private companion object {
@@ -166,5 +174,72 @@ class ProgressWatch {
     private companion object {
         const val FIRST_MS = 15_000L
         const val MAX_MS = 120_000L
+    }
+}
+
+/**
+ * The server refuses a channel: not in the package or offline, which stays so, or the account's connection limit, which
+ * passes once the provider has dropped the previous channel's connection. The viewer is told after about 3 s, and two more
+ * quiet tries still catch the limit passing, which has taken up to 15 s. Five requests in all.
+ */
+class RefusalWatch {
+    /** [retryInMs]: when to ask again, null for never. [tell]: say so on the screen now. */
+    class Step(val retryInMs: Long?, val tell: Boolean)
+
+    private var refusals = 0
+
+    /** Tries are under way: starting over from elsewhere would only make more connections. */
+    val active get() = refusals > 0
+
+    /** The viewer has been told, so the message stays through the quiet tries. */
+    val told get() = refusals >= TELL_AT
+
+    fun reset() {
+        refusals = 0
+    }
+
+    fun onRefused(): Step {
+        refusals++
+        return Step(DELAYS_MS.getOrNull(refusals - 1), refusals == TELL_AT)
+    }
+
+    private companion object {
+        val DELAYS_MS = longArrayOf(1_000, 2_000, 5_000, 7_000).toList()
+        const val TELL_AT = 3
+    }
+}
+
+/**
+ * Holds a line for the problem log until it is known how it ended. Whether the channel came back, and how soon, is what
+ * tells a blink from a lost minute. [write] gets the channel, the line and the wall clock of the problem.
+ */
+class ProblemOutcome(private val write: (channel: String, what: String, at: Long) -> Unit) {
+    private var pending = false
+    private var channel = ""
+    private var what = ""
+    private var at = 0L
+    private var since = 0L
+
+    /** A new problem. One still waiting did not end well: the channel was not back when this one came. */
+    fun problem(now: Long, wallClock: Long, channel: String, what: String) {
+        finish(now, "not back")
+        pending = true
+        this.channel = channel
+        this.what = what
+        at = wallClock
+        since = now
+    }
+
+    /** The picture runs again. */
+    fun back(now: Long) = finish(now, "back")
+
+    /** The viewer went to another channel or left the player. */
+    fun left(now: Long) = finish(now, "left")
+
+    private fun finish(now: Long, how: String) {
+        if (!pending) return
+        pending = false
+        val tenths = (now - since) / 100
+        write(channel, "$what → $how after ${tenths / 10}.${tenths % 10} s", at)
     }
 }

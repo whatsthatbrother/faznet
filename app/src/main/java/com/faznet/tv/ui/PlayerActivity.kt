@@ -55,9 +55,13 @@ import com.faznet.tv.data.Epg
 import com.faznet.tv.data.Repository
 import com.faznet.tv.data.safeMessage
 import com.faznet.tv.player.ExoWatch
+import com.faznet.tv.player.OpeningErrorPolicy
 import com.faznet.tv.player.PlayerFactory
+import com.faznet.tv.player.ProblemOutcome
 import com.faznet.tv.player.ProgressWatch
+import com.faznet.tv.player.RefusalWatch
 import com.faznet.tv.player.StreamProbe
+import com.faznet.tv.player.loadErrorKind
 import com.faznet.tv.player.StreamType
 import com.faznet.tv.player.Throughput
 import dagger.hilt.android.AndroidEntryPoint
@@ -131,7 +135,13 @@ class PlayerActivity : AppCompatActivity() {
     @Volatile private var lastFramePtsUs = -1L
     @Volatile private var frameIntervalUs = 0L
     private var recoveries = 0
-    private var httpRetries = 0
+    private val refusals = RefusalWatch()
+    /** Read on the loading thread: no picture has come yet from this opening, see [OpeningErrorPolicy]. */
+    @Volatile private var opening = true
+    private val openingErrors = OpeningErrorPolicy { opening }
+    private val problems = ProblemOutcome { channel, what, at -> ProblemLog.add(this, channel, what, at) }
+    private var lastLoadError = ""
+    private var readyAt = 0L
     private var okLong = false
     private var totalRecoveries = 0
 
@@ -169,7 +179,7 @@ class PlayerActivity : AppCompatActivity() {
                         p.playbackState == Player.STATE_IDLE || tvError.visibility == View.VISIBLE)
                 ) {
                     retries = 0
-                    httpRetries = 0
+                    refusals.reset()
                     freshPlayer()
                     startCurrent()
                 }
@@ -182,6 +192,7 @@ class PlayerActivity : AppCompatActivity() {
         if (player?.playbackState == Player.STATE_BUFFERING) {
             if (retries < MAX_RETRIES) {
                 retries++
+                problem("buffering for ${STALL_TIMEOUT_MS / 1000} s")
                 showReconnecting()
                 startCurrent()
             } else {
@@ -334,6 +345,7 @@ class PlayerActivity : AppCompatActivity() {
         runCatching { (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(netCallback) }
         pendingZap = -1
         handler.removeCallbacksAndMessages(null)
+        problems.left(SystemClock.elapsedRealtime())
         releasePlayer()
         PlayerFactory.freeBuffers()
     }
@@ -465,7 +477,7 @@ class PlayerActivity : AppCompatActivity() {
         player?.volume = 1f
         pbStart.visibility = View.GONE
         // Shown because it waited too long: an error on the screen has to stay readable.
-        if (player?.playerError == null) tvError.visibility = View.GONE
+        if (player?.playerError == null && !refusals.told) tvError.visibility = View.GONE
     }
 
     private var trace: com.faznet.tv.player.PlayerTrace? = null
@@ -481,8 +493,10 @@ class PlayerActivity : AppCompatActivity() {
                         tvError.visibility = View.GONE
                         retries = 0
                         handler.removeCallbacks(stallWatchdog)
-                        httpRetries = 0
-                        exoWatch.onReady(SystemClock.elapsedRealtime())
+                        refusals.reset()
+                        opening = false
+                        readyAt = SystemClock.elapsedRealtime()
+                        exoWatch.onReady(readyAt)
                     }
                     Player.STATE_BUFFERING -> {
                         stallCount++
@@ -498,6 +512,7 @@ class PlayerActivity : AppCompatActivity() {
                         handler.removeCallbacks(retry)
                         if (retries < MAX_RETRIES) {
                             retries++
+                            problem("stream ended after ${(SystemClock.elapsedRealtime() - readyAt) / 1000} s")
                             handler.postDelayed(retry, (1000L * retries).coerceAtMost(5000L))
                         } else {
                             pbStart.visibility = View.GONE
@@ -532,6 +547,7 @@ class PlayerActivity : AppCompatActivity() {
             }
             override fun onLoadError(t: AnalyticsListener.EventTime, l: LoadEventInfo, m: MediaLoadData, error: java.io.IOException, wasCanceled: Boolean) {
                 lastWarning = "load: ${error.javaClass.simpleName} ${error.safeMessage()}".take(60)
+                lastLoadError = loadErrorKind(error)
             }
             override fun onAudioSinkError(t: AnalyticsListener.EventTime, audioSinkError: Exception) {
                 lastWarning = "audio: ${audioSinkError.javaClass.simpleName}".take(60)
@@ -572,6 +588,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun play(ch: Channel, i: Int) {
+        problems.left(SystemClock.elapsedRealtime())
         openAt = Perf.now()
         openCount = 0
         handler.removeCallbacks(zapCommit)
@@ -580,7 +597,8 @@ class PlayerActivity : AppCompatActivity() {
         current = ch
         forceHls = false
         retries = 0
-        httpRetries = 0
+        refusals.reset()
+        lastLoadError = ""
         recoveries = 0
         progressWatch.reset(SystemClock.elapsedRealtime())
         handler.removeCallbacks(retry)
@@ -636,6 +654,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun startCurrent() {
         refused = false
+        opening = true
         // A re-open long after the channel appeared is timed by itself.
         if (openAt == 0L) openAt = Perf.now()
         openCount++
@@ -650,6 +669,11 @@ class PlayerActivity : AppCompatActivity() {
         lastFramePtsUs = -1L
         frameIntervalUs = 0L
         hideUntilStable()
+        // A quiet try after the viewer was told: the message stays until the channel really plays.
+        if (refusals.told) {
+            tvError.visibility = View.VISIBLE
+            pbStart.visibility = View.GONE
+        }
         val ua = ch.userAgent ?: repo.userAgent
         probeJob?.cancel()
         // stop() disables the renderers, so the video decoder is released and re-created for the new stream:
@@ -659,7 +683,7 @@ class PlayerActivity : AppCompatActivity() {
         probeJob = lifecycleScope.launch {
             val type = if (forceHls) StreamType.HLS else StreamProbe.detect(ch.url, ua, ch.referrer)
             if (token != playToken || player !== p) return@launch
-            p.setMediaSource(PlayerFactory.mediaSource(this@PlayerActivity, ch, ua, type))
+            p.setMediaSource(PlayerFactory.mediaSource(this@PlayerActivity, ch, ua, type, openingErrors))
             openPreparedAt = Perf.now()
             p.prepare()
             p.play()
@@ -674,19 +698,47 @@ class PlayerActivity : AppCompatActivity() {
     private fun hardWatch(pos: Long, frames: Long): Boolean {
         val now = SystemClock.elapsedRealtime()
         // Retries after a refusal are under way: starting over here would only make more connections.
-        val waited = progressWatch.check(now, pos, frames, revealed, pendingZap >= 0 || httpRetries > 0) ?: return false
-        val ch = current ?: return false
-        ProblemLog.add(this, ch.name, "no progress for ${waited / 1000} s → re-open")
+        val waited = progressWatch.check(now, pos, frames, revealed, pendingZap >= 0 || refusals.active) ?: return false
+        current ?: return false
+        problem("no progress for ${waited / 1000} s")
         lastWarning = "watchdog re-open"
         retries = 0
         recoveries = 0
-        httpRetries = 0
+        refusals.reset()
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
         showReconnecting()
         freshPlayer()
         startCurrent()
         return true
+    }
+
+    /** A line for the problem log with what the player knows right now, written once it is known how it ended. */
+    private fun problem(what: String, extra: String = "") {
+        val ch = current ?: return
+        val facts = listOf(extra, player?.let { facts(it) }.orEmpty()).filter { it.isNotEmpty() }.joinToString(" ")
+        problems.problem(SystemClock.elapsedRealtime(), System.currentTimeMillis(), ch.name, "$what [$facts]")
+    }
+
+    /** No addresses, playlists or error texts in here: this goes to the developer with the problem log. */
+    private fun facts(p: ExoPlayer): String {
+        val v = p.videoDecoderCounters?.also { it.ensureUpdated() }
+        val a = p.audioDecoderCounters?.also { it.ensureUpdated() }
+        val state = when (p.playbackState) {
+            Player.STATE_IDLE -> "idle"
+            Player.STATE_BUFFERING -> "buffering"
+            Player.STATE_READY -> "ready"
+            else -> "ended"
+        }
+        return buildString {
+            append("state=$state load=${p.isLoading} buf=${p.totalBufferedDuration} net=${Throughput.msSinceLastBytes()}")
+            if (v != null) append(" in=${v.queuedInputBufferCount} out=${v.renderedOutputBufferCount} drop=${v.droppedBufferCount} skip=${v.skippedOutputBufferCount}")
+            if (a != null) append(" audio=${a.queuedInputBufferCount}/${a.renderedOutputBufferCount}")
+            append(" under=$underruns stalls=$stallCount")
+            p.videoFormat?.let { append(" ${it.width}x${it.height}@${it.frameRate.toInt()} ${it.sampleMimeType?.substringAfter('/')}") }
+            if (videoDecoder.isNotEmpty()) append(" ${videoDecoder.take(30)}")
+            if (lastLoadError.isNotEmpty()) append(" err=$lastLoadError")
+        }
     }
 
     private fun checkFrames() {
@@ -713,12 +765,15 @@ class PlayerActivity : AppCompatActivity() {
             )
         )
         if (result.healthy) recoveries = 0
-        if (!revealed && result.canShow) reveal()
+        if (result.canShow) {
+            problems.back(now)
+            if (!revealed) reveal()
+        }
         val problem = result.problem ?: return
         val reason = problem.reason
         // The numbers say what really happened; they reach the developer with the problem log.
-        val detail = "wedged=${problem.wedged} in=${counters?.queuedInputBufferCount} out=$rendered behind=${problem.behindMs} buf=${p.totalBufferedDuration}"
-        Perf.log("freeze $reason $detail ch=${current?.number}")
+        val detail = "wedged=${problem.wedged} behind=${problem.behindMs} frame=${problem.sinceFrameMs} clock=${problem.sinceClockMs} decoder=${problem.sinceDecoderMs}"
+        Perf.log("freeze $reason $detail in=${counters?.queuedInputBufferCount} out=$rendered buf=${p.totalBufferedDuration} ch=${current?.number}")
         // Enough quick fixes on this channel: from here the last-resort watch opens it again, less often.
         if (recoveries >= MAX_RECOVERIES) return
         // No picture at all in strict key-frame mode: this stream probably never sends IDR frames.
@@ -730,7 +785,7 @@ class PlayerActivity : AppCompatActivity() {
             // A freeze right at the start says nothing about the channel, so don't switch decoders for it.
             if (!problem.atStart) ChannelMemory.addFix(this, ch.url)
             p.videoFormat?.let { ChannelMemory.rememberHeight(this, ch.url, it.height) }
-            ProblemLog.add(this, ch.name, reason + (if (softwareVideo) " (software)" else "") + " [$detail]")
+            problem(reason + if (softwareVideo) " (software)" else "", detail)
         }
         showReconnecting()
         freshPlayer()
@@ -763,29 +818,35 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
         // The server refused the channel (not in the package, offline, or the account's connection limit while
-        // zapping fast): one retry after a pause for the old connection to close, then say so plainly.
+        // zapping fast): say so soon, and try a little longer for the old connection to close.
         val http = generateSequence<Throwable>(error) { it.cause }
             .filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
         if (http != null && http in 400..499) {
-            // Two retries (2 s, then 4 s): the provider often still counts the previous channel's connection.
-            if (httpRetries < 2) {
-                httpRetries++
+            val step = refusals.onRefused()
+            if (step.tell) {
+                reveal()
+                pbStart.visibility = View.GONE
+                tvError.text = getString(R.string.err_refused, http)
+                tvError.visibility = View.VISIBLE
+                current?.let { problems.problem(SystemClock.elapsedRealtime(), System.currentTimeMillis(), it.name, "refused by server (HTTP $http)") }
+            } else if (!refusals.told) {
                 showReconnecting()
-                handler.removeCallbacks(retry)
-                handler.postDelayed(retry, 2000L * httpRetries)
+            }
+            handler.removeCallbacks(retry)
+            if (step.retryInMs != null) {
+                handler.postDelayed(retry, step.retryInMs)
             } else {
-                // Say so and leave it: every further try is one more connection on an account that has a limit.
+                // Leave it: every further try is one more connection on an account that has a limit.
                 refused = true
                 reveal()
-                tvError.text = getString(R.string.err_refused, http)
-                current?.let { ProblemLog.add(this, it.name, "refused by server (HTTP $http)") }
-                tvError.visibility = View.VISIBLE
             }
             return
         }
         val transient = error.errorCode in 1000..2999 || error.errorCode in 4000..4999
         if (transient && retries < MAX_RETRIES) {
             retries++
+            lastLoadError = loadErrorKind(error)
+            problem("network error")
             showReconnecting()
             handler.removeCallbacks(retry)
             handler.postDelayed(retry, (1500L * retries).coerceAtMost(6000L))

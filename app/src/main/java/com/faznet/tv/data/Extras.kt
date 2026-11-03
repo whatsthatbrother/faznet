@@ -76,11 +76,11 @@ object ProblemLog {
     private fun file(c: Context) = File(c.applicationContext.filesDir, "problems.log")
 
     @Synchronized
-    fun add(c: Context, channel: String, what: String) {
+    fun add(c: Context, channel: String, what: String, at: Long = System.currentTimeMillis()) {
         val f = file(c)
         try {
             val lines = (if (f.exists()) f.readLines() else emptyList()).takeLast(MAX - 1)
-            val line = "${fmt.format(Date())}  ${channel.take(40)}  —  $what".replace('\n', ' ')
+            val line = "${fmt.format(Date(at))}  ${channel.take(40)}  —  $what".replace('\n', ' ')
             f.writeText((lines + line).joinToString("\n"))
         } catch (e: IOException) {
             return // the device's storage is full: not a reason to close the channel someone is watching

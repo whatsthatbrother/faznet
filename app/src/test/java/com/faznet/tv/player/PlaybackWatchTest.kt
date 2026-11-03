@@ -191,3 +191,71 @@ class ProgressWatchTest {
         assertNull(watch.check(30_000, 0, 1, shown = true, zapping = false))
     }
 }
+
+class RefusalWatchTest {
+
+    private val watch = RefusalWatch()
+
+    @Test
+    fun aRefusedChannelIsToldAtTheThirdAnswerAndLeftAfterTheFifth() {
+        val steps = List(5) { watch.onRefused() }
+        assertEquals(listOf(1_000L, 2_000L, 5_000L, 7_000L, null), steps.map { it.retryInMs })
+        assertEquals("told once, at about 3 s", listOf(false, false, true, false, false), steps.map { it.tell })
+        assertTrue(watch.told)
+    }
+
+    @Test
+    fun theQuietTriesReachAsFarAsTheOldRetriesDid() {
+        val last = List(4) { watch.onRefused().retryInMs!! }.sum()
+        assertEquals("the last request goes out 15 s after the first", 15_000L, last)
+    }
+
+    @Test
+    fun aChannelThatPlaysStartsCountingAgain() {
+        repeat(3) { watch.onRefused() }
+        watch.reset()
+        assertFalse(watch.active)
+        assertFalse(watch.told)
+        assertEquals(1_000L, watch.onRefused().retryInMs)
+        assertTrue(watch.active)
+    }
+}
+
+class ProblemOutcomeTest {
+
+    private val lines = ArrayList<Triple<String, String, Long>>()
+    private val outcome = ProblemOutcome { channel, what, at -> lines += Triple(channel, what, at) }
+
+    @Test
+    fun theLineWaitsForTheChannelToComeBack() {
+        outcome.problem(1_000, 500_000, "One", "picture frozen [x]")
+        assertTrue(lines.isEmpty())
+        outcome.back(2_250)
+        assertEquals(listOf(Triple("One", "picture frozen [x] → back after 1.2 s", 500_000L)), lines)
+    }
+
+    @Test
+    fun onlyTheFirstPictureAfterAProblemCounts() {
+        outcome.back(1_000)
+        outcome.problem(1_000, 0, "One", "a")
+        outcome.back(2_000)
+        outcome.back(9_000)
+        assertEquals(1, lines.size)
+    }
+
+    @Test
+    fun aNewProblemSaysTheOldOneDidNotEndWell() {
+        outcome.problem(1_000, 10, "One", "a")
+        outcome.problem(16_000, 20, "One", "b")
+        assertEquals("a → not back after 15.0 s", lines.single().second)
+        outcome.left(16_500)
+        assertEquals("b → left after 0.5 s", lines.last().second)
+        assertEquals(20L, lines.last().third)
+    }
+
+    @Test
+    fun leavingWithNothingWaitingWritesNothing() {
+        outcome.left(1_000)
+        assertTrue(lines.isEmpty())
+    }
+}

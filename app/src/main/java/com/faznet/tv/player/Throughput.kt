@@ -13,12 +13,19 @@ object Throughput : TransferListener {
     private val bytes = AtomicLong(0)
     private var lastBytes = 0L
     private var lastTime = System.nanoTime()
+    @Volatile private var lastBytesAt = System.nanoTime()
+
+    /** How long the network has sent nothing: tells a provider that stopped from a player that stopped. */
+    fun msSinceLastBytes() = (System.nanoTime() - lastBytesAt) / 1_000_000
 
     override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
     override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
     override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
     override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
-        if (isNetwork) bytes.addAndGet(bytesTransferred.toLong())
+        if (isNetwork) {
+            bytes.addAndGet(bytesTransferred.toLong())
+            lastBytesAt = System.nanoTime()
+        }
     }
 
     /** Mbit/s since the previous call. */
