@@ -55,19 +55,32 @@ object PlayerFactory {
     /** Channels (URLs) that showed no picture in strict mode this session: open them in tolerant mode. */
     val looseKeyframes = HashSet<String>()
 
+    /** Channels (URLs) the software video decoder could not play this session: the hardware one for them, always. */
+    val softwareFailed = HashSet<String>()
+
     private fun extractors(flags: Int) = DefaultExtractorsFactory()
         .setTsExtractorFlags(flags)
         .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
         .setConstantBitrateSeekingEnabled(true)
 
     /**
-     * Video decoders, with software ones first when [softwareVideo] is set. The Mi TV Stick's hardware H.264
-     * decoder sometimes stalls on SD (576i) channels; its CPU handles SD in software without trouble.
+     * Video decoders: only the software ones when [softwareVideo] is set and the device has one for the format. Putting
+     * them first is not enough: ExoPlayer orders the list again by what each decoder says it supports, and on the Mi TV
+     * Stick the hardware decoder came out first for 1080 H.264 again (KLAN PLUS FHD, 06.11). A software decoder that
+     * cannot start is a decoder error, which sends the channel back to the hardware one (PlayerActivity.handleError).
      */
     private fun codecSelector(softwareVideo: Boolean) = MediaCodecSelector { mime, secure, tunneling ->
         val list = MediaCodecUtil.getDecoderInfos(mime, secure, tunneling)
-        if (softwareVideo && mime.startsWith("video/")) list.sortedBy { if (it.softwareOnly) 0 else 1 } else list
+        if (softwareVideo && mime.startsWith("video/")) list.filter { it.softwareOnly || isSoftwareDecoder(it.name) }.ifEmpty { list } else list
     }
+
+    /**
+     * A software decoder, by its name. The system's own flag is not enough: the Mi TV Stick's firmware lists
+     * OMX.google.h264.decoder as not software-only, so asking for software decoders found none, and the old "software
+     * decoder for SD" setting never really took effect there.
+     */
+    fun isSoftwareDecoder(name: String) =
+        name.startsWith("OMX.google.", ignoreCase = true) || name.startsWith("c2.android.", ignoreCase = true)
 
     fun create(context: Context, useFfmpeg: Boolean, tunneling: Boolean = false, softwareVideo: Boolean = false): ExoPlayer {
         val renderers = DefaultRenderersFactory(context)

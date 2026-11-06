@@ -61,6 +61,7 @@ import com.faznet.tv.player.ProblemOutcome
 import com.faznet.tv.player.ProgressWatch
 import com.faznet.tv.player.RefusalWatch
 import com.faznet.tv.player.StreamProbe
+import com.faznet.tv.player.StuckDecoder
 import com.faznet.tv.player.loadErrorKind
 import com.faznet.tv.player.StreamType
 import com.faznet.tv.player.Throughput
@@ -136,6 +137,7 @@ class PlayerActivity : AppCompatActivity() {
     @Volatile private var frameIntervalUs = 0L
     private var recoveries = 0
     private val refusals = RefusalWatch()
+    private val stuckDecoder = StuckDecoder()
     /** Read on the loading thread: no picture has come yet from this opening, see [OpeningErrorPolicy]. */
     @Volatile private var opening = true
     private val openingErrors = OpeningErrorPolicy { opening }
@@ -338,6 +340,11 @@ class PlayerActivity : AppCompatActivity() {
         if (repo.showStats) startStats()
         handler.removeCallbacks(frameWatch)
         handler.postDelayed(frameWatch, 1000)
+        // onStop clears the handler: a sleep timer set before goes on with the time it has left.
+        if (sleepAt != 0L) {
+            val left = sleepAt - SystemClock.elapsedRealtime()
+            if (left > 0) handler.postDelayed(sleepRunnable, left) else sleepAt = 0L
+        }
     }
 
     override fun onStop() {
@@ -424,15 +431,21 @@ class PlayerActivity : AppCompatActivity() {
 
     // ---------- player ----------
 
-    /** Software video decoder for SD channels that froze before (or always for SD, if chosen in Settings). */
+    /**
+     * Software video decoder for channels that kept stopping the hardware one (any size, see [StuckDecoder]), and for SD
+     * channels that froze before (or always for SD, if chosen in Settings).
+     */
     private fun wantsSoftwareVideo(ch: Channel?): Boolean {
         ch ?: return false
+        if (ch.url in softwareFailed) return false
         val info = ChannelMemory.get(this, ch.url) ?: return false
+        if (info.software) return true
         val sd = info.height in 1..576
         return sd && (repo.softwareSd || info.fixes > 0)
     }
 
     private var softwareVideo = false
+    private val softwareFailed get() = PlayerFactory.softwareFailed
 
     // ---- clean start: picture and sound stay hidden until the picture runs smoothly ----
     private lateinit var pbStart: View
@@ -538,6 +551,7 @@ class PlayerActivity : AppCompatActivity() {
             }
             override fun onVideoDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
                 videoDecoder = decoderName
+                Perf.log("video decoder $decoderName software=$softwareVideo ch=${current?.number}")
             }
             override fun onVideoInputFormatChanged(t: AnalyticsListener.EventTime, format: androidx.media3.common.Format, decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?) {
                 current?.let { ChannelMemory.rememberHeight(this@PlayerActivity, it.url, format.height) }
@@ -600,6 +614,7 @@ class PlayerActivity : AppCompatActivity() {
         refusals.reset()
         lastLoadError = ""
         recoveries = 0
+        stuckDecoder.reset()
         progressWatch.reset(SystemClock.elapsedRealtime())
         handler.removeCallbacks(retry)
         handler.removeCallbacks(stallWatchdog)
@@ -764,7 +779,10 @@ class PlayerActivity : AppCompatActivity() {
                 lastFramePtsUs, frameIntervalUs,
             )
         )
-        if (result.healthy) recoveries = 0
+        if (result.healthy) {
+            recoveries = 0
+            stuckDecoder.reset()
+        }
         if (result.canShow) {
             problems.back(now)
             if (!revealed) reveal()
@@ -782,10 +800,22 @@ class PlayerActivity : AppCompatActivity() {
         totalRecoveries++
         lastWarning = "auto-fix: $reason"
         current?.let { ch ->
-            // A freeze right at the start says nothing about the channel, so don't switch decoders for it.
+            // One freeze right at the start says nothing about the channel (the next opening usually plays), so it does
+            // not count as a fix; the same decoder freezing again at once does, see StuckDecoder.
             if (!problem.atStart) ChannelMemory.addFix(this, ch.url)
             p.videoFormat?.let { ChannelMemory.rememberHeight(this, ch.url, it.height) }
-            problem(reason + if (softwareVideo) " (software)" else "", detail)
+            val decoderFroze = problem.wedged || reason.startsWith("picture frozen")
+            // The other decoder from the next opening on, which is right below, and on every later one. Which one froze
+            // is the one that really ran, not the one asked for.
+            val software = PlayerFactory.isSoftwareDecoder(videoDecoder)
+            val change = decoderFroze && stuckDecoder.froze()
+            if (change) ChannelMemory.useSoftware(this, ch.url, !software)
+            val switched = when {
+                !change -> ""
+                software -> " → hardware decoder"
+                else -> " → software decoder"
+            }
+            problem(reason + (if (software) " (software)" else "") + switched, detail)
         }
         showReconnecting()
         freshPlayer()
@@ -840,6 +870,18 @@ class PlayerActivity : AppCompatActivity() {
                 refused = true
                 reveal()
             }
+            return
+        }
+        // The software decoder chosen for this channel can't play it (too big for it, or it does not start): back to the
+        // hardware one, for good, and at once.
+        if (softwareVideo && error.errorCode in PlaybackException.ERROR_CODE_DECODER_INIT_FAILED..PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED) {
+            current?.let { ch ->
+                softwareFailed.add(ch.url)
+                ChannelMemory.useSoftware(this, ch.url, false)
+                problem("software decoder failed (${error.errorCodeName}) → hardware decoder")
+            }
+            freshPlayer()
+            startCurrent()
             return
         }
         val transient = error.errorCode in 1000..2999 || error.errorCode in 4000..4999

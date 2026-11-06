@@ -20,52 +20,54 @@ val DbErrors = CoroutineExceptionHandler { _, e ->
 }
 
 /**
- * What the app learned about each channel, kept across restarts:
- * stream type (so it is never probed again), picture height, and how often it needed an auto-fix.
+ * What the app learned about each channel, kept across restarts: stream type (so it is never probed again), picture
+ * height, how often it needed an auto-fix, and whether the hardware video decoder keeps getting stuck on it.
  */
 object ChannelMemory {
     private const val FILE = "channel_memory"
     private const val MAX_ENTRIES = 3000
 
-    class Info(val type: String?, val height: Int, val fixes: Int)
+    /** [software]: open this channel with the software video decoder, whatever its size. */
+    data class Info(val type: String?, val height: Int, val fixes: Int, val software: Boolean = false)
 
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
     private fun key(url: String) = url.hashCode().toString(36) + "_" + url.length
 
     fun get(c: Context, url: String): Info? {
         val raw = prefs(c).getString(key(url), null) ?: return null
-        val p = raw.split('|')
-        return Info(p.getOrNull(0)?.ifEmpty { null }, p.getOrNull(1)?.toIntOrNull() ?: 0, p.getOrNull(2)?.toIntOrNull() ?: 0)
+        return parse(raw)
     }
 
-    private fun put(c: Context, url: String, info: Info) {
+    /** "type|height|fixes|software"; entries written before the last field existed have three. */
+    internal fun parse(raw: String): Info {
+        val p = raw.split('|')
+        return Info(
+            p.getOrNull(0)?.ifEmpty { null }, p.getOrNull(1)?.toIntOrNull() ?: 0, p.getOrNull(2)?.toIntOrNull() ?: 0,
+            p.getOrNull(3) == "1",
+        )
+    }
+
+    internal fun format(info: Info) = "${info.type ?: ""}|${info.height}|${info.fixes}|${if (info.software) 1 else 0}"
+
+    private fun update(c: Context, url: String, change: (Info) -> Info) {
+        val old = get(c, url) ?: Info(null, 0, 0)
+        val new = change(old)
+        if (new == old) return
         val sp = prefs(c)
         if (sp.all.size > MAX_ENTRIES) sp.edit().clear().apply()
-        sp.edit().putString(key(url), "${info.type ?: ""}|${info.height}|${info.fixes}").apply()
+        sp.edit().putString(key(url), format(new)).apply()
     }
 
-    fun rememberType(c: Context, url: String, type: String) {
-        val old = get(c, url)
-        if (old?.type == type) return
-        put(c, url, Info(type, old?.height ?: 0, old?.fixes ?: 0))
-    }
+    fun rememberType(c: Context, url: String, type: String) = update(c, url) { it.copy(type = type) }
 
     fun rememberHeight(c: Context, url: String, height: Int) {
-        val old = get(c, url)
-        if (height <= 0 || old?.height == height) return
-        put(c, url, Info(old?.type, height, old?.fixes ?: 0))
+        if (height > 0) update(c, url) { it.copy(height = height) }
     }
 
-    fun addFix(c: Context, url: String) {
-        val old = get(c, url)
-        put(c, url, Info(old?.type, old?.height ?: 0, ((old?.fixes ?: 0) + 1).coerceAtMost(99)))
-    }
+    fun addFix(c: Context, url: String) = update(c, url) { it.copy(fixes = (it.fixes + 1).coerceAtMost(99)) }
 
-    /** A channel that played cleanly several times is forgiven. */
-    fun clearFixes(c: Context, url: String) {
-        val old = get(c, url) ?: return
-        if (old.fixes > 0) put(c, url, Info(old.type, old.height, 0))
-    }
+    /** The hardware decoder kept getting stuck on this channel (or, with false, the software one did too). */
+    fun useSoftware(c: Context, url: String, on: Boolean) = update(c, url) { it.copy(software = on) }
 }
 
 /** The last problems seen in the player (auto-fixes, refused channels, errors), viewable in Settings. */

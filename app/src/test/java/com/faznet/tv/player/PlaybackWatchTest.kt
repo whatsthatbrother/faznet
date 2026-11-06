@@ -221,6 +221,36 @@ class RefusalWatchTest {
     }
 }
 
+class StuckDecoderTest {
+
+    private val decoder = StuckDecoder()
+
+    @Test
+    fun aChannelThatFreezesAtEveryOpeningChangesDecoderAtTheSecond() {
+        // KLAN PLUS FHD on the Mi TV Stick, 06.11: in=83 out=5 at every opening.
+        assertFalse(decoder.froze())
+        assertTrue(decoder.froze())
+    }
+
+    @Test
+    fun oneFreezeThenHealthyPlayingChangesNothing() {
+        // The interlaced channels of ROADMAP.md: the first opening freezes, the next one plays.
+        assertFalse(decoder.froze())
+        decoder.reset()
+        assertFalse(decoder.froze())
+        decoder.reset()
+        assertFalse(decoder.froze())
+    }
+
+    @Test
+    fun afterAChangeTheOtherDecoderGetsItsOwnTwoTries() {
+        decoder.froze()
+        assertTrue(decoder.froze())
+        assertFalse("the software decoder's first freeze", decoder.froze())
+        assertTrue(decoder.froze())
+    }
+}
+
 class ProblemOutcomeTest {
 
     private val lines = ArrayList<Triple<String, String, Long>>()

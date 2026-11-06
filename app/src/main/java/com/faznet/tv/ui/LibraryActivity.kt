@@ -22,9 +22,11 @@ import com.faznet.tv.data.Repository
 import com.faznet.tv.data.XtreamAccount
 import com.faznet.tv.data.XtreamApi
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Movies or series of the active Xtream account: categories on the left, posters on the right. */
 class LibraryActivity : AppCompatActivity() {
@@ -98,15 +100,22 @@ class LibraryActivity : AppCompatActivity() {
         loadJob = lifecycleScope.launch {
             if (!now) delay(CATEGORY_DELAY_MS)
             val cat = key.takeUnless { it == ALL }
+            // "All" can be tens of thousands of titles: the tiles are made off the main thread too.
             items = if (series) {
-                XtreamApi.series(account, cat).map { s ->
-                    Item(s.id, s.name, s.cover, s.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" } ?: "") { openSeries(s.id, s.name) }
+                val found = XtreamApi.series(account, cat)
+                withContext(Dispatchers.Default) {
+                    found.map { s ->
+                        Item(s.id, s.name, s.cover, s.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" } ?: "") { openSeries(s.id, s.name) }
+                    }
                 }
             } else {
-                XtreamApi.vodStreams(account, cat).map { v ->
-                    val url = XtreamApi.vodUrl(account, v)
-                    Item(v.id, v.name, v.icon, listOf(v.year, v.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" })
-                        .filter { !it.isNullOrEmpty() }.joinToString(" · ")) { VodPlayerActivity.start(this@LibraryActivity, url, v.name) }
+                val found = XtreamApi.vodStreams(account, cat)
+                withContext(Dispatchers.Default) {
+                    found.map { v ->
+                        val url = XtreamApi.vodUrl(account, v)
+                        Item(v.id, v.name, v.icon, listOf(v.year, v.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" })
+                            .filter { !it.isNullOrEmpty() }.joinToString(" · ")) { VodPlayerActivity.start(this@LibraryActivity, url, v.name) }
+                    }
                 }
             }
             progress.visibility = View.GONE

@@ -11,13 +11,47 @@
  *   fail:<MAC>  wrong-PIN counter (expires after 15 min)
  *
  * Writes are kept rare on purpose (KV free tier: 1000 writes/day).
+ *
+ * Guessing a PIN: a wrong PIN counts against the MAC wherever it is tried (login, add, delete, the app's
+ * playlist pull and register), and every IP may only try a few PINs a minute. KV is eventually consistent, so
+ * the MAC counter alone can be outrun by many requests at once; the per-IP limit (kept in memory, plus the
+ * optional RATE_LIMIT binding) is what slows that down.
  */
 const MAC_RE = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;
 const PIN_RE = /^\d{4}$/;
 const MAX_PLAYLISTS = 20;
 const MAX_FAILS = 10;
 const FAIL_TTL = 15 * 60;
-const MAX_FILE = 20 * 1024 * 1024;
+const MAX_FILE = 20 * 1024 * 1024; // bytes; a KV value may be at most 25 MiB
+
+/** Per IP and minute: PIN checks, problem reports. */
+const IP_LIMITS = { pin: 20, report: 5 };
+const hits = new Map(); // "<kind>|<ip>|<minute>" -> count, per Worker instance
+
+/**
+ * True if this IP may do one more [kind] now. Counted in memory (one Worker instance sees most requests from one
+ * place) and, when the RATE_LIMIT binding exists, by Cloudflare as well.
+ */
+async function allowed(env, request, kind) {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const minute = Math.floor(Date.now() / 60000);
+  const key = `${kind}|${ip}|${minute}`;
+  const n = (hits.get(key) || 0) + 1;
+  hits.set(key, n);
+  if (hits.size > 5000) {
+    for (const k of hits.keys()) if (!k.endsWith(`|${minute}`)) hits.delete(k);
+  }
+  if (n > IP_LIMITS[kind]) return false;
+  if (env.RATE_LIMIT) {
+    try {
+      const { success } = await env.RATE_LIMIT.limit({ key: `${kind}|${ip}` });
+      if (!success) return false;
+    } catch { /* the binding failing must not stop the service */ }
+  }
+  return true;
+}
+
+const tooMany = () => json({ error: "locked" }, 429);
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -36,8 +70,9 @@ function normMac(mac) {
 }
 
 async function pinHash(env, mac, pin) {
-  const secret = env.SECRET || "faznet-default-secret-change-me";
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  // Without SECRET every PIN hash could be computed by anyone: refuse to work instead of using a known key.
+  if (!env.SECRET) throw new Error("SECRET is not set");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${mac}|${pin}`));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -58,15 +93,24 @@ function token(bytes = 24) {
 async function checkDevice(env, macRaw, pin) {
   const mac = normMac(macRaw);
   if (!MAC_RE.test(mac) || !PIN_RE.test(String(pin || ""))) return [null, "invalid"];
-  const fails = parseInt((await env.FAZNET.get(`fail:${mac}`)) || "0", 10);
+  const fails = await failCount(env, mac);
   if (fails >= MAX_FAILS) return [null, "locked"];
   const dev = await env.FAZNET.get(`dev:${mac}`, "json");
   const ok = dev && safeEqual(dev.pin, await pinHash(env, mac, pin));
   if (!ok) {
-    await env.FAZNET.put(`fail:${mac}`, String(fails + 1), { expirationTtl: FAIL_TTL });
+    // Only a device that exists has a PIN to guess: an unknown MAC costs no KV write.
+    if (dev) await countFail(env, mac, fails);
     return [null, dev ? "wrong" : "unknown"];
   }
   return [{ ...dev, mac }, null];
+}
+
+async function failCount(env, mac) {
+  return parseInt((await env.FAZNET.get(`fail:${mac}`)) || "0", 10);
+}
+
+async function countFail(env, mac, fails) {
+  await env.FAZNET.put(`fail:${mac}`, String(fails + 1), { expirationTtl: FAIL_TTL });
 }
 
 const errStatus = (e) => (e === "locked" ? 429 : e === "invalid" ? 400 : 403);
@@ -98,6 +142,11 @@ export default {
     const path = url.pathname;
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
 
+    // Every route that checks a PIN: a few tries per IP and minute.
+    const pinRoute = path === "/api/device/register" || path === "/api/device/playlists" ||
+      path === "/api/web/login" || path === "/api/web/add" || path === "/api/web/delete";
+    if (pinRoute && request.method !== "OPTIONS" && !(await allowed(env, request, "pin"))) return tooMany();
+
     // ---------- device (app) ----------
     if (path === "/api/device/register" && request.method === "POST") {
       const b = await body(request);
@@ -111,7 +160,13 @@ export default {
         await env.FAZNET.put(`dev:${mac}`, JSON.stringify({ pin: h, model, version, created: now, seen: now }));
         return json({ ok: true, created: true });
       }
-      if (!safeEqual(dev.pin, h)) return json({ error: "mac_taken" }, 409);
+      // "This MAC has another PIN" tells whether a guessed PIN is right, so it counts like a wrong login.
+      const fails = await failCount(env, mac);
+      if (fails >= MAX_FAILS) return json({ error: "locked" }, 429);
+      if (!safeEqual(dev.pin, h)) {
+        await countFail(env, mac, fails);
+        return json({ error: "mac_taken" }, 409);
+      }
       // Only write when something changed or once a day — keeps KV writes low.
       if (dev.model !== model || dev.version !== version || now - (dev.seen || 0) > 86400000) {
         await env.FAZNET.put(`dev:${mac}`, JSON.stringify({ ...dev, model, version, seen: now }));
@@ -164,7 +219,7 @@ export default {
         p.name ||= host(s);
       } else if (type === "file") {
         const content = String(b.content || "");
-        if (!content || content.length > MAX_FILE) return json({ error: "fields" }, 400);
+        if (!content || new TextEncoder().encode(content).length > MAX_FILE) return json({ error: "fields" }, 400);
         const head = content.slice(0, 2048);
         if (!head.includes("#EXT") && !head.includes("://")) return json({ error: "badfile" }, 400);
         p.file = token();
@@ -192,6 +247,8 @@ export default {
 
     // ---------- problem reports from the app ----------
     if (path === "/api/report" && request.method === "POST") {
+      // Each report is a KV write; without a limit anyone could use up the day's writes for every device.
+      if (!(await allowed(env, request, "report"))) return tooMany();
       const b = await body(request);
       const text = String(b.text || "").slice(0, 20000);
       if (!text) return json({ error: "fields" }, 400);
@@ -211,7 +268,7 @@ export default {
     }
 
     if (path === "/admin/reports" && request.method === "GET") {
-      if (!env.SECRET || url.searchParams.get("key") !== env.SECRET) return new Response("Forbidden", { status: 403 });
+      if (!env.SECRET || !safeEqual(String(url.searchParams.get("key") || ""), env.SECRET)) return new Response("Forbidden", { status: 403 });
       const list = await env.FAZNET.list({ prefix: "rep:", limit: 100 });
       const reps = (await Promise.all(list.keys.map((k) => env.FAZNET.get(k.name, "json")))).filter(Boolean);
       if (url.searchParams.get("format") === "json") return json({ reports: reps });

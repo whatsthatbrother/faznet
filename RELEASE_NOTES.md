@@ -1,3 +1,32 @@
+## Faznet v4.3.1
+
+**Shqip:** Një kanal që e ndal dekoderin e videos së TV-së në çdo hapje (fotoja ngrin pas pak kornizash) tash kalon vetë te dekoderi software dhe e mban mend. Në Mi TV Stick një kanal Full HD atëherë lëviz, por jo rrjedhshëm: përdor versionin HD ose HEVC nëse lista e ka. Filmat, serialet dhe guida nuk e ngrijnë më ekranin kur ngarkohet një listë e madhe, guida e tregon programin menjëherë, dhe një film vazhdon vetë pas një ndërprerjeje të shkurtër të internetit. Playlist-at dhe favoritet mbeten.
+
+### A channel that stops the hardware decoder every time
+- Report of 06.11: KLAN PLUS FHD stops the Mi TV Stick's decoder at every opening (83 frames in, 5 pictures out), and re-opening never helped. The same channel plays on a PC from the same server
+- Two freezes in a row on the same channel, with no healthy playing between them, now switch it to the software decoder, and the channel keeps that. One freeze followed by a channel that plays changes nothing (the interlaced channels in ROADMAP.md)
+- If the software decoder can't start a channel, it goes back to the hardware decoder at once
+- On the Mi TV Stick the software decoder had never really been used: its firmware does not mark `OMX.google.h264.decoder` as software, and ExoPlayer sorted the hardware decoder first again. That also concerns the "software decoder for SD" setting, which now takes effect
+- The Stick's processor shows about 6 pictures a second of a 1080 channel in software (the rest are dropped). A moving picture instead of a frozen one, but not smooth. KLAN PLUS HEVC, also 1080, plays on the hardware decoder with no dropped frames
+
+### Movies, series, TV guide
+- Lists from the account are read off the main thread: "All" can be several MB, which held the screen still for seconds
+- The guide shows the programme at once. Which channels keep an archive (the account's whole channel list) comes after it and is kept for 30 minutes; the server's time zone once per run
+- A movie, an episode or catch-up continues by itself from the same place after a network error, up to 5 times
+- Leaving the movie player gives its buffer memory back, as the live player does
+
+### Also
+- A sleep timer goes on after the app was in the background (TV switched off, Home) instead of being lost
+- Upload server: guessing a device's PIN is limited (it was possible without a limit through registration), a few tries per address and minute, and problem reports per address
+
+### How it was tested
+- 95 automatic tests (6 new), Lint with no errors
+- Mi TV Stick: KLAN PLUS FHD before (frozen at 5 pictures, 4 re-opens) and after (software decoder from the third opening, 3.5 s, no freezes, about 6 pictures a second); KLAN PLUS HEVC on the hardware decoder (1.3 s, no dropped frames); movies, series, guide, catch-up, a movie with Wi-Fi off for a few seconds, the sleep timer: no crash, no "not responding"
+- Upload server: 23 tests against the code that runs on Cloudflare, normal use and the three ways of guessing a PIN
+
+### Not tried
+- A phone
+
 ## Faznet v4.3.0
 
 **Shqip:** Kur serveri e refuzon një kanal, mesazhi del pas rreth 3 sekondash në vend të 16, me 5 kërkesa në vend të 12. Nëse refuzimi kalon, kanali fillon vetë dhe mesazhi zhduket. Raportet e problemeve tash thonë si përfundoi çdo ndërprerje dhe çka dinte player-i në atë çast. Playlist-at dhe favoritet mbeten.

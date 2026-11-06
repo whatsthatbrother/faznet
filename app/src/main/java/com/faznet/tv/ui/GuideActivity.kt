@@ -91,17 +91,28 @@ class GuideActivity : AppCompatActivity() {
             val start = last?.let { list.indexOf(it) } ?: 0
             (rvChannels.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(start, 0)
             list.get(start)
-            serverTz = XtreamApi.serverTimeZone(account)
-            archive = XtreamApi.archiveDays(account)
+            // The programme comes first. Which channels keep an archive is the account's whole channel list, which
+            // can take seconds on a big account: it fills in the title when it arrives.
             showChannel(start)
+            launch { serverTz = XtreamApi.serverTimeZone(account) }
+            archive = XtreamApi.archiveDays(account)
+            showTitle()
         }
+    }
+
+    private var shown: Pair<Channel, String>? = null
+
+    private fun showTitle() {
+        val (ch, id) = shown ?: return
+        title.text = ch.name + if (archive.containsKey(id)) "  ·  " + getString(R.string.catchup_days, archive[id]) else ""
     }
 
     private fun showChannel(pos: Int) {
         val list = channels ?: return
         val ch = list.peek(pos) ?: return
         val id = XtreamAccount.liveStreamId(ch.url) ?: return
-        title.text = ch.name + if (archive.containsKey(id)) "  ·  " + getString(R.string.catchup_days, archive[id]) else ""
+        shown = ch to id
+        showTitle()
         job?.cancel()
         progress.visibility = View.VISIBLE
         empty.visibility = View.GONE
@@ -126,8 +137,11 @@ class GuideActivity : AppCompatActivity() {
                 ChannelStore.start(playlistId, ch, list.scope, null, getString(R.string.group_all))
                 startActivity(Intent(this, PlayerActivity::class.java))
             }
-            p.end <= now && (p.hasArchive || archive.containsKey(streamId)) ->
-                VodPlayerActivity.start(this, XtreamApi.catchupUrl(account, streamId, p, serverTz), "${ch.name} · ${p.title}")
+            p.end <= now && (p.hasArchive || archive.containsKey(streamId)) -> lifecycleScope.launch {
+                // Start times are in the server's time zone: asked once, at once if it is not here yet.
+                val tz = XtreamApi.serverTimeZone(account).also { serverTz = it }
+                VodPlayerActivity.start(this@GuideActivity, XtreamApi.catchupUrl(account, streamId, p, tz), "${ch.name} · ${p.title}")
+            }
             p.end <= now -> Toast.makeText(this, R.string.catchup_not_available, Toast.LENGTH_SHORT).show()
             else -> Toast.makeText(this, R.string.programme_later, Toast.LENGTH_SHORT).show()
         }

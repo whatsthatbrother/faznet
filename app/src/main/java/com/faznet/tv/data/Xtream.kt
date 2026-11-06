@@ -6,6 +6,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import org.json.JSONArray
@@ -13,6 +14,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
 
 /** Login of an Xtream Codes account: from an Xtream playlist, or from an M3U link of the get.php kind. */
 data class XtreamAccount(val server: String, val user: String, val pass: String) {
@@ -70,11 +72,18 @@ object XtreamApi {
         }
     }
 
+    /**
+     * Reads an answer off the main thread: "all movies" or every live channel of a big account is several MB of JSON,
+     * which held the screen still for seconds on the Mi TV Stick.
+     */
+    private suspend fun <T> parsed(body: String?, parse: (String?) -> T): T = withContext(Dispatchers.Default) { parse(body) }
+
     private fun arr(s: String?): JSONArray = runCatching { JSONArray(s ?: "[]") }.getOrElse { JSONArray() }
+    private fun obj(s: String?): JSONObject = runCatching { JSONObject(s ?: "{}") }.getOrElse { JSONObject() }
     private fun JSONObject.str(k: String) = optString(k).takeUnless { it == "null" } ?: ""
 
-    suspend fun vodCategories(a: XtreamAccount) = categories(call(a, "get_vod_categories"))
-    suspend fun seriesCategories(a: XtreamAccount) = categories(call(a, "get_series_categories"))
+    suspend fun vodCategories(a: XtreamAccount) = parsed(call(a, "get_vod_categories"), ::categories)
+    suspend fun seriesCategories(a: XtreamAccount) = parsed(call(a, "get_series_categories"), ::categories)
 
     private fun categories(s: String?): List<XCategory> {
         val j = arr(s)
@@ -83,26 +92,29 @@ object XtreamApi {
         }
     }
 
-    suspend fun vodStreams(a: XtreamAccount, categoryId: String?): List<XVod> {
-        val j = arr(if (categoryId != null) call(a, "get_vod_streams", "category_id" to categoryId) else call(a, "get_vod_streams"))
-        return (0 until j.length()).mapNotNull { i ->
+    suspend fun vodStreams(a: XtreamAccount, categoryId: String?): List<XVod> = parsed(
+        if (categoryId != null) call(a, "get_vod_streams", "category_id" to categoryId) else call(a, "get_vod_streams")
+    ) { body ->
+        val j = arr(body)
+        (0 until j.length()).mapNotNull { i ->
             val o = j.optJSONObject(i) ?: return@mapNotNull null
             XVod(o.str("stream_id"), o.str("name"), o.str("stream_icon").ifEmpty { null },
                 o.str("container_extension").ifEmpty { "mp4" }, o.str("rating"), o.str("year"))
         }
     }
 
-    suspend fun series(a: XtreamAccount, categoryId: String?): List<XSeries> {
-        val j = arr(if (categoryId != null) call(a, "get_series", "category_id" to categoryId) else call(a, "get_series"))
-        return (0 until j.length()).mapNotNull { i ->
+    suspend fun series(a: XtreamAccount, categoryId: String?): List<XSeries> = parsed(
+        if (categoryId != null) call(a, "get_series", "category_id" to categoryId) else call(a, "get_series")
+    ) { body ->
+        val j = arr(body)
+        (0 until j.length()).mapNotNull { i ->
             val o = j.optJSONObject(i) ?: return@mapNotNull null
             XSeries(o.str("series_id"), o.str("name"), o.str("cover").ifEmpty { null }, o.str("plot"), o.str("rating"))
         }
     }
 
-    suspend fun episodes(a: XtreamAccount, seriesId: String): List<XEpisode> {
-        val root = runCatching { JSONObject(call(a, "get_series_info", "series_id" to seriesId) ?: "{}") }.getOrElse { JSONObject() }
-        val eps = root.optJSONObject("episodes") ?: return emptyList()
+    suspend fun episodes(a: XtreamAccount, seriesId: String): List<XEpisode> = parsed(call(a, "get_series_info", "series_id" to seriesId)) { body ->
+        val eps = obj(body).optJSONObject("episodes") ?: return@parsed emptyList()
         val out = ArrayList<XEpisode>()
         for (season in eps.keys()) {
             val list = eps.optJSONArray(season) ?: continue
@@ -117,24 +129,36 @@ object XtreamApi {
                 )
             }
         }
-        return out.sortedWith(compareBy({ it.season }, { it.number }))
+        out.sortedWith(compareBy({ it.season }, { it.number }))
     }
 
-    /** Live channels that have a catch-up archive: stream id → number of days kept. */
+    private class Archive(val at: Long, val days: Map<String, Int>)
+    private val archives = ConcurrentHashMap<XtreamAccount, Archive>()
+    private val timeZones = ConcurrentHashMap<XtreamAccount, TimeZone>()
+
+    /**
+     * Live channels that have a catch-up archive: stream id → number of days kept. This is the account's whole channel
+     * list, so it is kept for a while instead of being downloaded again every time the guide opens.
+     */
     suspend fun archiveDays(a: XtreamAccount): Map<String, Int> {
-        val j = arr(call(a, "get_live_streams"))
-        val out = HashMap<String, Int>()
-        for (i in 0 until j.length()) {
-            val o = j.optJSONObject(i) ?: continue
-            if (o.optInt("tv_archive") == 1) out[o.str("stream_id")] = o.optInt("tv_archive_duration", 1).coerceAtLeast(1)
+        archives[a]?.takeIf { System.currentTimeMillis() - it.at < ARCHIVE_TTL_MS }?.let { return it.days }
+        val body = call(a, "get_live_streams") ?: return emptyMap()
+        val days = parsed(body) {
+            val j = arr(it)
+            val out = HashMap<String, Int>()
+            for (i in 0 until j.length()) {
+                val o = j.optJSONObject(i) ?: continue
+                if (o.optInt("tv_archive") == 1) out[o.str("stream_id")] = o.optInt("tv_archive_duration", 1).coerceAtLeast(1)
+            }
+            out
         }
-        return out
+        archives[a] = Archive(System.currentTimeMillis(), days)
+        return days
     }
 
     /** The day's programme of one live channel (past programmes marked when they are in the archive). */
-    suspend fun guide(a: XtreamAccount, streamId: String): List<XProgramme> {
-        val root = runCatching { JSONObject(call(a, "get_simple_data_table", "stream_id" to streamId) ?: "{}") }.getOrElse { JSONObject() }
-        val list = root.optJSONArray("epg_listings") ?: return emptyList()
+    suspend fun guide(a: XtreamAccount, streamId: String): List<XProgramme> = parsed(call(a, "get_simple_data_table", "stream_id" to streamId)) { body ->
+        val list = obj(body).optJSONArray("epg_listings") ?: return@parsed emptyList()
         val out = ArrayList<XProgramme>()
         for (i in 0 until list.length()) {
             val o = list.optJSONObject(i) ?: continue
@@ -142,7 +166,7 @@ object XtreamApi {
             val end = o.str("stop_timestamp").toLongOrNull() ?: continue
             out.add(XProgramme(b64(o.str("title")), b64(o.str("description")), start * 1000, end * 1000, o.optInt("has_archive") == 1))
         }
-        return out.sortedBy { it.start }
+        out.sortedBy { it.start }
     }
 
     private fun b64(s: String): String = try {
@@ -151,10 +175,12 @@ object XtreamApi {
         s
     }
 
-    /** The server's time zone (catch-up start times are written in it). */
+    /** The server's time zone (catch-up start times are written in it). Asked once per account and app run. */
     suspend fun serverTimeZone(a: XtreamAccount): TimeZone {
-        val tz = runCatching { JSONObject(call(a, "") ?: "{}").optJSONObject("server_info")?.str("timezone") }.getOrNull()
-        return if (tz.isNullOrEmpty()) TimeZone.getDefault() else TimeZone.getTimeZone(tz)
+        timeZones[a]?.let { return it }
+        val body = call(a, "") ?: return TimeZone.getDefault() // no answer: ask again next time
+        val tz = parsed(body) { obj(it).optJSONObject("server_info")?.str("timezone") }
+        return (if (tz.isNullOrEmpty()) TimeZone.getDefault() else TimeZone.getTimeZone(tz)).also { timeZones[a] = it }
     }
 
     fun vodUrl(a: XtreamAccount, v: XVod) = "${a.server}/movie/${a.user}/${a.pass}/${v.id}.${v.ext}"
@@ -166,4 +192,6 @@ object XtreamApi {
         val minutes = ((p.end - p.start) / 60_000).coerceAtLeast(1)
         return "${a.server}/timeshift/${a.user}/${a.pass}/$minutes/${f.format(p.start)}/$streamId.ts"
     }
+
+    private const val ARCHIVE_TTL_MS = 30 * 60 * 1000L
 }

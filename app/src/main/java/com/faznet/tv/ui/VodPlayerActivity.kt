@@ -38,6 +38,9 @@ class VodPlayerActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var url = ""
     private val handler = Handler(Looper.getMainLooper())
+    private var retries = 0
+    /** prepare() after an error goes on from where the player stopped. */
+    private val retry = Runnable { player?.let { it.prepare(); it.play() } }
     private val saveTick = object : Runnable {
         override fun run() {
             savePosition()
@@ -63,14 +66,25 @@ class VodPlayerActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         val p = PlayerFactory.create(this, repo.useFfmpeg)
+        retries = 0
         p.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
+                // The network or the server failed for a moment: go on from the same place by itself, as the live
+                // player does, instead of leaving the movie on an error until the viewer starts it again.
+                if (error.errorCode in 2000..2999 && retries < MAX_RETRIES) {
+                    retries++
+                    tvError.setText(R.string.reconnecting)
+                    tvError.visibility = View.VISIBLE
+                    handler.removeCallbacks(retry)
+                    handler.postDelayed(retry, 2_000L * retries)
+                    return
+                }
                 tvError.text = getString(R.string.err_stream, error.errorCodeName)
                 tvError.visibility = View.VISIBLE
             }
 
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY) tvError.visibility = View.GONE
+                if (state == Player.STATE_READY) { tvError.visibility = View.GONE; retries = 0 }
                 if (state == Player.STATE_ENDED) { clearPosition(); finish() }
             }
         })
@@ -92,6 +106,8 @@ class VodPlayerActivity : AppCompatActivity() {
         playerView.player = null
         player?.release()
         player = null
+        // The buffer memory is shared with the live player: give it back, as the live player does when it closes.
+        PlayerFactory.freeBuffers()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -136,6 +152,7 @@ class VodPlayerActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
+        private const val MAX_RETRIES = 5
 
         private fun prefs(c: Context) = c.applicationContext.getSharedPreferences("resume", Context.MODE_PRIVATE)
         private fun key(url: String) = url.hashCode().toString(36) + "_" + url.length

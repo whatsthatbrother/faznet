@@ -129,6 +129,33 @@ class ExoWatch(private val traceWatching: Boolean = false) {
 }
 
 /**
+ * Whether the video decoder should change for a channel. Some channels stop the Mi TV Stick's hardware decoder at every
+ * opening (KLAN PLUS FHD: 83 frames in, 5 pictures out, then nothing), so re-opening never helps. Others freeze only now
+ * and then, usually on the first opening, and play on the next one. Only freezes [LIMIT] times in a row, with no healthy
+ * playing between them, tell the first kind apart: then the channel changes decoder, and the screen remembers that.
+ */
+class StuckDecoder {
+    private var inRow = 0
+
+    /** A new channel, or it played well for a while. */
+    fun reset() {
+        inRow = 0
+    }
+
+    /** The picture froze with the decoder in use. @return true if the channel should change decoder now. */
+    fun froze(): Boolean {
+        inRow++
+        if (inRow < LIMIT) return false
+        inRow = 0
+        return true
+    }
+
+    private companion object {
+        const val LIMIT = 2
+    }
+}
+
+/**
  * The last resort: whatever the reason (error screen, endless buffering, every other fix used up), a
  * channel whose picture and clock stand still is opened again after 15 s, then 30, 60, 120 s.
  */
