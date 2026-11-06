@@ -65,6 +65,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
             checkForUpdate()
             lifecycleScope.launch {
                 com.faznet.tv.data.Reports.sendPendingCrash(this@MainActivity, repo)
+                com.faznet.tv.data.Reports.sendExits(this@MainActivity, repo)
                 com.faznet.tv.data.Reports.sendNewProblems(this@MainActivity, repo)
             }
         }

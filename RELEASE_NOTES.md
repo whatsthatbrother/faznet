@@ -1,3 +1,25 @@
+## Faznet v4.3.3
+
+**Shqip:** Raportet e problemeve tash tregojnë edhe kur aplikacioni u mbyll nga një crash në kodin e sistemit (foto ose video), kur nuk u përgjigj, ose kur sistemi e mbylli për memorie ndërsa ishte në ekran. Këto më parë nuk arrinin fare. Vetëm Android 11 e më i ri, vetëm me raportet automatike të ndezura, pa adresa. Gjithçka e 4.3.2 mbetet. Playlist-at dhe favoritet mbeten.
+
+### Why
+- Mi TV Stick, 06.11 18:33, 20 s after the stick was restarted: the app closed on a native crash ("Scudo ERROR: corrupted chunk header") while Android decoded a channel logo. Something in native code had written over memory before; the log can't say what
+- Problem reports only caught crashes in Kotlin/Java, so how often this happens to anyone was not known
+
+### Reports
+- At start, Android 11 and newer: how the app ended since the last look, from Android's own record
+- Sent: a native crash, "not responding" with the main thread's stack (what held the screen), and being killed for memory while on the screen
+- Not sent: leaving the app, an update, being killed in the background, a Kotlin/Java crash (that has its own report already)
+- The first time, the last day is included
+- On Android 11 a native crash only says "crash", without the library; Android 12 and newer keep more, not read yet
+
+### Also found on 06.11
+- The Mi TV Stick's "bad periods", where interlaced 1080 channels freeze after 5 pictures at every opening (ROADMAP.md), ended when the stick was restarted: channels that froze before opened in about 1.5 s with no re-opening. The decoder's state, not the channels
+
+### How it was tested
+- 101 automatic tests (6 new), Lint with no errors
+- Mi TV Stick: the 18:33 crash reached the server as a report at the next start; a channel in 1.45 s; no crash
+
 ## Faznet v4.3.2
 
 **Shqip:** Kanalet Full HD dhe HD mbeten përsëri te dekoderi i videos së TV-së. 4.3.1 disa prej tyre i kaloi te dekoderi software, të cilin Mi TV Stick nuk e lëviz rrjedhshëm në këtë madhësi (rreth 5 foto në sekondë, dhe rihapje çdo gjysmë minute). Dekoderi software tash përdoret vetëm për kanalet SD, dhe kthehet vetë nëse nuk ia del. Gjithë pjesa tjetër e 4.3.1 mbetet. Playlist-at dhe favoritet mbeten.
