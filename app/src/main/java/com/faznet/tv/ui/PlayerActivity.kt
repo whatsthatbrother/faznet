@@ -439,9 +439,10 @@ class PlayerActivity : AppCompatActivity() {
         ch ?: return false
         if (ch.url in softwareFailed) return false
         val info = ChannelMemory.get(this, ch.url) ?: return false
-        if (info.software) return true
-        val sd = info.height in 1..576
-        return sd && (repo.softwareSd || info.fixes > 0)
+        // Only SD: the Mi TV Stick's processor shows about 5 pictures a second of a 1080 channel in software and falls
+        // into buffering every half minute (4.3.1 chose it for 1080 channels too; those go back to the hardware one).
+        val sd = info.height in 1..SOFTWARE_MAX_HEIGHT
+        return sd && (info.software || repo.softwareSd || info.fixes > 0)
     }
 
     private var softwareVideo = false
@@ -773,6 +774,7 @@ class PlayerActivity : AppCompatActivity() {
         val rendered = counters?.renderedOutputBufferCount ?: 0
         val activity = if (counters == null) 0L else counters.queuedInputBufferCount.toLong() + rendered +
             counters.skippedOutputBufferCount + counters.droppedBufferCount + counters.droppedInputBufferCount
+        if (softwareTooSlow(counters)) return
         val result = exoWatch.check(
             ExoWatch.Sample(
                 now, p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO), rendered, activity, p.currentPosition,
@@ -808,7 +810,9 @@ class PlayerActivity : AppCompatActivity() {
             // The other decoder from the next opening on, which is right below, and on every later one. Which one froze
             // is the one that really ran, not the one asked for.
             val software = PlayerFactory.isSoftwareDecoder(videoDecoder)
-            val change = decoderFroze && stuckDecoder.froze()
+            // Software only where it can keep up: a bigger picture stays with the hardware decoder and its re-opens.
+            val small = (p.videoFormat?.height ?: 0) in 1..SOFTWARE_MAX_HEIGHT
+            val change = decoderFroze && (software || small) && stuckDecoder.froze()
             if (change) ChannelMemory.useSoftware(this, ch.url, !software)
             val switched = when {
                 !change -> ""
@@ -820,6 +824,25 @@ class PlayerActivity : AppCompatActivity() {
         showReconnecting()
         freshPlayer()
         startCurrent()
+    }
+
+    /**
+     * The software decoder drops more pictures than it shows: it can't keep up with this channel on this device. Back to
+     * the hardware one, for good, and at once. @return true if it re-opened the channel.
+     */
+    private fun softwareTooSlow(counters: androidx.media3.exoplayer.DecoderCounters?): Boolean {
+        counters ?: return false
+        if (!softwareVideo || !PlayerFactory.isSoftwareDecoder(videoDecoder)) return false
+        val shown = counters.renderedOutputBufferCount
+        val dropped = counters.droppedBufferCount + counters.droppedInputBufferCount
+        if (shown + dropped < SLOW_CHECK_FRAMES || dropped <= shown) return false
+        val ch = current ?: return false
+        softwareFailed.add(ch.url)
+        ChannelMemory.useSoftware(this, ch.url, false)
+        problem("software decoder too slow (shown $shown, dropped $dropped) → hardware decoder")
+        freshPlayer()
+        startCurrent()
+        return true
     }
 
     private fun showReconnecting() {
@@ -1446,6 +1469,10 @@ class PlayerActivity : AppCompatActivity() {
         private const val MAX_RETRIES = 5
         private const val MAX_HIDDEN_MS = 9_000L
         private const val MAX_RECOVERIES = 4
+        /** The tallest picture the software video decoder gets (SD). */
+        private const val SOFTWARE_MAX_HEIGHT = 576
+        /** Pictures (shown and dropped) before the software decoder's speed is judged: a few seconds. */
+        private const val SLOW_CHECK_FRAMES = 100
         private const val INFO_MS = 4_000L
         private const val OPTIONS_MS = 8_000L
         private const val LIST_MS = 12_000L

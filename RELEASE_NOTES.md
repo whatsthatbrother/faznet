@@ -1,3 +1,24 @@
+## Faznet v4.3.2
+
+**Shqip:** Kanalet Full HD dhe HD mbeten përsëri te dekoderi i videos së TV-së. 4.3.1 disa prej tyre i kaloi te dekoderi software, të cilin Mi TV Stick nuk e lëviz rrjedhshëm në këtë madhësi (rreth 5 foto në sekondë, dhe rihapje çdo gjysmë minute). Dekoderi software tash përdoret vetëm për kanalet SD, dhe kthehet vetë nëse nuk ia del. Gjithë pjesa tjetër e 4.3.1 mbetet. Playlist-at dhe favoritet mbeten.
+
+### What 4.3.1 got wrong
+- It moved a channel to the software decoder after two freezes in a row, whatever its size. On the Mi TV Stick that decoder shows about 5 pictures a second of a 1080 channel and drops the rest; the player then fell into buffering and opened the channel again every 30-40 s
+- KLAN KOSOVA HD was moved that way the same evening. It is one of the channels whose first openings freeze only at times, and at those times the hardware decoder also freezes every opening, so two freezes in a row did not tell it apart from KLAN PLUS FHD
+
+### Now
+- The software decoder is only chosen for pictures up to 576 lines (SD), by the freeze rule, the "software decoder for SD" setting, or earlier fixes
+- Channels 4.3.1 moved to it at a bigger size go back to the hardware decoder by themselves
+- If the software decoder drops more pictures than it shows (after about 100), the channel goes back to the hardware one at once and stays there
+
+### Known, not fixed here
+- Some interlaced 1080 channels (KLAN PLUS FHD, KLAN KOSOVA HD) freeze after 5 pictures at every opening on the Mi TV Stick while the decoder is in one of its bad periods, as in 4.3.0. Their HD or HEVC versions, where the list has them, play on the hardware decoder (KLAN PLUS HEVC: 1.4 s to picture, no dropped frames). Not tried yet: tunneling, vendor decoder settings
+- The software decoder on SD channels has not been measured on the stick yet; if it can't keep up, the guard above sends the channel back
+
+### How it was tested
+- 95 automatic tests, Lint with no errors
+- Mi TV Stick: KLAN KOSOVA HD, marked for software by 4.3.1, opens on the hardware decoder again; KLAN PLUS HEVC 1.4 s, no dropped frames; no crash
+
 ## Faznet v4.3.1
 
 **Shqip:** Një kanal që e ndal dekoderin e videos së TV-së në çdo hapje (fotoja ngrin pas pak kornizash) tash kalon vetë te dekoderi software dhe e mban mend. Në Mi TV Stick një kanal Full HD atëherë lëviz, por jo rrjedhshëm: përdor versionin HD ose HEVC nëse lista e ka. Filmat, serialet dhe guida nuk e ngrijnë më ekranin kur ngarkohet një listë e madhe, guida e tregon programin menjëherë, dhe një film vazhdon vetë pas një ndërprerjeje të shkurtër të internetit. Playlist-at dhe favoritet mbeten.
