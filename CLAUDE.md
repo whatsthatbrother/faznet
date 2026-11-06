@@ -49,8 +49,11 @@ re-opening); HTTP 403 when zapping fast (account connection limit).
   playlist upload with MAC + PIN (do not change its behaviour), PayPal donate (paypal.me/EgzonFazliu).
 - Publishing a version: copy the two APKs to `docs/download/Faznet-TV.apk` and `docs/download/Faznet-arm64.apk`,
   update `docs/version.json` (`version`, `code`, `notes` + `notes_en` in English, `notes_sq` in Albanian) and the
-  version badge and the download sizes in `docs/index.html` (`<b>x.y.z</b>`, `~N MB`, EN + SQ), add `RELEASE_NOTES.md`, commit, push to `main`, tag `vx.y.z`, then make a GitHub Release from that tag with both APKs
-  and the version's notes (the releases page stood at 1.1.1 until 4.1.0).
+  version badge and the download sizes in `docs/index.html` (`<b>x.y.z</b>`, `~N MB`, EN + SQ), add the version to `CHANGELOG.md`, commit, push to `main`, tag `vx.y.z`, then make a GitHub Release from that tag with both APKs
+  and the version's `CHANGELOG.md` entry as notes. Diar's rule (2026-11-06): GitHub shows a changelog only, in English —
+  what is new and what was fixed, never how it was fixed or tested — and only the current release; older releases and
+  their tags are deleted (backups of the old ones in `archive/github-releases-backup/`, not in git). The in-app notes in
+  `version.json` stay in English + Albanian.
   The app checks `version.json` on every start (30 min throttle) and offers "Update now".
 - `worker/` = Cloudflare Worker + KV (faznet.diarfazliu.workers.dev): device register, playlists, `/api/report`,
   `/admin/reports` (needs the secret key — see CLAUDE.local.md, never commit it). Deploy = paste into the

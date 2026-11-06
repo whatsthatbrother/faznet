@@ -40,6 +40,26 @@
             android:textSize="@dimen/overlay_title"
             android:textStyle="bold" />
 
+        <!-- A phone held upright is narrower than the buttons: they scroll sideways, the title gives way -->
+        <HorizontalScrollView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+        <!-- Phones only, first: the picture stays upright until this is pressed -->
+        <ImageButton
+            android:id="@+id/btnFullscreen"
+            style="@style/IconButton"
+            android:contentDescription="@string/fullscreen"
+            android:src="@drawable/ic_fullscreen"
+            android:visibility="gone" />
+
         <ImageButton
             android:id="@+id/btnList"
             style="@style/IconButton"
@@ -81,6 +101,8 @@
             style="@style/IconButton"
             android:contentDescription="@string/stats"
             android:src="@drawable/ic_stats" />
+        </LinearLayout>
+        </HorizontalScrollView>
     </LinearLayout>
 
     <!-- Infobar: shown on every channel change, like a TV -->

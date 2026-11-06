@@ -156,6 +156,30 @@ class StuckDecoder {
 }
 
 /**
+ * The device's video decoder is in one of its bad periods: on the Mi TV Stick (06.11) interlaced channels froze after 5
+ * pictures at every opening until the stick was restarted, and then played at once. One channel freezing says nothing (some
+ * always do), but [CHANNELS] different ones freezing at their start within [WINDOW_MS] is the device, not the channels.
+ */
+class BadDecoderPeriod {
+    private val frozeAt = LinkedHashMap<String, Long>()
+
+    /** [channel] froze at its start with the hardware decoder. @return true if a restart should be suggested now. */
+    fun froze(channel: String, now: Long): Boolean {
+        frozeAt[channel] = now
+        frozeAt.entries.removeAll { now - it.value > WINDOW_MS }
+        return frozeAt.size >= CHANNELS
+    }
+
+    /** Suggested, or the viewer said no: count from nothing again. */
+    fun reset() = frozeAt.clear()
+
+    private companion object {
+        const val CHANNELS = 3
+        const val WINDOW_MS = 10 * 60 * 1000L
+    }
+}
+
+/**
  * The last resort: whatever the reason (error screen, endless buffering, every other fix used up), a
  * channel whose picture and clock stand still is opened again after 15 s, then 30, 60, 120 s.
  */

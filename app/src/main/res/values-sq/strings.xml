@@ -76,6 +76,11 @@
     <string name="show_stats">Shfaq statistikat e stream-it në player (buffer, shpejtësia, kodekët) — në player: Menu → Statistikat</string>
     <string name="channel_list">Lista e kanaleve</string>
     <string name="stats">Statistikat</string>
+    <string name="fullscreen">Ekran i plotë</string>
+    <string name="restart_title">Sugjerohet restartimi i pajisjes</string>
+    <string name="restart_message">Dekoderi i videos i kësaj pajisjeje po ndalet në disa kanale. Problemi është te pajisja, jo te kanalet, dhe një restart e rregullon: fike dhe ndize pajisjen (TV stick-un hiqe nga rryma për 10 sekonda).</string>
+    <string name="restart_ok">Në rregull</string>
+    <string name="restart_never">Mos e shfaq më</string>
     <string name="prev_group">Grupi i mëparshëm</string>
     <string name="next_group">Grupi tjetër</string>
     <string name="list_count">%1$d / %2$d</string>

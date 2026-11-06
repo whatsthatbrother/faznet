@@ -233,7 +233,8 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (!isTv()) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        // Phones: upright, whichever way the phone is held; sideways only with the full screen button.
+        if (!isTv()) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         setContentView(R.layout.activity_player)
         repo = Repository.get(this)
 
@@ -288,6 +289,10 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnTracks).setOnClickListener { hideOptions(); showTracks() }
         findViewById<View>(R.id.btnSleep).setOnClickListener { hideOptions(); showSleep() }
         findViewById<View>(R.id.btnPlaylistSwitch).setOnClickListener { hideOptions(); switchPlaylist() }
+        if (!isTv()) findViewById<View>(R.id.btnFullscreen).apply {
+            visibility = View.VISIBLE
+            setOnClickListener { setFullscreen(!fullscreen); bumpOptions() }
+        }
 
         gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
@@ -820,6 +825,7 @@ class PlayerActivity : AppCompatActivity() {
                 else -> " → software decoder"
             }
             problem(reason + (if (software) " (software)" else "") + switched, detail)
+            if (decoderFroze && problem.atStart && !software && PlayerFactory.badPeriod.froze(ch.url, now)) suggestRestart()
         }
         showReconnecting()
         freshPlayer()
@@ -843,6 +849,36 @@ class PlayerActivity : AppCompatActivity() {
         freshPlayer()
         startCurrent()
         return true
+    }
+
+    /**
+     * Several channels froze at their start the same way: the device's decoder is in a bad period, which a restart
+     * clears (see BadDecoderPeriod). Said at most once a day, and never again if the viewer asks so.
+     */
+    private fun suggestRestart() {
+        PlayerFactory.badPeriod.reset()
+        if (isFinishing) return
+        val sp = getSharedPreferences("hints", MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (sp.getBoolean("restart_never", false) || now - sp.getLong("restart_at", 0L) < RESTART_HINT_EVERY_MS) return
+        sp.edit().putLong("restart_at", now).apply()
+        current?.let { ProblemLog.add(this, it.name, "restart suggested: 3 channels froze at their start within 10 min") }
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.restart_title)
+            .setMessage(R.string.restart_message)
+            .setPositiveButton(R.string.restart_ok, null)
+            .setNegativeButton(R.string.restart_never) { _, _ -> sp.edit().putBoolean("restart_never", true).apply() }
+            .show()
+    }
+
+    // ---------- phones: upright, full screen by the button ----------
+
+    private var fullscreen = false
+
+    private fun setFullscreen(on: Boolean) {
+        fullscreen = on
+        requestedOrientation = if (on) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        findViewById<ImageButton>(R.id.btnFullscreen).setImageResource(if (on) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen)
     }
 
     private fun showReconnecting() {
@@ -1432,6 +1468,11 @@ class PlayerActivity : AppCompatActivity() {
                 if (first) toggleFavorite(); return true
             }
             KeyEvent.KEYCODE_BACK -> {
+                // Phone in full screen: Back makes it upright again first.
+                if (fullscreen) {
+                    if (first) setFullscreen(false)
+                    return true
+                }
                 if (numberBuffer.isNotEmpty()) {
                     if (first) {
                         numberBuffer = ""
@@ -1473,6 +1514,7 @@ class PlayerActivity : AppCompatActivity() {
         private const val SOFTWARE_MAX_HEIGHT = 576
         /** Pictures (shown and dropped) before the software decoder's speed is judged: a few seconds. */
         private const val SLOW_CHECK_FRAMES = 100
+        private const val RESTART_HINT_EVERY_MS = 24 * 60 * 60 * 1000L
         private const val INFO_MS = 4_000L
         private const val OPTIONS_MS = 8_000L
         private const val LIST_MS = 12_000L

@@ -77,6 +77,11 @@
     <string name="show_stats">Show stream stats in the player (buffer, speed, codecs) — Menu → Stats in the player</string>
     <string name="channel_list">Channel list</string>
     <string name="stats">Stream stats</string>
+    <string name="fullscreen">Full screen</string>
+    <string name="restart_title">Restarting the device is recommended</string>
+    <string name="restart_message">The video decoder of this device keeps stopping on several channels. This is in the device, not in the channels, and a restart clears it: turn the device off and on (a TV stick: unplug it for 10 seconds).</string>
+    <string name="restart_ok">OK</string>
+    <string name="restart_never">Don\'t show again</string>
     <string name="prev_group">Previous group</string>
     <string name="next_group">Next group</string>
     <string name="list_count">%1$d / %2$d</string>

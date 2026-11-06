@@ -251,6 +251,42 @@ class StuckDecoderTest {
     }
 }
 
+class BadDecoderPeriodTest {
+
+    private val period = BadDecoderPeriod()
+    private val min = 60_000L
+
+    @Test
+    fun threeDifferentChannelsWithinTenMinutesAskForARestart() {
+        // Mi TV Stick, 06.11 18:24-18:25: KLAN KOSOVA HD, channel 3, channel 5 froze at their start one after another.
+        assertFalse(period.froze("klan-kosova-hd", 0))
+        assertFalse(period.froze("ch3", 1 * min))
+        assertTrue(period.froze("ch5", 2 * min))
+    }
+
+    @Test
+    fun oneChannelFreezingAgainAndAgainIsTheChannel() {
+        // KLAN PLUS FHD freezes at every opening even when others play.
+        repeat(10) { assertFalse(period.froze("klan-plus-fhd", it * 1_000L)) }
+    }
+
+    @Test
+    fun freezesFarApartAreNotABadPeriod() {
+        assertFalse(period.froze("a", 0))
+        assertFalse(period.froze("b", 6 * min))
+        assertFalse("a is more than 10 minutes old by now", period.froze("c", 11 * min))
+    }
+
+    @Test
+    fun afterSuggestingItCountsFromNothing() {
+        period.froze("a", 0)
+        period.froze("b", 0)
+        assertTrue(period.froze("c", 0))
+        period.reset()
+        assertFalse(period.froze("d", 1_000))
+    }
+}
+
 class ProblemOutcomeTest {
 
     private val lines = ArrayList<Triple<String, String, Long>>()

@@ -58,6 +58,9 @@ object PlayerFactory {
     /** Channels (URLs) the software video decoder could not play this session: the hardware one for them, always. */
     val softwareFailed = HashSet<String>()
 
+    /** Across player screens: a bad period shows over several channels, opened from the list one after another. */
+    val badPeriod = BadDecoderPeriod()
+
     private fun extractors(flags: Int) = DefaultExtractorsFactory()
         .setTsExtractorFlags(flags)
         .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
