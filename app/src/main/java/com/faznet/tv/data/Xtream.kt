@@ -82,6 +82,17 @@ object XtreamApi {
     private fun obj(s: String?): JSONObject = runCatching { JSONObject(s ?: "{}") }.getOrElse { JSONObject() }
     private fun JSONObject.str(k: String) = optString(k).takeUnless { it == "null" } ?: ""
 
+    /** Live categories in the server's order, or null when the account did not answer with a list (fall back to M3U). */
+    suspend fun liveCategories(a: XtreamAccount): List<XCategory>? {
+        val body = call(a, "get_live_categories") ?: return null
+        return parsed(body) { s -> if (s?.trimStart()?.startsWith("[") == true) categories(s) else null }
+    }
+
+    /** The address of the whole live channel list (JSON), for downloading it into a file. */
+    fun liveStreamsUrl(a: XtreamAccount): String? = "${a.server}/player_api.php".toHttpUrlOrNull()?.newBuilder()
+        ?.addQueryParameter("username", a.user)?.addQueryParameter("password", a.pass)
+        ?.addQueryParameter("action", "get_live_streams")?.build()?.toString()
+
     suspend fun vodCategories(a: XtreamAccount) = parsed(call(a, "get_vod_categories"), ::categories)
     suspend fun seriesCategories(a: XtreamAccount) = parsed(call(a, "get_series_categories"), ::categories)
 

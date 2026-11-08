@@ -1,5 +1,6 @@
 package com.faznet.tv.data.db
 
+import com.faznet.tv.data.Channel
 import com.faznet.tv.data.M3uParser
 import java.io.IOException
 import java.io.InputStream
@@ -32,6 +33,24 @@ class ChannelImporter(private val db: FaznetDatabase) {
         checkedAt: Long,
         minChannels: Int = 1,
         onProgress: (Int) -> Unit = {},
+    ): Result = import(
+        playlistId, { sink -> M3uParser.parse(input, defaultGroup, sink) }, xtream, fingerprint, sourceTag, checkedAt,
+        minChannels, onProgress,
+    )
+
+    /**
+     * The same from any reader of channels: an M3U list, or the live channels of an Xtream account's API (XtreamLive).
+     * @param source calls its argument for every channel, in order
+     */
+    fun import(
+        playlistId: String,
+        source: ((Channel) -> Unit) -> Unit,
+        xtream: Boolean,
+        fingerprint: String?,
+        sourceTag: String?,
+        checkedAt: Long,
+        minChannels: Int = 1,
+        onProgress: (Int) -> Unit = {},
     ): Result {
         val dao = db.imports()
         val listId = nextListId()
@@ -56,8 +75,8 @@ class ChannelImporter(private val db: FaznetDatabase) {
         // and leaving them out makes the import, the database and the memory on a TV stick that much smaller.
         var total = 0
         try {
-            M3uParser.parse(input, defaultGroup) { c ->
-                if (isOnDemand(c.url)) return@parse
+            source { c ->
+                if (isOnDemand(c.url)) return@source
                 val number = ++total
                 val g = groups.getOrPut(c.group) { (groups.size).let { GroupCount(ListIds.group(listId, it), it, c.group) } }
                 val id = base + number

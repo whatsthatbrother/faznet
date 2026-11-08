@@ -103,7 +103,12 @@ class Repository private constructor(private val ctx: Context) {
      * begin like a playlist is dropped at once: the address of a channel never ends, and would fill the device.
      * @param keepGoing called now and then, and throws when the download is no longer wanted
      */
-    fun download(start: String, dest: File, maxBytes: Long = MAX_PLAYLIST_BYTES, keepGoing: () -> Unit = {}) {
+    fun download(
+        start: String, dest: File, maxBytes: Long = MAX_PLAYLIST_BYTES,
+        /** Judges the first bytes: an M3U list by default (an Xtream API answer is JSON, see XtreamLive). */
+        accept: (String) -> Boolean = ::looksLikeM3u,
+        keepGoing: () -> Unit = {},
+    ) {
         var url = start
         var conn = open(url)
         var redirects = 0
@@ -131,10 +136,7 @@ class Repository private constructor(private val ctx: Context) {
                         if (n < 0) break
                         headSize += n
                     }
-                    val start = String(head, 0, headSize)
-                    if (!start.contains("#EXT", ignoreCase = true) && !start.contains("://")) {
-                        throw IOException("Response is not an M3U playlist")
-                    }
+                    if (!accept(String(head, 0, headSize))) throw IOException("Response is not a playlist")
                     output.write(head, 0, headSize)
                     var total = headSize.toLong()
                     val buffer = ByteArray(64 * 1024)
@@ -337,3 +339,6 @@ object ChannelStore {
     /** Set by the player's "switch playlist": open the new playlist's last channel once it is loaded. */
     var autoPlayNext = false
 }
+
+/** The start of a download that is an M3U list: "#EXTM3U"/"#EXTINF", or at least an address. */
+internal fun looksLikeM3u(head: String): Boolean = head.contains("#EXT", ignoreCase = true) || head.contains("://")

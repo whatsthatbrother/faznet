@@ -232,11 +232,29 @@ class ChannelRepository @Inject constructor(
 
         val file = repo.cacheFile(p.id)
         val url = p.m3uUrl()
-        if (url != null && (force || !file.exists() || file.length() == 0L)) repo.download(url, file) { ensureActive() }
+        val account = XtreamAccount.from(p)
+        if (url != null && (force || !file.exists() || file.length() == 0L)) {
+            // An Xtream account: only its live channels, from the API. Its M3U list also holds every movie and episode,
+            // often sixty times as much to download. A server without the API still has the M3U list.
+            val api = account?.let { XtreamApi.liveStreamsUrl(it) }
+            val viaApi = api != null && runCatching {
+                repo.download(api, file, accept = XtreamLive::looksLikeList) { ensureActive() }
+            }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.isSuccess
+            if (!viaApi) repo.download(url, file) { ensureActive() }
+        }
         if (!file.exists()) throw java.io.IOException("Playlist file missing")
 
+        // The API's channels name only their category's number: the names come with it, or the M3U list is used.
+        var categories: Map<String, String>? = null
+        if (account != null && XtreamLive.isJson(file)) {
+            val cats = XtreamApi.liveCategories(account)
+            if (cats != null) categories = cats.associate { it.id to it.name }
+            else if (url != null) repo.download(url, file) { ensureActive() }
+            else throw java.io.IOException("No live categories")
+        }
+
         val now = System.currentTimeMillis()
-        val fingerprint = fingerprint(file)
+        val fingerprint = fingerprint(file) + (categories?.let { ":" + it.entries.joinToString().hashCode().toString(36) } ?: "")
         if (existing != null && state.fingerprint == fingerprint) {
             library.setChecked(p.id, now)
             if (url != null) file.delete()
@@ -247,11 +265,13 @@ class ChannelRepository @Inject constructor(
         importing.value = 0
         try {
             val result = Perf.measure("import") {
+                val defaultGroup = context.getString(R.string.group_uncategorized)
+                val names = categories
                 file.inputStream().use { input ->
-                    importer.import(
-                        p.id, input, context.getString(R.string.group_uncategorized), XtreamAccount.from(p) != null,
-                        fingerprint, tag, now, least,
-                    ) {
+                    val source: ((Channel) -> Unit) -> Unit =
+                        if (names != null && account != null) { sink -> XtreamLive.parse(input, account, names, defaultGroup, sink) }
+                        else { sink -> M3uParser.parse(input, defaultGroup, sink) }
+                    importer.import(p.id, source, account != null, fingerprint, tag, now, least) {
                         ensureActive() // another playlist was chosen: stop here, it would only have to wait
                         importing.value = it
                     }
@@ -307,7 +327,7 @@ class ChannelRepository @Inject constructor(
     }
 
     // The import's format is part of the tag: when it changes, every list is read in again once, by itself.
-    // 2: live channels only (movies and series of an Xtream list left out).
+    // 2: live channels only (movies and series of an Xtream list left out). 3: Xtream live channels from the API.
     private fun sourceTag(p: Playlist) =
         "$IMPORT_FORMAT|${p.type}|${p.source}|${p.username}|${p.password}".hashCode().toString(36)
 
@@ -327,7 +347,7 @@ class ChannelRepository @Inject constructor(
     class ListResult(val listId: Long, val channels: Int, val changed: Boolean)
 
     private companion object {
-        const val IMPORT_FORMAT = 2
+        const val IMPORT_FORMAT = 3
         const val PAGE = 60
         const val WHOLE_LIST_STEP = 2000
         const val SEARCH_LIMIT = 500
