@@ -1270,9 +1270,10 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun sizeListPanel() {
         if (isTv()) {
-            // Overscan: keep the list and the bars inside the visible area of the TV.
+            // Overscan: keep the list inside the visible area of the TV. The floating panel's own margin (20 dp) does
+            // most of it, so the inside only needs a little more.
             val d = resources.displayMetrics.density
-            listPanel.setPadding((36 * d).toInt(), (28 * d).toInt(), listPanel.paddingRight, (24 * d).toInt())
+            listPanel.setPadding((18 * d).toInt(), (20 * d).toInt(), listPanel.paddingRight, (16 * d).toInt())
         }
         val dm = resources.displayMetrics
         val widthDp = dm.widthPixels / dm.density

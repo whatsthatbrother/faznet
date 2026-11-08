@@ -2,21 +2,22 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="@dimen/overlay_row"
-    android:layout_marginBottom="2dp"
+    android:layout_marginBottom="4dp"
     android:background="@drawable/bg_overlay_item"
     android:clickable="true"
     android:focusable="true"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingStart="8dp"
-    android:paddingEnd="10dp">
+    android:paddingStart="6dp"
+    android:paddingEnd="14dp">
 
     <TextView
         android:id="@+id/ovNumber"
         android:layout_width="44dp"
         android:layout_height="wrap_content"
+        android:duplicateParentState="true"
         android:gravity="center"
-        android:textColor="#B3FFFFFF"
+        android:textColor="@color/ov_dim"
         android:textSize="@dimen/overlay_number" />
 
     <ImageView
@@ -33,8 +34,9 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:ellipsize="end"
+        android:duplicateParentState="true"
         android:maxLines="1"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/ov_text"
         android:textSize="@dimen/overlay_name" />
 
     <ImageView
@@ -43,6 +45,8 @@
         android:layout_height="16dp"
         android:layout_marginStart="6dp"
         android:importantForAccessibility="no"
+        android:duplicateParentState="true"
         android:src="@drawable/ic_play_small"
+        android:tint="@color/ov_playing"
         android:visibility="gone" />
 </LinearLayout>
