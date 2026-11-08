@@ -61,8 +61,18 @@ class PlaylistsActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
-        adapter.submit(repo.playlists(), repo.activeId)
-        if (adapter.itemCount == 0) findViewById<View>(R.id.btnAdd).requestFocus()
+        val list = repo.playlists()
+        adapter.submit(list, repo.activeId)
+        if (list.isEmpty()) {
+            findViewById<View>(R.id.btnAdd).requestFocus()
+            return
+        }
+        // The active playlist takes the remote's focus once, when the screen opens or the list changed. (Before, every
+        // time its row was drawn again, so scrolling a long list pulled the focus back to it.)
+        val rv = findViewById<RecyclerView>(R.id.rvPlaylists)
+        val at = list.indexOfFirst { it.id == repo.activeId }.coerceAtLeast(0)
+        rv.scrollToPosition(at)
+        rv.post { rv.findViewHolderForAdapterPosition(at)?.itemView?.findViewById<View>(R.id.rowMain)?.requestFocus() }
     }
 
     private fun confirmDelete(p: Playlist) {
@@ -214,6 +224,5 @@ class PlaylistAdapter(
         h.active.visibility = if (p.id == activeId) View.VISIBLE else View.INVISIBLE
         h.row.setOnClickListener { onSelect(p) }
         h.delete.setOnClickListener { onDelete(p) }
-        if (p.id == activeId) h.row.post { h.row.requestFocus() }
     }
 }
