@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <application>
-        <activity android:name="com.faznet.tv.ui.MainActivity">
+        <activity android:name="com.faznet.tv.ui.StartActivity">
             <intent-filter tools:node="removeAll" />
         </activity>
 

@@ -23,17 +23,23 @@
         android:theme="@style/Theme.Faznet"
         android:usesCleartextTraffic="true">
 
+        <!-- The start screen: Live TV, Movies, Series -->
         <activity
-            android:name=".ui.MainActivity"
+            android:name=".ui.StartActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
-            android:exported="true"
-            android:windowSoftInputMode="stateAlwaysHidden|adjustResize">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation"
+            android:exported="true"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
 
         <activity
             android:name=".ui.PlaylistsActivity"

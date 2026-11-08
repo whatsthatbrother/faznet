@@ -60,14 +60,10 @@ class MainActivity : AppCompatActivity(), HomeActions {
                 }
             }
         }
+        // The start screen sends the reports; it asks for the last channel only on a cold start with that setting on.
         if (savedInstanceState == null) {
-            vm.autoPlayOnce()
+            if (intent.getBooleanExtra(EXTRA_AUTOPLAY, false)) vm.autoPlayOnce()
             checkForUpdate()
-            lifecycleScope.launch {
-                com.faznet.tv.data.Reports.sendPendingCrash(this@MainActivity, repo)
-                com.faznet.tv.data.Reports.sendExits(this@MainActivity, repo)
-                com.faznet.tv.data.Reports.sendNewProblems(this@MainActivity, repo)
-            }
         }
         if (BuildConfig.DEBUG && repo.playlists().none { it.name == "Test2 (debug)" } &&
             runCatching { assets.open("test.m3u").close() }.isSuccess) addDebugTestPlaylist()
@@ -220,6 +216,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
     }
 
     companion object {
+        const val EXTRA_AUTOPLAY = "autoplay"
         const val KEY_ALL = HomeViewModel.KEY_ALL
         const val KEY_FAV = HomeViewModel.KEY_FAV
         const val KEY_RECENT = HomeViewModel.KEY_RECENT

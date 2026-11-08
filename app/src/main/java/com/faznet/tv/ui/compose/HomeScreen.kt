@@ -233,11 +233,8 @@ private fun TabBar(state: HomeState, actions: HomeActions, modifier: Modifier) {
             Modifier.widthIn(max = 240.dp))
         Tab(state.query.ifEmpty { stringResource(R.string.tab_search) }, R.drawable.ic_search, actions::search,
             Modifier.widthIn(max = 220.dp))
-        if (state.xtream) {
-            Tab(stringResource(R.string.guide), null, actions::guide)
-            if (state.hasMovies) Tab(stringResource(R.string.movies), null, actions::movies)
-            if (state.hasSeries) Tab(stringResource(R.string.series), null, actions::series)
-        }
+        // Movies and series have their own cards on the start screen; Live TV keeps only the guide.
+        if (state.xtream) Tab(stringResource(R.string.guide), null, actions::guide)
     }
 }
 
