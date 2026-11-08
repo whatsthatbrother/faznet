@@ -308,7 +308,9 @@ class HomeViewModel @Inject constructor(
         // Filled in as soon as the account answers: without movies or series their buttons stay away.
         ui.hasMovies = false
         ui.hasSeries = false
-        XtreamAccount.from(p)?.let { account ->
+        // Only phones show those buttons here; on a TV, movies and series are on the start screen, and asking the
+        // server for both category lists every time Live TV opens only cost the stick time and connections.
+        if (!tv) XtreamAccount.from(p)?.let { account ->
             viewModelScope.launch { ui.hasMovies = XtreamApi.vodCategories(account).isNotEmpty() }
             viewModelScope.launch { ui.hasSeries = XtreamApi.seriesCategories(account).isNotEmpty() }
         }
