@@ -138,7 +138,8 @@ fun HomeScreen(state: HomeState, pages: Flow<PagingData<Channel>>, actions: Home
 
 @Composable
 private fun HomeContent(state: HomeState, pages: Flow<PagingData<Channel>>, actions: HomeActions, wide: Boolean, tv: Boolean) {
-    val background = remember { Brush.verticalGradient(listOf(Color(0xFF16161D), Color(0xFF060608))) }
+    // tvOS: a soft graphite light from the top fading into black.
+    val background = remember { Brush.verticalGradient(0f to Color(0xFF2A2A2E), 0.45f to Color(0xFF0E0E10), 1f to Color.Black) }
     val lastRepeat = remember { LongArray(1) }
     Column(
         Modifier
@@ -181,23 +182,23 @@ private fun HomeContent(state: HomeState, pages: Flow<PagingData<Channel>>, acti
 @Composable
 private fun TopBar(state: HomeState, actions: HomeActions, wide: Boolean) {
     if (wide) {
-        Row(
-            Modifier.fillMaxWidth().height(64.dp).padding(start = 12.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Image(painterResource(R.drawable.logo), null, Modifier.size(34.dp))
-            Spacer(Modifier.width(10.dp))
-            Text("Faznet", color = Fz.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(12.dp))
-            PlaylistPill(state, actions, Modifier.widthIn(max = 260.dp))
-            Spacer(Modifier.width(8.dp))
-            SearchPill(state, actions, Modifier.weight(1f))
-            state.updateVersion?.let { v ->
-                Spacer(Modifier.width(8.dp))
-                UpdateButton(v, actions, Modifier)
+        // tvOS: the sections as text tabs in one frosted bar in the middle, the app's name on the left, the time and the
+        // round buttons on the right.
+        Box(Modifier.fillMaxWidth().height(72.dp).padding(start = 12.dp, end = 4.dp)) {
+            Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically) {
+                Image(painterResource(R.drawable.logo), null, Modifier.size(28.dp))
+                Spacer(Modifier.width(10.dp))
+                Text("Faznet", color = Fz.text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.2.sp)
             }
-            Clock()
-            TopIcons(state, actions, Modifier.widthIn(max = 480.dp).horizontalScroll(rememberScrollState()))
+            TabBar(state, actions, Modifier.align(Alignment.Center))
+            Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+                state.updateVersion?.let { v ->
+                    UpdateButton(v, actions, Modifier)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Clock()
+                TopIcons(state, actions, Modifier, sections = false)
+            }
         }
     } else {
         // A phone has no room for all of it in one row: search would shrink to an icon and Settings leave the screen.
@@ -220,45 +221,86 @@ private fun TopBar(state: HomeState, actions: HomeActions, wide: Boolean) {
     }
 }
 
+/** The frosted bar of the TV top: text tabs, the focused one turns white (tvOS tab bar). */
 @Composable
-private fun PlaylistPill(state: HomeState, actions: HomeActions, modifier: Modifier) {
+private fun TabBar(state: HomeState, actions: HomeActions, modifier: Modifier) {
+    Row(
+        modifier.background(Color(0x1FFFFFFF), RoundedCornerShape(26.dp)).padding(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Tab(state.playlistName.ifEmpty { stringResource(R.string.add_playlist) }, R.drawable.ic_playlist, actions::playlists,
+            Modifier.widthIn(max = 240.dp))
+        Tab(state.query.ifEmpty { stringResource(R.string.tab_search) }, R.drawable.ic_search, actions::search,
+            Modifier.widthIn(max = 220.dp))
+        if (state.xtream) {
+            Tab(stringResource(R.string.guide), null, actions::guide)
+            if (state.hasMovies) Tab(stringResource(R.string.movies), null, actions::movies)
+            if (state.hasSeries) Tab(stringResource(R.string.series), null, actions::series)
+        }
+    }
+}
+
+@Composable
+private fun Tab(text: String, icon: Int?, onClick: () -> Unit, modifier: Modifier = Modifier) {
     FocusBox(
-        onClick = { actions.playlists() },
+        onClick = onClick,
         modifier = modifier.height(42.dp),
         shape = RoundedCornerShape(21.dp),
+        color = Color.Transparent,
+        focusedColor = Fz.focusLight,
+        focusedBrush = null,
+        focusScale = 1.06f,
+        outline = false,
+    ) { focused ->
+        Row(Modifier.padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(painterResource(icon), null, tint = if (focused) Fz.onLight else Fz.dim, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(text, color = if (focused) Fz.onLight else Fz.text.copy(alpha = 0.85f), fontSize = 15.sp,
+                fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun PlaylistPill(state: HomeState, actions: HomeActions, modifier: Modifier) {
+    LightPill(state.playlistName.ifEmpty { stringResource(R.string.add_playlist) }, R.drawable.ic_playlist, dim = false,
+        onClick = actions::playlists, modifier = modifier)
+}
+
+@Composable
+private fun SearchPill(state: HomeState, actions: HomeActions, modifier: Modifier) {
+    LightPill(state.query.ifEmpty { stringResource(R.string.search_hint) }, R.drawable.ic_search, dim = state.query.isEmpty(),
+        onClick = actions::search, modifier = modifier)
+}
+
+/** Phone top: a grey pill that turns white under the finger or the remote. */
+@Composable
+private fun LightPill(text: String, icon: Int, dim: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    FocusBox(
+        onClick = onClick,
+        modifier = modifier.height(40.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = Fz.surface2,
+        focusedColor = Fz.focusLight,
+        focusedBrush = null,
+        outline = false,
     ) { focused ->
         Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.ic_playlist), null, tint = if (focused) Color.White else Fz.accent, modifier = Modifier.size(18.dp))
+            Icon(painterResource(icon), null, tint = if (focused) Fz.onLight else Fz.dim, modifier = Modifier.size(17.dp))
             Spacer(Modifier.width(8.dp))
-            Text(state.playlistName.ifEmpty { stringResource(R.string.add_playlist) }, color = Fz.text, fontSize = 14.sp,
+            Text(text, color = if (focused) Fz.onLight else if (dim) Fz.dim else Fz.text, fontSize = 14.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
 @Composable
-private fun SearchPill(state: HomeState, actions: HomeActions, modifier: Modifier) {
-    FocusBox(
-        onClick = { actions.search() },
-        modifier = modifier.height(42.dp),
-        shape = RoundedCornerShape(21.dp),
-    ) { focused ->
-        Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.ic_search), null, tint = if (focused) Color.White else Fz.dim, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                state.query.ifEmpty { stringResource(R.string.search_hint) },
-                color = if (state.query.isEmpty() && !focused) Fz.dim else Fz.text, fontSize = 14.sp, maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TopIcons(state: HomeState, actions: HomeActions, modifier: Modifier) {
+private fun TopIcons(state: HomeState, actions: HomeActions, modifier: Modifier, sections: Boolean = true) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        if (state.xtream) {
+        if (sections && state.xtream) {
             IconAction(R.drawable.ic_guide, stringResource(R.string.guide), actions::guide)
             if (state.hasMovies) IconAction(R.drawable.ic_movie, stringResource(R.string.movies), actions::movies)
             if (state.hasSeries) IconAction(R.drawable.ic_series, stringResource(R.string.series), actions::series)
@@ -275,11 +317,14 @@ private fun UpdateButton(version: String, actions: HomeActions, modifier: Modifi
         onClick = { actions.update() },
         modifier = modifier.height(42.dp),
         shape = RoundedCornerShape(21.dp),
-        color = Color(0xFF2EC27E),
+        color = Color(0xFF30D158), // Apple green
+        focusedColor = Fz.focusLight,
+        focusedBrush = null,
+        outline = false,
         focusScale = 1.08f,
-    ) {
+    ) { focused ->
         Text(
-            stringResource(R.string.update_banner, version), color = Color.White, fontSize = 14.sp,
+            stringResource(R.string.update_banner, version), color = if (focused) Fz.onLight else Color.White, fontSize = 14.sp,
             fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.align(Alignment.Center).padding(horizontal = 16.dp),
         )
     }
@@ -295,7 +340,7 @@ private fun Clock() {
         }
     }
     val f = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    Text(f.format(now), color = Fz.text, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+    Text(f.format(now), color = Fz.text.copy(alpha = 0.9f), fontSize = 20.sp, fontWeight = FontWeight.Medium,
         modifier = Modifier.padding(horizontal = 14.dp))
 }
 
@@ -334,25 +379,28 @@ private fun GroupChip(g: GroupItem, state: HomeState, actions: HomeActions, vert
         // TV: moving over a category opens it, like a TV guide
         onFocus = { f -> if (f && vertical && g.key != state.selectedGroup) actions.selectGroup(g.key, false) },
         selected = selected,
-        modifier = (if (vertical) Modifier.fillMaxWidth().height(42.dp) else Modifier.height(38.dp)).focusRequester(requester),
-        shape = RoundedCornerShape(10.dp),
-        color = if (vertical) Color.Transparent else Fz.surface,
-        focusScale = 1.02f,
+        // tvOS sidebar: plain text rows; the open group sits on a faint grey, the focused row turns white with black text.
+        modifier = (if (vertical) Modifier.fillMaxWidth().height(44.dp) else Modifier.height(36.dp)).focusRequester(requester),
+        shape = RoundedCornerShape(if (vertical) 12.dp else 18.dp),
+        color = if (vertical) Color.Transparent else Fz.surface2,
+        focusedColor = Fz.focusLight,
+        selectedColor = Fz.selected,
+        focusedBrush = null,
+        outline = false,
+        focusScale = 1.03f,
     ) { focused ->
-        Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (selected) {
-                Box(Modifier.size(width = 3.dp, height = 18.dp).background(Fz.accent, RoundedCornerShape(2.dp)))
-                Spacer(Modifier.width(8.dp))
-            }
+        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                g.title, color = if (selected) Fz.text else Fz.text.copy(alpha = 0.85f), fontSize = 14.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                g.title,
+                color = when { focused -> Fz.onLight; selected -> Fz.text; else -> Fz.text.copy(alpha = 0.7f) },
+                fontSize = 15.sp,
+                fontWeight = if (selected || focused) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = if (vertical) Modifier.weight(1f) else Modifier,
             )
             if (g.count >= 0) {
                 Spacer(Modifier.width(8.dp))
-                Text(g.count.toString(), color = if (focused) Fz.text else Fz.dim, fontSize = 12.sp)
+                Text(g.count.toString(), color = if (focused) Fz.onLight.copy(alpha = 0.6f) else Fz.dim, fontSize = 13.sp)
             }
         }
     }
@@ -370,11 +418,12 @@ private fun ChannelArea(state: HomeState, pages: Flow<PagingData<Channel>>, acti
         val check = state.checkVersion
         ScrollToFocusedChannel(state, gridState, channels.itemCount)
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(if (tv) 148.dp else 160.dp),
+            columns = GridCells.Adaptive(if (tv) 160.dp else 160.dp),
             state = gridState,
-            contentPadding = PaddingValues(10.dp, 10.dp, 10.dp, 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            // tvOS: generous air between the cards, room for the focused one to grow.
+            contentPadding = PaddingValues(16.dp, 14.dp, 16.dp, 32.dp),
+            horizontalArrangement = Arrangement.spacedBy(22.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             // The place is the key: a tile keeps the focus when its channel arrives from the database, and a new group
@@ -422,14 +471,13 @@ private fun rememberFocusMe(index: Int, state: HomeState): FocusRequester {
     return requester
 }
 
-private val TileBand = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
-private val TileBandColor = Color(0x33000000)
-private val TileName = TextStyle(fontSize = 12.sp, lineHeight = 24.sp, letterSpacing = 0.5.sp, textAlign = TextAlign.Center)
+private val TileName = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 0.2.sp, textAlign = TextAlign.Center,
+    fontWeight = FontWeight.Medium)
 private val TileNameFocused = TileName.copy(fontWeight = FontWeight.SemiBold)
-private val TileNameColor = Fz.text.copy(alpha = 0.8f)
-private val TileNameDead = Color(0xFFFF6B81)
+private val TileNameColor = Fz.text.copy(alpha = 0.6f)
+private val TileNameDead = Color(0xFFFF453A) // Apple red
 
-/** Tiles look (Apple TV style): a big logo on a dark tile, the name under it; the focused tile grows. */
+/** Apple TV card: the logo floats on a quiet grey card, the name small below it; the focused card lifts and grows. */
 @Composable
 private fun TileCard(
     ch: Channel?, index: Int, fav: Boolean, check: Int,
@@ -440,25 +488,25 @@ private fun TileCard(
     FocusBox(
         onClick = { ch?.let(actions::openChannel) },
         onLongClick = { ch?.let(actions::toggleFavorite) },
-        modifier = Modifier.fillMaxWidth().height(118.dp).focusRequester(requester),
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xFF1C1C24),
-        focusedColor = Color(0xFF34343F),
+        modifier = Modifier.fillMaxWidth().height(116.dp).focusRequester(requester),
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFF1C1C1E),
+        focusedColor = Color(0xFF3A3A3C),
         focusedBrush = null,
-        focusScale = 1.08f,
+        focusScale = 1.1f,
         outline = false,
     ) { focused ->
         // The fewest layouts that give this picture: every tile on screen is composed when a group opens.
         Box(
-            Modifier.fillMaxSize().padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 48.dp)
+            Modifier.fillMaxSize().padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 38.dp)
                 .channelLogo(ch?.logo?.takeIf { it.isNotBlank() }, tvIcon.takeIf { ch != null })
         )
-        if (fav) Icon(painterResource(R.drawable.ic_star), null, tint = Color(0xFFFFC94D),
-            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(14.dp))
+        if (fav) Icon(painterResource(R.drawable.ic_star), null, tint = Color(0xFFFFD60A),
+            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(13.dp))
         BasicText(
             ch?.name.orEmpty(),
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(TileBandColor, TileBand)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
             style = if (focused) TileNameFocused else TileName,
             color = { if (dead) TileNameDead else if (focused) Color.White else TileNameColor },
             maxLines = 1,
@@ -492,13 +540,14 @@ fun WideButton(text: String, primary: Boolean, onClick: () -> Unit, modifier: Mo
         onClick = onClick,
         modifier = modifier.padding(top = 8.dp).height(46.dp).widthIn(min = 220.dp),
         shape = RoundedCornerShape(23.dp),
-        color = if (primary) Fz.accent else Color(0xFF2A3580),
-        // Buttons turn white under the remote, like the other buttons of the app
-        focusedColor = Color.White,
+        color = if (primary) Fz.accent else Fz.surface2,
+        // Buttons turn white under the remote (tvOS)
+        focusedColor = Fz.focusLight,
         focusedBrush = null,
+        outline = false,
         focusScale = 1.06f,
     ) { focused ->
-        Text(text, color = if (focused) Fz.bg else Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+        Text(text, color = if (focused) Fz.onLight else Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.align(Alignment.Center).padding(horizontal = 22.dp))
     }
 }

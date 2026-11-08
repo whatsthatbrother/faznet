@@ -35,7 +35,7 @@
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Faznet.Dialog</item>
         <!-- Short cross-fades between screens instead of the slow default slide -->
         <item name="android:windowAnimationStyle">@style/Faznet.WindowAnim</item>
-        <item name="colorControlHighlight">#554F6BFF</item>
+        <item name="colorControlHighlight">#550A84FF</item>
     </style>
 
     <style name="Faznet.Button" parent="Widget.Material3.Button">
@@ -70,7 +70,7 @@
         <item name="buttonBarPositiveButtonStyle">@style/Faznet.DialogButton</item>
         <item name="buttonBarNegativeButtonStyle">@style/Faznet.DialogButton.Secondary</item>
         <item name="buttonBarNeutralButtonStyle">@style/Faznet.DialogButton.Secondary</item>
-        <item name="colorControlHighlight">#664F6BFF</item>
+        <item name="colorControlHighlight">#660A84FF</item>
     </style>
 
     <!-- Red warning dialog (restart the device): has to be noticed over the picture -->

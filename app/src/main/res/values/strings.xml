@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Faznet</string>
+    <string name="app_name" translatable="false">Faznet Design</string>
     <string name="playlists">Playlists</string>
     <string name="add_playlist">Add playlist</string>
     <string name="welcome_title">Welcome to Faznet</string>
@@ -10,6 +10,7 @@
     <string name="group_recent">Recently watched</string>
     <string name="group_uncategorized">Uncategorized</string>
     <string name="search_hint">Search channels…</string>
+    <string name="tab_search">Search</string>
     <string name="loading">Loading playlist…</string>
     <string name="no_channels">No channels here</string>
     <string name="err_load">Could not load the playlist:\n%1$s</string>

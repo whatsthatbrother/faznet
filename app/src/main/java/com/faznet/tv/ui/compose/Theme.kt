@@ -63,19 +63,24 @@ import kotlinx.coroutines.launch
 
 /** Faznet colours (same as res/values/colors.xml). */
 object Fz {
-    val bg = Color(0xFF0B1030)
-    val bgTop = Color(0xFF1B2266)
-    val surface = Color(0xFF141B45)
-    val surface2 = Color(0xFF1E2766)
-    val accent = Color(0xFF4F6BFF)
-    val accent2 = Color(0xFF8A4DFF)
-    val text = Color(0xFFEEF1FF)
-    val dim = Color(0xFFA0A8D0)
-    val line = Color(0xFF2A3475)
-    val selected = Color(0x404F6BFF)
+    val bg = Color(0xFF000000)
+    val bgTop = Color(0xFF1C1C1E)
+    val surface = Color(0xFF1C1C1E)
+    val surface2 = Color(0xFF2C2C2E)
+    val accent = Color(0xFF0A84FF)
+    val accent2 = Color(0xFF409CFF)
+    val text = Color(0xFFFFFFFF)
+    val dim = Color(0xFF8E8E93)
+    val line = Color(0xFF38383A)
+    val selected = Color(0x1FFFFFFF)
+    /** Raised grey of a focused item (tvOS dark), under a thin white frame. */
+    val focus = Color(0xFF48484A)
+    /** tvOS: a focused button or row turns white, its text black. */
+    val focusLight = Color(0xFFF2F2F7)
+    val onLight = Color(0xFF1C1C1E)
 
-    /** The focused item: blue to violet, like Smart IPTV. */
-    val focusBrush = Brush.horizontalGradient(listOf(accent, accent2))
+    /** The focused item: one calm grey, no colour gradient (Apple style). */
+    val focusBrush: Brush = androidx.compose.ui.graphics.SolidColor(focus)
 }
 
 @Composable
@@ -315,10 +320,11 @@ private class FocusLookNode(
 fun IconAction(icon: Int, label: String, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, size: Dp = 46.dp) {
     FocusBox(
         onClick = onClick, onLongClick = onLongClick, modifier = Modifier.padding(horizontal = 3.dp).size(size),
-        shape = RoundedCornerShape(50), color = Color(0xB3262F75), outline = true, focusScale = 1.1f,
-    ) {
+        shape = RoundedCornerShape(50), color = Fz.surface2, focusedColor = Fz.focusLight, focusedBrush = null,
+        outline = false, focusScale = 1.12f,
+    ) { focused ->
         Icon(
-            painterResource(icon), contentDescription = label, tint = Fz.text,
+            painterResource(icon), contentDescription = label, tint = if (focused) Fz.onLight else Fz.text,
             modifier = Modifier.align(Alignment.Center).size(size * 0.5f)
         )
     }

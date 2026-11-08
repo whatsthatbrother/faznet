@@ -14,7 +14,7 @@ if (bench) layout.buildDirectory.set(file("build-bench"))
 
 // The release key is NOT in the repository (see signingConfigs below).
 val keyProps = Properties().apply {
-    val f = rootProject.file("keystore/keystore.properties")
+    val f = rootProject.file("../Faznet/keystore/keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
@@ -23,13 +23,13 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = if (bench) "com.faznet.tv.bench" else "com.faznet.tv"
+        applicationId = if (bench) "com.faznet.tv.bench" else "com.faznet.tv.design"
         minSdk = 23
         targetSdk = 35
         // The bench app must never be offered an update from the website. Only for trying the updater against a site on
         // this PC does it take a real number: -PbenchVersion=43 -PfaznetWeb=http://127.0.0.1:8765
         versionCode = if (bench) (project.findProperty("benchVersion") as String?)?.toInt() ?: 999_999 else 54
-        versionName = "4.3.5"
+        versionName = "5.0.0-design"
 
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
         // "REPLACE" counts as no server (Repository.serverUrl): the bench app registers nothing and sends no reports.
@@ -49,7 +49,7 @@ android {
     // (storePassword=..., keyPassword=...) or provide FAZNET_STORE_PASSWORD / FAZNET_KEY_PASSWORD.
     signingConfigs {
         create("release") {
-            storeFile = rootProject.file("keystore/faznet.jks")
+            storeFile = rootProject.file("../Faznet/keystore/faznet.jks")
             storePassword = keyProps.getProperty("storePassword") ?: System.getenv("FAZNET_STORE_PASSWORD")
             keyAlias = "faznet"
             keyPassword = keyProps.getProperty("keyPassword") ?: System.getenv("FAZNET_KEY_PASSWORD")

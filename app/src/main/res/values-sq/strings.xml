@@ -9,6 +9,7 @@
     <string name="group_recent">Të shikuara së fundi</string>
     <string name="group_uncategorized">Pa kategori</string>
     <string name="search_hint">Kërko kanale…</string>
+    <string name="tab_search">Kërko</string>
     <string name="loading">Duke ngarkuar playlist-ën…</string>
     <string name="no_channels">Nuk ka kanale këtu</string>
     <string name="err_load">Playlist-a nuk u ngarkua:\n%1$s</string>
