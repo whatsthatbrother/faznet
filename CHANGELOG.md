@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.3.5
+
+### New
+- The suggestion to restart the device is now a red message, in English and Albanian together, so it is easy to notice and understand.
+
 ## 4.3.4
 
 ### New
