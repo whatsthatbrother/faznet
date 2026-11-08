@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Buttons on the red warning dialog: dark red, white when focused with the remote -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:color="#FFFFFF" />
+    <item android:state_pressed="true" android:color="#FFCDD2" />
+    <item android:color="#7F0000" />
+</selector>

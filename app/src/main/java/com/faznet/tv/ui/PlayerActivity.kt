@@ -863,13 +863,22 @@ class PlayerActivity : AppCompatActivity() {
         if (sp.getBoolean("restart_never", false) || now - sp.getLong("restart_at", 0L) < RESTART_HINT_EVERY_MS) return
         sp.edit().putLong("restart_at", now).apply()
         current?.let { ProblemLog.add(this, it.name, "restart suggested: 3 channels froze at their start within 10 min") }
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.restart_title)
-            .setMessage(R.string.restart_message)
-            .setPositiveButton(R.string.restart_ok, null)
-            .setNegativeButton(R.string.restart_never) { _, _ -> sp.edit().putBoolean("restart_never", true).apply() }
+        // Red, and in English and Albanian together whatever the app's language: it has to be noticed and understood.
+        val en = inLanguage("en")
+        val sq = inLanguage("sq")
+        fun both(id: Int, sep: String) = en.getString(id) + sep + sq.getString(id)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.ThemeOverlay_Faznet_Dialog_Alert)
+            .setIcon(android.R.drawable.ic_dialog_alert)
+            .setTitle(both(R.string.restart_title, "\n"))
+            .setMessage(both(R.string.restart_message, "\n\n"))
+            .setPositiveButton(both(R.string.restart_ok, " · "), null)
+            .setNegativeButton(both(R.string.restart_never, " · ")) { _, _ -> sp.edit().putBoolean("restart_never", true).apply() }
             .show()
     }
+
+    private fun inLanguage(tag: String) = createConfigurationContext(
+        Configuration(resources.configuration).apply { setLocale(java.util.Locale.forLanguageTag(tag)) }
+    ).resources
 
     // ---------- phones: upright, full screen by the button ----------
 

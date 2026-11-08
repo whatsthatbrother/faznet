@@ -73,6 +73,28 @@
         <item name="colorControlHighlight">#664F6BFF</item>
     </style>
 
+    <!-- Red warning dialog (restart the device): has to be noticed over the picture -->
+    <style name="Faznet.DialogButton.Alert" parent="Widget.Material3.Button">
+        <item name="backgroundTint">@color/alert_btn_bg</item>
+        <item name="android:textColor">@color/alert_btn_text</item>
+        <item name="strokeColor">#FFFFFF</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:layout_marginStart">8dp</item>
+    </style>
+
+    <style name="ThemeOverlay.Faznet.Dialog.Alert">
+        <item name="colorSurface">#C62828</item>
+        <item name="colorSurfaceContainerHigh">#C62828</item>
+        <item name="colorOnSurface">#FFFFFF</item>
+        <item name="colorOnSurfaceVariant">#FFFFFF</item>
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="android:textColorSecondary">#FFFFFF</item>
+        <item name="colorSecondary">#FFFFFF</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Faznet.DialogButton.Alert</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Faznet.DialogButton.Alert</item>
+        <item name="colorControlHighlight">#55FFFFFF</item>
+    </style>
+
     <style name="Faznet.WindowAnim" parent="@android:style/Animation.Activity">
         <item name="android:activityOpenEnterAnimation">@anim/fz_fade_in</item>
         <item name="android:activityOpenExitAnimation">@anim/fz_hold</item>
