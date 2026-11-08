@@ -77,6 +77,10 @@ class GuideActivity : AppCompatActivity() {
         rvProg.layoutManager = LinearLayoutManager(this)
         rvProg.adapter = progAdapter
         rvProg.itemAnimator = null
+        // An empty list took the remote's focus itself, with nothing to show it: the focus seemed lost. Only rows can
+        // hold it now.
+        rvProg.isFocusable = false
+        rvChannels.isFocusable = false
 
         lifecycleScope.launch(DbErrors) {
             val list = channelRepo.activeList(playlistId)?.let { channelRepo.pagesOf(channelRepo.listView(it).all()) }
@@ -91,6 +95,8 @@ class GuideActivity : AppCompatActivity() {
             val start = last?.let { list.indexOf(it) } ?: 0
             (rvChannels.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(start, 0)
             list.get(start)
+            // The remote starts on the channel whose programme is shown, not on the Back button.
+            rvChannels.post { rvChannels.findViewHolderForAdapterPosition(start)?.itemView?.requestFocus() }
             // The programme comes first. Which channels keep an archive is the account's whole channel list, which
             // can take seconds on a big account: it fills in the title when it arrives.
             showChannel(start)
@@ -110,7 +116,19 @@ class GuideActivity : AppCompatActivity() {
     private fun showChannel(pos: Int) {
         val list = channels ?: return
         val ch = list.peek(pos) ?: return
-        val id = XtreamAccount.liveStreamId(ch.url) ?: return
+        val id = XtreamAccount.liveStreamId(ch.url)
+        if (id == null) {
+            // A channel the account has no guide for: say so, instead of leaving the previous channel's programme
+            // (and name) on screen as if it were this one's.
+            job?.cancel()
+            shown = null
+            title.text = ch.name
+            progress.visibility = View.GONE
+            progAdapter.submit(ch, "", emptyList())
+            empty.setText(R.string.guide_empty)
+            empty.visibility = View.VISIBLE
+            return
+        }
         shown = ch to id
         showTitle()
         job?.cancel()
@@ -118,7 +136,11 @@ class GuideActivity : AppCompatActivity() {
         empty.visibility = View.GONE
         progAdapter.submit(ch, id, emptyList())
         job = lifecycleScope.launch {
-            val list = XtreamApi.guide(account, id)
+            // Some providers send a guide that ended months ago. Nothing older than the channel's catch-up archive
+            // (at least a day) is shown: a stale guide on screen reads as if it were today's.
+            val keepDays = maxOf(archive[id] ?: 0, 1)
+            val since = System.currentTimeMillis() - keepDays * 24L * 3600_000L
+            val list = XtreamApi.guide(account, id).filter { it.end > since }
             progress.visibility = View.GONE
             progAdapter.submit(ch, id, list)
             if (list.isEmpty()) { empty.setText(R.string.guide_empty); empty.visibility = View.VISIBLE }
@@ -186,7 +208,12 @@ class GuideActivity : AppCompatActivity() {
                 else -> ""
             }
             h.badge.visibility = if (h.badge.text.isEmpty()) View.GONE else View.VISIBLE
-            h.itemView.alpha = if (p.end <= now && !canReplay) 0.55f else 1f
+            h.badge.setBackgroundResource(if (live) R.drawable.bg_badge_live else R.drawable.bg_badge)
+            h.itemView.isSelected = live // the programme on air sits a little lighter
+            // Past programmes that can't be watched again are dimmed, but not while focused: the white row stays white.
+            val dim = if (p.end <= now && !canReplay) 0.5f else 1f
+            h.itemView.alpha = if (h.itemView.isFocused) 1f else dim
+            h.itemView.setOnFocusChangeListener { v, f -> v.alpha = if (f) 1f else dim }
             h.itemView.setOnClickListener { ch?.let { c -> open(c, streamId, p) } }
         }
     }
