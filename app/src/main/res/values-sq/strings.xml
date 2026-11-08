@@ -206,4 +206,7 @@
     <string name="start_with_live">Hap direkt TV Live (pa ekranin hyrës)</string>
     <string name="parental_new_pin">Shkruaj një PIN të ri me 4 shifra, ose lëre bosh për ta mbajtur të njëjtin.</string>
     <string name="parental_turn_off">Fike</string>
+    <string name="season_n">Sezoni %1$d</string>
+    <string name="episode_n">Episodi %1$d</string>
+    <string name="resume_at">Vazhdo nga %1$s</string>
 </resources>

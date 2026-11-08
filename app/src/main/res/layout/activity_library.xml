@@ -2,16 +2,16 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg"
+    android:background="@android:color/transparent"
     android:orientation="vertical">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="60dp"
+        android:layout_height="76dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="8dp"
-        android:paddingEnd="16dp">
+        android:paddingStart="12dp"
+        android:paddingEnd="20dp">
 
         <ImageButton
             android:id="@+id/libBack"
@@ -23,16 +23,16 @@
             android:id="@+id/libTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="14dp"
             android:layout_weight="1"
             android:textColor="@color/text"
-            android:textSize="20sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
         <EditText
             android:id="@+id/libSearch"
-            android:layout_width="260dp"
-            android:layout_height="44dp"
+            android:layout_width="300dp"
+            android:layout_height="48dp"
             android:background="@drawable/bg_search"
             android:drawableStart="@drawable/ic_search"
             android:drawablePadding="10dp"
@@ -41,8 +41,8 @@
             android:imeOptions="actionSearch"
             android:inputType="text"
             android:maxLines="1"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
             android:textColor="@color/text"
             android:textColorHint="@color/text_dim"
             android:textSize="15sp" />
@@ -55,11 +55,12 @@
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/libCategories"
-            android:layout_width="240dp"
+            android:layout_width="250dp"
             android:layout_height="match_parent"
             android:clipToPadding="false"
-            android:paddingStart="12dp"
-            android:paddingEnd="8dp"
+            android:paddingStart="16dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="12dp"
             android:paddingBottom="16dp" />
 
         <FrameLayout
@@ -71,16 +72,18 @@
                 android:id="@+id/libItems"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipChildren="false"
                 android:clipToPadding="false"
-                android:paddingEnd="12dp"
-                android:paddingBottom="16dp" />
+                android:paddingStart="4dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="24dp" />
 
             <ProgressBar
                 android:id="@+id/libProgress"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_gravity="center"
-                android:indeterminateTint="@color/accent"
+                android:indeterminateTint="#FFFFFF"
                 android:visibility="gone" />
 
             <TextView

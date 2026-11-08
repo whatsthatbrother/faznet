@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Screens (tvOS): soft graphite light from the top, fading into black -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="270" android:startColor="#2A2A2E" android:centerColor="#0E0E10" android:endColor="#000000" />
+</shape>

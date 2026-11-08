@@ -37,7 +37,7 @@
         android:maxLines="1"
         android:paddingStart="12dp"
         android:paddingEnd="12dp"
-        android:textColor="@color/text_dim"
+        android:textColor="@color/row_text"
         android:textSize="14sp" />
 
     <TextClock

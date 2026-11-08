@@ -69,7 +69,8 @@ class LibraryActivity : AppCompatActivity() {
         grid = PosterAdapter()
         val widthDp = resources.configuration.screenWidthDp - if (portrait) 20 else 260
         findViewById<RecyclerView>(R.id.libItems).apply {
-            layoutManager = GridLayoutManager(this@LibraryActivity, (widthDp / 120).coerceIn(2, 8))
+            // Fewer, bigger posters with air between them (Apple TV)
+            layoutManager = GridLayoutManager(this@LibraryActivity, (widthDp / 140).coerceIn(2, 7))
             adapter = grid
             itemAnimator = null
         }
@@ -105,7 +106,9 @@ class LibraryActivity : AppCompatActivity() {
                 val found = XtreamApi.series(account, cat)
                 withContext(Dispatchers.Default) {
                     found.map { s ->
-                        Item(s.id, s.name, s.cover, s.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" } ?: "") { openSeries(s.id, s.name) }
+                        Item(s.id, s.name, s.cover, s.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" } ?: "") {
+                            SeriesActivity.start(this@LibraryActivity, s.id, s.name, s.cover, s.plot, s.rating)
+                        }
                     }
                 }
             } else {
@@ -131,37 +134,6 @@ class LibraryActivity : AppCompatActivity() {
         empty.visibility = if (shown.isEmpty() && progress.visibility != View.VISIBLE) View.VISIBLE else View.GONE
     }
 
-    private fun openSeries(id: String, name: String) {
-        progress.visibility = View.VISIBLE
-        lifecycleScope.launch {
-            val eps = XtreamApi.episodes(account, id)
-            progress.visibility = View.GONE
-            if (eps.isEmpty()) {
-                MaterialAlertDialogBuilder(this@LibraryActivity).setTitle(name).setMessage(R.string.no_items)
-                    .setPositiveButton(android.R.string.ok, null).show()
-                return@launch
-            }
-            val labels = eps.map { e ->
-                val url = XtreamApi.episodeUrl(account, e)
-                val resume = VodPlayerActivity.resumePosition(this@LibraryActivity, url)
-                "S${e.season} E${e.number}  ${e.title.ifEmpty { name }}" + if (resume > 0) "  ⏵ ${fmt(resume)}" else ""
-            }.toTypedArray()
-            MaterialAlertDialogBuilder(this@LibraryActivity)
-                .setTitle(name)
-                .setItems(labels) { _, which ->
-                    val e = eps[which]
-                    VodPlayerActivity.start(this@LibraryActivity, XtreamApi.episodeUrl(account, e), "$name · S${e.season} E${e.number}")
-                }
-                .setNegativeButton(R.string.cancel, null)
-                .show()
-        }
-    }
-
-    private fun fmt(ms: Long): String {
-        val s = ms / 1000
-        return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
-    }
-
     private inner class PosterAdapter : RecyclerView.Adapter<PosterAdapter.VH>() {
         private var list: List<Item> = emptyList()
 
@@ -171,7 +143,7 @@ class LibraryActivity : AppCompatActivity() {
         }
 
         inner class VH(v: View) : RecyclerView.ViewHolder(v) {
-            val image: ImageView = v.findViewById(R.id.posterImage)
+            val image: ImageView = v.findViewById<ImageView>(R.id.posterImage).apply { clipToOutline = true } // rounded poster
             val title: TextView = v.findViewById(R.id.posterTitle)
             val sub: TextView = v.findViewById(R.id.posterSub)
         }
@@ -190,9 +162,11 @@ class LibraryActivity : AppCompatActivity() {
                 error(R.drawable.ic_tv)
             }
             h.itemView.setOnClickListener { item.play() }
+            // Apple TV: the focused poster lifts above its neighbours and grows.
             h.itemView.setOnFocusChangeListener { v, f ->
-                val sc = if (f) 1.05f else 1f
-                v.animate().scaleX(sc).scaleY(sc).setDuration(120).start()
+                val sc = if (f) 1.1f else 1f
+                v.animate().scaleX(sc).scaleY(sc).translationZ(if (f) 12f * v.resources.displayMetrics.density else 0f)
+                    .setDuration(160).start()
             }
         }
     }

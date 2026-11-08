@@ -207,4 +207,7 @@
     <string name="start_with_live">Open Live TV straight away (skip the start screen)</string>
     <string name="parental_new_pin">Type a new 4-digit PIN, or leave it empty to keep the current one.</string>
     <string name="parental_turn_off">Turn off</string>
+    <string name="season_n">Season %1$d</string>
+    <string name="episode_n">Episode %1$d</string>
+    <string name="resume_at">Continue at %1$s</string>
 </resources>
