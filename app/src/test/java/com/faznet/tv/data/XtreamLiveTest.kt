@@ -35,9 +35,36 @@ class XtreamLiveTest {
         assertEquals(listOf("RTSH 1 HD", "Tom & Jerry", "No category", "105"), out.map { it.name })
         assertEquals(listOf("News", "Kids", "Other", "Other"), out.map { it.group })
         assertEquals(listOf(1, 2, 3, 4), out.map { it.number })
-        assertEquals("http://s.test:8080/live/u/p/101.ts", out[0].url)
+        assertEquals("http://s.test:8080/u/p/101", out[0].url) // the classic form without a learnt template
         assertEquals("http://i/1.png", out[0].logo)
         assertEquals(null, out[1].logo)
+    }
+
+    @Test
+    fun addressFormLearntFromTheM3uList() {
+        // The provider's own M3U: an info clip on another path first, movies, then the live channels' real form.
+        val m3u = """
+            #EXTM3U
+            #EXTINF:-1,Account Information
+            http://info.test/clip/u/p/999999.mp4
+            #EXTINF:-1 group-title="News",One
+            http://s.test:8080/u/p/101.ts
+            #EXTINF:-1,Film
+            http://s.test:8080/movie/u/p/9001.mp4
+            #EXTINF:-1 group-title="News",Two
+            http://s.test:8080/u/p/102.ts
+            #EXTINF:-1 group-title="Sport",Three
+            http://s.test:8080/u/p/103.ts
+        """.trimIndent()
+        val t = XtreamLive.learnTemplate(m3u.lineSequence(), account)!!
+        assertEquals("http://s.test:8080/u/p/160.ts", t.url("160"))
+        assertEquals(t.url("7"), XtreamLive.Template.decode(t.encode())!!.url("7"))
+
+        val out = ArrayList<Channel>()
+        XtreamLive.parse("""[{"stream_id":"160","name":"Sport 1","category_id":"1"}]""".byteInputStream(), account,
+            mapOf("1" to "Sport"), "Other", t) { out.add(it) }
+        assertEquals("http://s.test:8080/u/p/160.ts", out[0].url)
+        assertEquals(null, XtreamLive.learnTemplate(sequenceOf("#EXTM3U", "<html>"), account))
     }
 
     @Test

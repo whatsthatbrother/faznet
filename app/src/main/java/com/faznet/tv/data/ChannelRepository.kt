@@ -241,6 +241,10 @@ class ChannelRepository @Inject constructor(
                 repo.download(api, file, accept = XtreamLive::looksLikeList) { ensureActive() }
             }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.isSuccess
             if (!viaApi) repo.download(url, file) { ensureActive() }
+            // The channels' addresses exactly as the provider's own M3U list writes them (learnt from its first lines):
+            // a different form of the same address can get a different, broken stream.
+            val learnt = if (viaApi && account != null) XtreamLive.learnTemplate(url, account, repo.userAgent) else null
+            if (learnt != null) templateFile(file).writeText(learnt.encode()) else templateFile(file).delete()
         }
         if (!file.exists()) throw java.io.IOException("Playlist file missing")
 
@@ -254,10 +258,14 @@ class ChannelRepository @Inject constructor(
         }
 
         val now = System.currentTimeMillis()
-        val fingerprint = fingerprint(file) + (categories?.let { ":" + it.entries.joinToString().hashCode().toString(36) } ?: "")
+        val template = account?.let { a ->
+            XtreamLive.Template.decode(templateFile(file).takeIf { it.exists() }?.readText()) ?: XtreamLive.classic(a)
+        }
+        val fingerprint = fingerprint(file) +
+            (categories?.let { ":" + (it.entries.joinToString() + template?.encode()).hashCode().toString(36) } ?: "")
         if (existing != null && state.fingerprint == fingerprint) {
             library.setChecked(p.id, now)
-            if (url != null) file.delete()
+            if (url != null) { file.delete(); templateFile(file).delete() }
             return ListResult(existing, state.channelCount, changed = false)
         }
 
@@ -269,7 +277,9 @@ class ChannelRepository @Inject constructor(
                 val names = categories
                 file.inputStream().use { input ->
                     val source: ((Channel) -> Unit) -> Unit =
-                        if (names != null && account != null) { sink -> XtreamLive.parse(input, account, names, defaultGroup, sink) }
+                        if (names != null && account != null && template != null) {
+                            { sink -> XtreamLive.parse(input, account, names, defaultGroup, template, sink) }
+                        }
                         else { sink -> M3uParser.parse(input, defaultGroup, sink) }
                     importer.import(p.id, source, account != null, fingerprint, tag, now, least) {
                         ensureActive() // another playlist was chosen: stop here, it would only have to wait
@@ -279,12 +289,12 @@ class ChannelRepository @Inject constructor(
             }
             Perf.log("import ${result.channels} channels, ${result.groups} groups")
             // A list that can be downloaded again needs no copy of the file: the database is the copy.
-            if (url != null) file.delete()
+            if (url != null) { file.delete(); templateFile(file).delete() }
             repo.deleteOldCopy(p.id)
             return ListResult(result.listId, result.channels, changed = true)
         } catch (e: ChannelImporter.ListRefused) {
             // Not kept: without a list yet, the next start would read this same answer again instead of asking the server.
-            if (url != null) file.delete()
+            if (url != null) { file.delete(); templateFile(file).delete() }
             throw e
         } finally {
             importing.value = null
@@ -327,9 +337,12 @@ class ChannelRepository @Inject constructor(
     }
 
     // The import's format is part of the tag: when it changes, every list is read in again once, by itself.
-    // 2: live channels only (movies and series of an Xtream list left out). 3: Xtream live channels from the API.
+    // 2: live channels only (movies and series of an Xtream list left out). 3: Xtream live channels from the API. 4: with the M3U list's own address form.
     private fun sourceTag(p: Playlist) =
         "$IMPORT_FORMAT|${p.type}|${p.source}|${p.username}|${p.password}".hashCode().toString(36)
+
+    /** Beside the downloaded list: how the provider writes a live channel's address (XtreamLive.Template). */
+    private fun templateFile(list: File) = File(list.path + ".tpl")
 
     private fun fingerprint(file: File): String {
         val digest = MessageDigest.getInstance("SHA-1")
@@ -347,7 +360,7 @@ class ChannelRepository @Inject constructor(
     class ListResult(val listId: Long, val channels: Int, val changed: Boolean)
 
     private companion object {
-        const val IMPORT_FORMAT = 3
+        const val IMPORT_FORMAT = 4
         const val PAGE = 60
         const val WHOLE_LIST_STEP = 2000
         const val SEARCH_LIMIT = 500
