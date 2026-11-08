@@ -33,6 +33,10 @@
         <item name="materialButtonStyle">@style/Faznet.Button</item>
         <item name="materialButtonOutlinedStyle">@style/Faznet.Button.Secondary</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Faznet.Dialog</item>
+        <!-- Text fields and choices are made with the screen's context, also inside dialogs: the look lives here -->
+        <item name="editTextStyle">@style/Faznet.EditText</item>
+        <item name="radioButtonStyle">@style/Faznet.Choice.Radio</item>
+        <item name="checkboxStyle">@style/Faznet.Choice.Check</item>
         <!-- Short cross-fades between screens instead of the slow default slide -->
         <item name="android:windowAnimationStyle">@style/Faznet.WindowAnim</item>
         <item name="colorControlHighlight">#550A84FF</item>
@@ -54,12 +58,18 @@
     </style>
 
     <style name="Faznet.DialogButton" parent="Widget.Material3.Button">
+        <item name="cornerRadius">22dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">46dp</item>
         <item name="backgroundTint">@color/btn_bg</item>
         <item name="android:textColor">@color/btn_text</item>
         <item name="android:layout_marginStart">8dp</item>
     </style>
 
     <style name="Faznet.DialogButton.Secondary" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="cornerRadius">22dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">46dp</item>
         <item name="backgroundTint">@color/btn2_bg</item>
         <item name="android:textColor">@color/btn2_text</item>
         <item name="strokeColor">@color/btn2_stroke</item>
@@ -67,14 +77,64 @@
     </style>
 
     <style name="ThemeOverlay.Faznet.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <!-- tvOS look for every dialog: big rounded corners, a bigger title, grey rounded fields, pill buttons -->
+        <item name="alertDialogStyle">@style/Faznet.AlertDialog</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/Faznet.DialogTitle</item>
+        <item name="editTextStyle">@style/Faznet.EditText</item>
+        <item name="radioButtonStyle">@style/Faznet.Choice.Radio</item>
+        <item name="checkboxStyle">@style/Faznet.Choice.Check</item>
         <item name="buttonBarPositiveButtonStyle">@style/Faznet.DialogButton</item>
         <item name="buttonBarNegativeButtonStyle">@style/Faznet.DialogButton.Secondary</item>
         <item name="buttonBarNeutralButtonStyle">@style/Faznet.DialogButton.Secondary</item>
         <item name="colorControlHighlight">#660A84FF</item>
     </style>
 
+    <style name="Faznet.AlertDialog" parent="MaterialAlertDialog.Material3">
+        <item name="shapeAppearance">@style/ShapeAppearance.Faznet.Dialog</item>
+    </style>
+
+    <style name="ShapeAppearance.Faznet.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">28dp</item>
+    </style>
+
+    <style name="Faznet.DialogTitle" parent="MaterialAlertDialog.Material3.Title.Text">
+        <item name="android:textSize">22sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Faznet.EditText" parent="Widget.AppCompat.EditText">
+        <item name="android:background">@drawable/bg_field</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textColorHint">@color/text_dim</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="Faznet.Choice.Radio" parent="Widget.Material3.CompoundButton.RadioButton">
+        <item name="android:background">@drawable/bg_choice</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:textSize">16sp</item>
+        <item name="buttonTint">@color/accent</item>
+    </style>
+
+    <style name="Faznet.Choice.Check" parent="Widget.Material3.CompoundButton.CheckBox">
+        <item name="android:background">@drawable/bg_choice</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="buttonTint">@color/accent</item>
+    </style>
+
     <!-- Red warning dialog (restart the device): has to be noticed over the picture -->
     <style name="Faznet.DialogButton.Alert" parent="Widget.Material3.Button">
+        <item name="cornerRadius">22dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">46dp</item>
         <item name="backgroundTint">@color/alert_btn_bg</item>
         <item name="android:textColor">@color/alert_btn_text</item>
         <item name="strokeColor">#FFFFFF</item>

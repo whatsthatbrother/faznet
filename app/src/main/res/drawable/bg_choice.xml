@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A choice in a dialog (radio, check): a grey bar when the remote is on it -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape><solid android:color="#48484A" /><corners android:radius="12dp" /></shape>
+    </item>
+    <item><shape><solid android:color="@android:color/transparent" /><corners android:radius="12dp" /></shape></item>
+</selector>

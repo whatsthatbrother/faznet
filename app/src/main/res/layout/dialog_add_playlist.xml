@@ -9,13 +9,15 @@
         android:orientation="vertical"
         android:paddingStart="24dp"
         android:paddingTop="8dp"
-        android:paddingEnd="24dp">
+        android:paddingEnd="24dp"
+        android:paddingBottom="8dp">
 
         <RadioGroup
             android:id="@+id/rgType"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:layout_marginBottom="6dp"
+            android:orientation="horizontal">
 
             <RadioButton
                 android:id="@+id/rbUrl"
@@ -26,12 +28,14 @@
 
             <RadioButton
                 android:id="@+id/rbXtream"
+                android:layout_marginStart="8dp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/type_xtream" />
 
             <RadioButton
                 android:id="@+id/rbFile"
+                android:layout_marginStart="8dp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/type_file" />
@@ -39,6 +43,7 @@
 
         <EditText
             android:id="@+id/etName"
+            android:layout_marginTop="10dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/name_hint"
@@ -47,6 +52,7 @@
 
         <EditText
             android:id="@+id/etUrl"
+            android:layout_marginTop="10dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/url_hint"
@@ -62,6 +68,7 @@
 
             <EditText
                 android:id="@+id/etServer"
+            android:layout_marginTop="10dp"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="@string/server_hint"
@@ -70,6 +77,7 @@
 
             <EditText
                 android:id="@+id/etUser"
+            android:layout_marginTop="10dp"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="@string/username_hint"
@@ -78,6 +86,7 @@
 
             <EditText
                 android:id="@+id/etPass"
+            android:layout_marginTop="10dp"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="@string/password_hint"
@@ -89,6 +98,7 @@
             android:id="@+id/boxFile"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:visibility="gone">

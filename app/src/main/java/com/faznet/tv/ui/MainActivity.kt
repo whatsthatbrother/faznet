@@ -95,6 +95,7 @@ class MainActivity : AppCompatActivity(), HomeActions {
             doAfterTextChanged { vm.setQuery(it?.toString() ?: "") }
         }
         val d = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.tab_search)
             .setView(padded(et))
             .setPositiveButton(android.R.string.ok, null)
             .setNeutralButton(R.string.clear) { _, _ -> vm.setQuery("") }
