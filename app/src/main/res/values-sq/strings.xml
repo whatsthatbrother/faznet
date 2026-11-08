@@ -203,4 +203,7 @@
     <string name="start_series_sub">Seriale dhe episode, sipas kërkesës</string>
     <string name="start_playlist">Playlist-a: %1$s</string>
     <string name="start_xtream_only">Filmat dhe serialet vijnë me një llogari Xtream (server, emër përdoruesi, fjalëkalim).</string>
+    <string name="start_with_live">Hap direkt TV Live (pa ekranin hyrës)</string>
+    <string name="parental_new_pin">Shkruaj një PIN të ri me 4 shifra, ose lëre bosh për ta mbajtur të njëjtin.</string>
+    <string name="parental_turn_off">Fike</string>
 </resources>

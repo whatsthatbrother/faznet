@@ -104,7 +104,9 @@ class SettingsActivity : AppCompatActivity() {
         Item.Toggle(getString(R.string.software_sd), { repo.softwareSd }, { repo.softwareSd = it }),
         Item.Toggle(getString(R.string.show_stats), { repo.showStats }, { repo.showStats = it }),
         Item.Header(getString(R.string.section_start)),
-        Item.Toggle(getString(R.string.autoplay_last), { repo.autoPlayLast }, { repo.autoPlayLast = it }),        Item.Header(getString(R.string.section_reports)),
+        Item.Toggle(getString(R.string.start_with_live), { repo.startWithLive }, { repo.startWithLive = it }),
+        Item.Toggle(getString(R.string.autoplay_last), { repo.autoPlayLast }, { repo.autoPlayLast = it }),
+        Item.Header(getString(R.string.section_reports)),
         Item.Toggle(getString(R.string.auto_reports), { repo.autoReports }, { repo.autoReports = it }),
         Item.Action(getString(R.string.problem_log), {
             ProblemLog.read(this).size.let { if (it == 0) getString(R.string.problem_log_empty) else "$it" }
@@ -140,19 +142,20 @@ class SettingsActivity : AppCompatActivity() {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Brush.linearGradient(listOf(Fz.bgTop, Fz.bg, Color(0xFF070A20))))
+                .background(Brush.verticalGradient(0f to Color(0xFF2A2A2E), 0.5f to Color(0xFF0E0E10), 1f to Color.Black))
                 .padding(if (tv) PaddingValues(horizontal = 48.dp, vertical = 20.dp) else PaddingValues(8.dp)),
             contentAlignment = Alignment.TopCenter,
         ) {
             Column(Modifier.widthIn(max = 900.dp).fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().height(60.dp), verticalAlignment = Alignment.CenterVertically) {
                     FocusBox(onClick = { finish() }, modifier = Modifier.size(46.dp), shape = RoundedCornerShape(50),
-                        color = Color.Transparent, focusScale = 1.1f) {
-                        Icon(painterResource(R.drawable.ic_back), null, tint = Fz.text,
-                            modifier = Modifier.align(Alignment.Center).size(24.dp))
+                        color = Fz.surface2, focusedColor = Fz.focusLight, focusedBrush = null, outline = false,
+                        focusScale = 1.1f) { focused ->
+                        Icon(painterResource(R.drawable.ic_back), null, tint = if (focused) Fz.onLight else Fz.text,
+                            modifier = Modifier.align(Alignment.Center).size(22.dp))
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Text(getString(R.string.settings), color = Fz.text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(14.dp))
+                    Text(getString(R.string.settings), color = Fz.text, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
                     Text("Faznet ${BuildConfig.VERSION_NAME}", color = Fz.dim, fontSize = 14.sp)
                 }
@@ -164,8 +167,9 @@ class SettingsActivity : AppCompatActivity() {
                     items(list) { item ->
                         when (item) {
                             is Item.Header -> Text(
-                                item.title.uppercase(), color = Fz.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(start = 8.dp, top = 14.dp, bottom = 2.dp),
+                                item.title.uppercase(), color = Fz.dim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.8.sp,
+                                modifier = Modifier.padding(start = 16.dp, top = 22.dp, bottom = 4.dp),
                             )
                             is Item.Toggle -> ToggleRow(item, if (item === list.firstOrNull { it is Item.Toggle }) first else null)
                             is Item.Action -> ActionRow(item)
@@ -186,20 +190,26 @@ class SettingsActivity : AppCompatActivity() {
         var on by remember { mutableStateOf(item.get()) }
         FocusBox(
             onClick = { on = !on; item.set(on) },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 58.dp)
+            modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)
                 .then(if (requester != null) Modifier.focusRequester(requester) else Modifier),
-            focusScale = 1.015f,
+            shape = RowShape,
+            color = Fz.surface,
+            focusedColor = Fz.focusLight,
+            focusedBrush = null,
+            outline = false,
+            focusScale = 1.02f,
         ) { focused ->
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(item.title, color = Fz.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(item.title, color = if (focused) Fz.onLight else Fz.text, fontSize = 16.sp,
+                    fontWeight = if (focused) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
                 Spacer(Modifier.width(16.dp))
-                // Switch
+                // iOS switch: green when on
                 Box(
-                    Modifier.size(width = 46.dp, height = 26.dp)
-                        .background(if (on) (if (focused) Color.White.copy(alpha = 0.35f) else Fz.accent) else Fz.line, RoundedCornerShape(13.dp)),
+                    Modifier.size(width = 50.dp, height = 30.dp)
+                        .background(if (on) SwitchOn else if (focused) Color(0xFFD1D1D6) else Color(0xFF3A3A3C), RoundedCornerShape(15.dp)),
                     contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
                 ) {
-                    Box(Modifier.padding(3.dp).size(20.dp).background(Color.White, RoundedCornerShape(10.dp)))
+                    Box(Modifier.padding(2.dp).size(26.dp).background(Color.White, RoundedCornerShape(13.dp)))
                 }
             }
         }
@@ -208,19 +218,29 @@ class SettingsActivity : AppCompatActivity() {
     @Composable
     private fun ActionRow(item: Item.Action) {
         @Suppress("UNUSED_VARIABLE") val r = refresh.intValue
-        FocusBox(onClick = item.run, modifier = Modifier.fillMaxWidth().heightIn(min = 58.dp), focusScale = 1.015f) { focused ->
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(item.icon), null, tint = if (focused) Color.White else Fz.accent, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(14.dp))
+        FocusBox(
+            onClick = item.run, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp), shape = RowShape,
+            color = Fz.surface, focusedColor = Fz.focusLight, focusedBrush = null, outline = false, focusScale = 1.02f,
+        ) { focused ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(item.icon), null, tint = if (focused) Fz.accent else Fz.dim, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(item.title, color = Fz.text, fontSize = 15.sp)
+                    Text(item.title, color = if (focused) Fz.onLight else Fz.text, fontSize = 16.sp,
+                        fontWeight = if (focused) FontWeight.Medium else FontWeight.Normal)
                     val sub = item.sub()
-                    if (sub.isNotEmpty()) Text(sub, color = if (focused) Color.White.copy(alpha = 0.8f) else Fz.dim,
-                        fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (sub.isNotEmpty()) Text(sub, color = if (focused) Fz.onLight.copy(alpha = 0.6f) else Fz.dim,
+                        fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                Icon(painterResource(R.drawable.ic_chevron_right), null, tint = Fz.dim, modifier = Modifier.size(20.dp))
+                Icon(painterResource(R.drawable.ic_chevron_right), null, tint = if (focused) Fz.onLight.copy(alpha = 0.5f) else Fz.dim,
+                    modifier = Modifier.size(20.dp))
             }
         }
+    }
+
+    private companion object {
+        val RowShape = RoundedCornerShape(14.dp)
+        val SwitchOn = Color(0xFF30D158) // iOS green
     }
 
     // ---------- dialogs ----------
@@ -269,44 +289,54 @@ class SettingsActivity : AppCompatActivity() {
         hint = "••••"
     }
 
+    /**
+     * The PIN only opens the lock's settings. It does not unlock the locked groups (before, pressing Cancel after it
+     * left them open until the app was closed).
+     */
     private fun askParentalPin(onOk: () -> Unit) {
         val et = pinField()
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.parental_enter_pin)
             .setView(padded(et))
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                if (et.text.toString() == Parental.pin(this)) {
-                    Parental.unlocked = true
-                    onOk()
-                } else Toast.makeText(this, R.string.parental_wrong_pin, Toast.LENGTH_SHORT).show()
+                if (et.text.toString() == Parental.pin(this)) onOk()
+                else Toast.makeText(this, R.string.parental_wrong_pin, Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
         et.requestFocus()
     }
 
-    private fun setupParental() {
-        if (Parental.pin(this).length == 4 && !Parental.unlocked) {
-            askParentalPin { setupParental() }
+    private fun setupParental(pinChecked: Boolean = false) {
+        val current = Parental.pin(this)
+        val hasPin = current.length == 4
+        if (hasPin && !pinChecked && !Parental.unlocked) {
+            askParentalPin { setupParental(pinChecked = true) }
             return
         }
-        val et = pinField().apply { setText(Parental.pin(this@SettingsActivity)) }
-        MaterialAlertDialogBuilder(this)
+        // The current PIN is never shown: an empty field keeps it, "Turn off" removes the lock.
+        val et = pinField()
+        val b = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.parental_title)
-            .setMessage(R.string.parental_set_pin)
+            .setMessage(if (hasPin) R.string.parental_new_pin else R.string.parental_set_pin)
             .setView(padded(et))
             .setPositiveButton(R.string.next) { _, _ ->
                 val pin = et.text.toString()
-                if (pin.isEmpty()) {
-                    Parental.setPin(this, ""); Parental.setLockedGroups(this, emptySet())
-                    Toast.makeText(this, R.string.parental_off, Toast.LENGTH_SHORT).show()
-                    refresh.intValue++
-                } else if (pin.length != 4) {
-                    Toast.makeText(this, R.string.parental_pin_4, Toast.LENGTH_SHORT).show()
-                } else chooseLockedGroups(pin)
+                when {
+                    pin.isEmpty() && hasPin -> chooseLockedGroups(current)
+                    pin.isEmpty() -> Unit
+                    pin.length != 4 -> Toast.makeText(this, R.string.parental_pin_4, Toast.LENGTH_SHORT).show()
+                    else -> chooseLockedGroups(pin)
+                }
             }
             .setNegativeButton(R.string.cancel, null)
-            .show()
+        if (hasPin) b.setNeutralButton(R.string.parental_turn_off) { _, _ ->
+            Parental.setPin(this, ""); Parental.setLockedGroups(this, emptySet())
+            Toast.makeText(this, R.string.parental_off, Toast.LENGTH_SHORT).show()
+            refresh.intValue++
+        }
+        b.show()
+        et.requestFocus()
     }
 
     private fun chooseLockedGroups(pin: String) {

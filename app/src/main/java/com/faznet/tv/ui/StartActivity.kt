@@ -78,9 +78,10 @@ class StartActivity : AppCompatActivity() {
         repo = Repository.get(this)
         window.setBackgroundDrawable(null)
 
-        // "Open the last channel on start": straight into Live TV, which plays it.
-        if (savedInstanceState == null && repo.autoPlayLast && repo.activePlaylist() != null) {
-            openLive(autoPlay = true)
+        // "Open the last channel on start" or "open Live TV straight away": into Live TV at once. The start screen
+        // stays below it, so Back still leads to Movies and Series.
+        if (savedInstanceState == null && repo.activePlaylist() != null && (repo.autoPlayLast || repo.startWithLive)) {
+            openLive(autoPlay = repo.autoPlayLast)
         }
         setContent { FaznetTheme { StartScreen(state, ::openLive, ::openLibrary, ::openPlaylists, ::openDevice, ::openSettings) } }
 

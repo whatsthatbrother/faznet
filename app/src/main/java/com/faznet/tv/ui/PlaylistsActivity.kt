@@ -122,11 +122,16 @@ class PlaylistsActivity : AppCompatActivity() {
                         val uri = pickedUri ?: return@setOnClickListener required()
                         val label = displayName(uri)
                         Toast.makeText(this, R.string.importing, Toast.LENGTH_SHORT).show()
+                        // One import at a time: a second press on Save used to read the same file in twice.
+                        val buttons = listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE).mapNotNull(dialog::getButton)
+                        buttons.forEach { it.isEnabled = false }
                         lifecycleScope.launch {
                             try {
                                 repo.importFile(uri, id)
                                 save(dialog, Playlist(id, name.ifEmpty { label.substringBeforeLast('.') }, Playlist.TYPE_FILE, label))
                             } catch (e: Exception) {
+                                runCatching { repo.cacheFile(id).delete() } // no half-copied file left behind
+                                buttons.forEach { it.isEnabled = true }
                                 Toast.makeText(this@PlaylistsActivity, getString(R.string.err_import, e.safeMessage()), Toast.LENGTH_LONG).show()
                             }
                         }

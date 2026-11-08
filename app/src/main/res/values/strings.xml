@@ -204,4 +204,7 @@
     <string name="start_series_sub">Series and episodes, on demand</string>
     <string name="start_playlist">Playlist: %1$s</string>
     <string name="start_xtream_only">Movies and series come with an Xtream account (server, username, password).</string>
+    <string name="start_with_live">Open Live TV straight away (skip the start screen)</string>
+    <string name="parental_new_pin">Type a new 4-digit PIN, or leave it empty to keep the current one.</string>
+    <string name="parental_turn_off">Turn off</string>
 </resources>

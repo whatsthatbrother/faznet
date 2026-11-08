@@ -81,8 +81,12 @@ class Repository private constructor(private val ctx: Context) {
     suspend fun importFile(uri: Uri, id: String) = withContext(Dispatchers.IO) {
         val input = ctx.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open file")
         val tmp = File(cacheDir, "$id.tmp")
-        input.use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
-        if (!tmp.renameTo(cacheFile(id))) throw IOException("Cannot save file")
+        try {
+            input.use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
+            if (!tmp.renameTo(cacheFile(id))) throw IOException("Cannot save file")
+        } finally {
+            tmp.delete() // gone after a rename; after a failure, no half-copied file stays in the cache
+        }
     }
 
     private fun open(url: String): HttpURLConnection =
@@ -250,6 +254,11 @@ class Repository private constructor(private val ctx: Context) {
         get() = prefs.getBoolean(KEY_AUTOPLAY, false)
         set(v) = prefs.edit().putBoolean(KEY_AUTOPLAY, v).apply()
 
+    /** Skip the start screen (Live TV, Movies, Series) and open Live TV straight away. */
+    var startWithLive: Boolean
+        get() = prefs.getBoolean(KEY_START_LIVE, false)
+        set(v) = prefs.edit().putBoolean(KEY_START_LIVE, v).apply()
+
     var useFfmpeg: Boolean
         get() = prefs.getBoolean(KEY_FFMPEG, true)
         set(v) = prefs.edit().putBoolean(KEY_FFMPEG, v).apply()
@@ -291,6 +300,7 @@ class Repository private constructor(private val ctx: Context) {
         private const val KEY_ACTIVE = "active"
         private const val KEY_UA = "user_agent"
         private const val KEY_AUTOPLAY = "autoplay_last"
+        private const val KEY_START_LIVE = "start_with_live"
         private const val KEY_ASPECT = "aspect"
         private const val KEY_FFMPEG = "ffmpeg"
         private const val KEY_STATS = "show_stats"
