@@ -306,7 +306,10 @@ class ChannelRepository @Inject constructor(
         }
     }
 
-    private fun sourceTag(p: Playlist) = "${p.type}|${p.source}|${p.username}|${p.password}".hashCode().toString(36)
+    // The import's format is part of the tag: when it changes, every list is read in again once, by itself.
+    // 2: live channels only (movies and series of an Xtream list left out).
+    private fun sourceTag(p: Playlist) =
+        "$IMPORT_FORMAT|${p.type}|${p.source}|${p.username}|${p.password}".hashCode().toString(36)
 
     private fun fingerprint(file: File): String {
         val digest = MessageDigest.getInstance("SHA-1")
@@ -324,6 +327,7 @@ class ChannelRepository @Inject constructor(
     class ListResult(val listId: Long, val channels: Int, val changed: Boolean)
 
     private companion object {
+        const val IMPORT_FORMAT = 2
         const val PAGE = 60
         const val WHOLE_LIST_STEP = 2000
         const val SEARCH_LIMIT = 500

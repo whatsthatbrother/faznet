@@ -51,11 +51,17 @@ class ChannelImporter(private val db: FaznetDatabase) {
             batch.clear()
         }
 
-        val total = try {
+        // Live channels only, numbered 1, 2, 3… without gaps. An Xtream list (m3u_plus) also holds every movie and
+        // episode of the account, often ten times the live channels: they have their own screens (Movies, Series),
+        // and leaving them out makes the import, the database and the memory on a TV stick that much smaller.
+        var total = 0
+        try {
             M3uParser.parse(input, defaultGroup) { c ->
+                if (isOnDemand(c.url)) return@parse
+                val number = ++total
                 val g = groups.getOrPut(c.group) { (groups.size).let { GroupCount(ListIds.group(listId, it), it, c.group) } }
-                val id = base + c.number
-                batch.add(ChannelEntity(id, g.id, g.count, c.number, c.name, ChannelKeys.searchName(c.name), c.url, c.logo, c.userAgent, c.referrer))
+                val id = base + number
+                batch.add(ChannelEntity(id, g.id, g.count, number, c.name, ChannelKeys.searchName(c.name), c.url, c.logo, c.userAgent, c.referrer))
                 g.count++
                 if (favorites.isNotEmpty() || watched.isNotEmpty()) {
                     val key = ChannelKeys.of(c.url, xtream)
@@ -64,7 +70,7 @@ class ChannelImporter(private val db: FaznetDatabase) {
                 }
                 if (batch.size >= BATCH) {
                     flush()
-                    onProgress(c.number)
+                    onProgress(number)
                 }
             }
         } catch (e: Exception) {
@@ -128,8 +134,30 @@ class ChannelImporter(private val db: FaznetDatabase) {
         return maxOf(byChannel, byGroup) + 1
     }
 
-    private companion object {
-        const val BATCH = 2000
-        const val DELETE_STEP = 5000L
+    companion object {
+        private const val BATCH = 2000
+        private const val DELETE_STEP = 5000L
+
+        private val ON_DEMAND = arrayOf("/movie/", "/series/")
+
+        /**
+         * A movie or a series episode of an Xtream server: …/movie/user/pass/id.ext or …/series/user/pass/id.ext, also
+         * under a sub-path (…/xc/movie/u/p/1.mp4). A live channel whose name merely contains "movie" is not one: the
+         * word has to be a path segment followed by exactly user, password and file.
+         */
+        fun isOnDemand(url: String): Boolean {
+            for (kind in ON_DEMAND) {
+                var at = url.indexOf(kind)
+                while (at >= 0) {
+                    val from = at + kind.length
+                    val end = url.indexOf('?', from).let { if (it < 0) url.length else it }
+                    var slashes = 0
+                    for (i in from until end) if (url[i] == '/') slashes++
+                    if (slashes == 2) return true
+                    at = url.indexOf(kind, at + 1)
+                }
+            }
+            return false
+        }
     }
 }

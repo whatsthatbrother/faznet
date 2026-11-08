@@ -49,6 +49,43 @@ class ChannelImporterTest {
         importer.import(playlist, ByteArrayInputStream(text.toByteArray()), "Other", xtream, fingerprint, "tag", 1L)
 
     @Test
+    fun moviesAndSeriesOfAnXtreamListAreLeftOut() = runBlocking {
+        val text = """
+            #EXTM3U
+            #EXTINF:-1 group-title="News",Live One
+            http://a.test:8080/user/pass/101
+            #EXTINF:-1 group-title="Movies",A Film
+            http://a.test:8080/movie/user/pass/9001.mp4
+            #EXTINF:-1 group-title="News",Live Two
+            http://a.test:8080/live/user/pass/102.ts
+            #EXTINF:-1 group-title="Series",S01E01
+            http://a.test:8080/series/user/pass/7001.mkv
+            #EXTINF:-1 group-title="Movies",Under a sub-path
+            http://a.test/xc/movie/user/pass/9002.mp4?token=1
+            #EXTINF:-1 group-title="Film",Movie Channel HD
+            http://a.test:8080/live/user/pass/movie-channel.ts
+        """.trimIndent() + "\n"
+        val r = import(text)
+        assertEquals(3, r.channels)
+        val groups = db.channels().groupsNow(r.listId)
+        assertEquals(listOf("News", "Film"), groups.map { it.name })
+        val all = db.channels().range(ListIds.base(r.listId), 1, 10)
+        assertEquals(listOf("Live One", "Live Two", "Movie Channel HD"), all.map { it.name })
+        assertEquals(listOf(1, 2, 3), all.map { it.number }) // numbered without gaps
+    }
+
+    @Test
+    fun onDemandUrls() {
+        assertTrue(ChannelImporter.isOnDemand("http://h:80/movie/u/p/1.mp4"))
+        assertTrue(ChannelImporter.isOnDemand("https://h/series/u/p/2.mkv"))
+        assertTrue(ChannelImporter.isOnDemand("http://h/panel/movie/u/p/3.mp4?x=a/b"))
+        assertEquals(false, ChannelImporter.isOnDemand("http://h/u/p/4"))
+        assertEquals(false, ChannelImporter.isOnDemand("http://h/live/u/p/5.ts"))
+        assertEquals(false, ChannelImporter.isOnDemand("http://h/movie/stream.m3u8"))
+        assertEquals(false, ChannelImporter.isOnDemand("http://h/hls/movie/channel/a/b/index.m3u8"))
+    }
+
+    @Test
     fun groupsAndPositionsAreInOrderOfAppearance() = runBlocking {
         val r = import(m3u("A" to "One", "B" to "Two", "C" to "One", "D" to "Three", "E" to "Two"))
         assertEquals(5, r.channels)
