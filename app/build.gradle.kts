@@ -131,7 +131,7 @@ ksp {
 }
 
 dependencies {
-    val media3 = "1.9.0"
+    val media3 = "1.11.1"
     implementation("androidx.core:core-ktx:1.19.1")
     implementation("androidx.appcompat:appcompat:1.8.0")
     implementation("com.google.android.material:material:1.14.0")
@@ -144,8 +144,9 @@ dependencies {
     implementation("androidx.media3:media3-ui:$media3")
     implementation("androidx.media3:media3-datasource-okhttp:$media3")
     implementation("androidx.media3:media3-extractor:$media3")
-    // FFmpeg audio decoder (AC3, E-AC3, MP2, DTS...) built by Jellyfin against the same Media3 version
-    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:$media3+1")
+    // FFmpeg audio decoder (AC3, E-AC3, MP2, DTS...) built by Jellyfin. Its newest build is for Media3 1.9.0; with 1.11.1
+    // it was checked on the Mi TV Stick (MP2 and AAC-LATM channels play through it). Move it up when Jellyfin publishes one.
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.9.0+1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("io.coil-kt:coil:2.7.0")
