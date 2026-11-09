@@ -5,24 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Faznet · IPTV player falas për Android TV</title>
 <meta name="description" content="Faznet — player IPTV falas për Android TV dhe telefon. Shkarko APK-në dhe ngarko playlist-ën me MAC dhe PIN.">
-<meta name="theme-color" content="#0b1030">
+<meta name="theme-color" content="#0b0b0d">
 <link rel="icon" href="icon.png">
 <style>
-  :root{--bg:#0b1030;--surface:#141b45;--surface2:#1e2766;--line:#2a3475;--text:#eef1ff;--dim:#a0a8d0;--accent:#4f6bff;--accent2:#8a4dff;--ok:#2ec27e;--err:#ff5d6c;--gold:#ffc94d}
+  :root{--bg:#0b0b0d;--surface:#1c1c1e;--surface2:#2c2c2e;--line:#38383a;--text:#ffffff;--dim:#8e8e93;--accent:#ff3b5c;--accent2:#ff8a3d;--brand:linear-gradient(135deg,#ff8a3d,#ff3b5c 50%,#c2187a);--ok:#30d158;--err:#ff453a;--gold:#ffd60a}
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#2a2f8a 0%,transparent 60%),radial-gradient(900px 500px at -10% 10%,#3a1f7a 0%,transparent 55%),var(--bg);background-attachment:fixed;color:var(--text);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  body{margin:0;background:radial-gradient(1100px 560px at 85% -12%,rgba(255,59,92,.20) 0%,transparent 60%),radial-gradient(900px 500px at -10% 8%,rgba(255,138,61,.13) 0%,transparent 55%),linear-gradient(180deg,#1c1c1f 0%,var(--bg) 520px);background-attachment:fixed;color:var(--text);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
   a{color:inherit}
   .container{max-width:1080px;margin:0 auto;padding:0 20px}
   /* nav */
-  nav{position:sticky;top:0;z-index:10;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(11,16,48,.72);border-bottom:1px solid rgba(255,255,255,.06)}
+  nav{position:sticky;top:0;z-index:10;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(11,11,13,.72);border-bottom:1px solid rgba(255,255,255,.06)}
   nav .container{display:flex;align-items:center;gap:12px;height:64px}
   nav .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;text-decoration:none}
   nav .brand img{width:34px;height:34px;border-radius:10px}
   nav .links{margin-left:auto;display:flex;gap:4px}
   nav .links a{text-decoration:none;color:var(--dim);font-size:14px;padding:8px 12px;border-radius:999px}
   nav .links a:hover{color:#fff;background:rgba(255,255,255,.06)}
-  nav .links a.cta{color:#fff;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  nav .links a.cta{color:#fff;background:var(--brand)}
   @media (max-width:640px){nav .links a:not(.cta){display:none}}
   /* hero */
   .hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:40px;align-items:center;padding-top:64px;padding-bottom:40px}
@@ -31,37 +31,21 @@
   .badge b{color:#fff}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(46,194,126,.18)}
   .hero h1{font-size:clamp(34px,5.2vw,56px);line-height:1.05;margin:18px 0 14px;letter-spacing:-.02em}
-  .grad{background:linear-gradient(90deg,#7f95ff,#b38bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .grad{background:linear-gradient(90deg,#ff9a4d,#ff3b5c 55%,#d3268a);-webkit-background-clip:text;background-clip:text;color:transparent}
   .hero p.lead{color:var(--dim);font-size:17px;max-width:520px;margin:0 0 26px}
   .dl{display:flex;flex-wrap:wrap;gap:12px}
   .btn{display:inline-flex;align-items:center;gap:12px;text-decoration:none;border-radius:14px;padding:13px 18px;font-weight:700;transition:transform .15s,box-shadow .15s}
   .btn:hover{transform:translateY(-2px)}
   .btn small{display:block;font-weight:500;font-size:12px;opacity:.85}
   .btn svg{width:26px;height:26px;flex:none}
-  .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 10px 30px -10px rgba(110,90,255,.8)}
+  .btn.primary{background:var(--brand);color:#fff;box-shadow:0 10px 30px -10px rgba(255,59,92,.75)}
   .btn.secondary{background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff}
   .note{color:var(--dim);font-size:13px;margin-top:14px}
-  /* TV mockup */
-  .tv{position:relative;aspect-ratio:16/10;border-radius:18px;padding:10px;background:#05071a;border:1px solid #2b3370;box-shadow:0 40px 80px -30px rgba(0,0,0,.8),0 0 0 6px rgba(255,255,255,.03)}
-  .tv:after{content:"";position:absolute;left:38%;right:38%;bottom:-18px;height:8px;border-radius:0 0 8px 8px;background:#1a1f45}
-  .screen{height:100%;border-radius:10px;overflow:hidden;background:linear-gradient(135deg,#1b2266,#0b1030 60%,#070a20);display:grid;grid-template-rows:auto 1fr;font-size:10px}
-  .s-top{display:flex;align-items:center;gap:6px;padding:8px 10px}
-  .s-top i{display:block;width:14px;height:14px;border-radius:4px;background:url(icon.png) center/cover}
-  .s-top .pill{flex:1;height:14px;border-radius:7px;background:#141b45}
-  .s-top .clock{color:#fff;font-weight:700}
-  .s-body{display:grid;grid-template-columns:28% 1fr;gap:6px;padding:0 8px 8px;min-height:0}
-  .s-groups div{padding:5px 8px;border-radius:6px;color:#c9cff0;margin-bottom:3px;white-space:nowrap;overflow:hidden}
-  .s-groups div.on{background:rgba(79,107,255,.25);color:#fff;border-left:2px solid var(--accent)}
-  .s-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}
-  .s-card{display:flex;align-items:center;gap:6px;background:#141b45;border-radius:7px;padding:6px}
-  .s-card .logo{width:26px;height:18px;border-radius:4px;background:#0b0e13;flex:none;display:grid;place-items:center;color:#7f95ff;font-weight:800;font-size:8px}
-  .s-card .t{flex:1;min-width:0}
-  .s-card b{display:block;color:#fff;font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .s-card small{color:#a0a8d0;font-size:8px}
-  .s-card.focus{background:linear-gradient(90deg,var(--accent),var(--accent2));transform:scale(1.05);box-shadow:0 8px 20px -6px rgba(110,90,255,.9)}
-  .s-card.focus small{color:#e8e6ff}
-  .s-card .star{color:var(--gold)}
-  @media (max-width:480px){.s-grid{grid-template-columns:1fr}.s-grid .s-card:nth-child(n+6){display:none}}
+  /* TV: the real Faznet 5 start screen on a TV */
+  .tv{position:relative;aspect-ratio:16/9;border-radius:18px;padding:10px;background:#0a0a0b;border:1px solid #2c2c2e;box-shadow:0 40px 80px -30px rgba(0,0,0,.85),0 0 0 6px rgba(255,255,255,.03),0 30px 120px -40px rgba(255,59,92,.35)}
+  .tv:after{content:"";position:absolute;left:38%;right:38%;bottom:-18px;height:8px;border-radius:0 0 8px 8px;background:#1c1c1e}
+  .screen{height:100%;border-radius:10px;overflow:hidden;background:#111113}
+  .screen img{display:block;width:100%;height:100%;object-fit:cover}
   /* sections */
   section.block{padding:56px 0}
   .head{text-align:center;max-width:640px;margin:0 auto 32px}
@@ -70,15 +54,15 @@
   .features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
   @media (max-width:880px){.features{grid-template-columns:repeat(2,1fr)}}
   @media (max-width:560px){.features{grid-template-columns:1fr}}
-  .feat{background:rgba(20,27,69,.75);border:1px solid var(--line);border-radius:16px;padding:20px}
-  .feat .ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(79,107,255,.3),rgba(138,77,255,.3));margin-bottom:12px;font-size:20px}
+  .feat{background:rgba(28,28,30,.85);border:1px solid var(--line);border-radius:16px;padding:20px}
+  .feat .ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(255,138,61,.22),rgba(255,59,92,.22));margin-bottom:12px;font-size:20px}
   .feat h3{margin:0 0 6px;font-size:16px}
   .feat p{margin:0;color:var(--dim);font-size:14px}
   .install{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;counter-reset:step}
   @media (max-width:880px){.install{grid-template-columns:repeat(2,1fr)}}
   @media (max-width:560px){.install{grid-template-columns:1fr}}
-  .step{position:relative;background:rgba(20,27,69,.75);border:1px solid var(--line);border-radius:16px;padding:20px 18px 18px}
-  .step:before{counter-increment:step;content:counter(step);position:absolute;top:-12px;left:18px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .step{position:relative;background:rgba(28,28,30,.85);border:1px solid var(--line);border-radius:16px;padding:20px 18px 18px}
+  .step:before{counter-increment:step;content:counter(step);position:absolute;top:-12px;left:18px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px;background:var(--brand)}
   .step h3{margin:6px 0 6px;font-size:15px}
   .step p{margin:0;color:var(--dim);font-size:13.5px}
   code{font-family:ui-monospace,Consolas,monospace;background:rgba(255,255,255,.07);padding:2px 6px;border-radius:6px;font-size:12.5px;word-break:break-all}
@@ -94,7 +78,7 @@
   #upload input[type=text],#upload input[type=password],#upload input[type=url],#upload input[type=file]{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px}
   #upload input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
   #upload .mac{font-family:ui-monospace,Consolas,monospace;letter-spacing:.06em;text-transform:uppercase}
-  #upload button{display:inline-block;border:0;border-radius:10px;padding:12px 18px;font-weight:600;font-size:15px;cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;width:100%;margin-top:18px}
+  #upload button{display:inline-block;border:0;border-radius:10px;padding:12px 18px;font-weight:600;font-size:15px;cursor:pointer;background:var(--brand);color:#fff;width:100%;margin-top:18px}
   #upload button:disabled{opacity:.6;cursor:wait}
   #upload .ghost{background:transparent;border:1px solid var(--line);color:var(--dim);width:auto;margin:0;padding:8px 12px;font-size:13px}
   #upload .msg{border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:14px;display:none}
@@ -127,7 +111,7 @@
   nav .links a{white-space:nowrap}
   .lang{flex:none}
   @media (max-width:640px){nav .links a.donate{display:inline-block;padding:7px 10px}nav .links a.cta{display:none}}
-  .support{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:24px;align-items:center;background:linear-gradient(135deg,rgba(79,107,255,.18),rgba(138,77,255,.18));border:1px solid var(--line);border-radius:22px;padding:32px}
+  .support{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:24px;align-items:center;background:linear-gradient(135deg,rgba(255,138,61,.14),rgba(255,59,92,.14) 55%,rgba(194,24,122,.14));border:1px solid var(--line);border-radius:22px;padding:32px}
   @media (max-width:760px){.support{grid-template-columns:minmax(0,1fr);padding:24px}}
   .support h2{margin:0 0 10px;font-size:clamp(24px,3vw,32px)}
   .support p{margin:0 0 8px;color:var(--dim)}
@@ -178,30 +162,7 @@
   </div>
 
   <div class="tv" aria-hidden="true">
-    <div class="screen">
-      <div class="s-top"><i></i><div class="pill"></div><span class="clock">20:45</span></div>
-      <div class="s-body">
-        <div class="s-groups">
-          <div data-i18n="m_all"></div>
-          <div data-i18n="m_fav"></div>
-          <div class="on" data-i18n="m_news"></div>
-          <div data-i18n="m_sport"></div>
-          <div data-i18n="m_movies"></div>
-          <div data-i18n="m_kids"></div>
-          <div data-i18n="m_music"></div>
-        </div>
-        <div class="s-grid">
-          <div class="s-card"><div class="logo">TV1</div><div class="t"><b>News One</b><small data-i18n="m_news"></small></div></div>
-          <div class="s-card focus"><div class="logo">TV2</div><div class="t"><b>News Two HD</b><small data-i18n="m_news"></small></div><span class="star">★</span></div>
-          <div class="s-card"><div class="logo">TV3</div><div class="t"><b>Channel 3</b><small data-i18n="m_news"></small></div></div>
-          <div class="s-card"><div class="logo">TV4</div><div class="t"><b>Info 24</b><small data-i18n="m_news"></small></div></div>
-          <div class="s-card"><div class="logo">TV5</div><div class="t"><b>Channel 5 FHD</b><small data-i18n="m_news"></small></div></div>
-          <div class="s-card"><div class="logo">TV6</div><div class="t"><b>News Plus</b><small data-i18n="m_news"></small></div></div>
-          <div class="s-card"><div class="logo">TV7</div><div class="t"><b>Channel 7</b><small data-i18n="m_news"></small></div></div>
-          <div class="s-card"><div class="logo">TV8</div><div class="t"><b>Region TV</b><small data-i18n="m_news"></small></div></div>
-        </div>
-      </div>
-    </div>
+    <div class="screen"><img src="screen-tv.png" alt="" loading="eager"></div>
   </div>
 </header>
 
@@ -331,7 +292,7 @@
 <footer class="site">
   <div class="container">
     <span data-i18n="footer"></span>
-    <span>Made by <b>d1@r.f</b></span>
+    <span>Made by <b>d1@rf</b></span>
   </div>
 </footer>
 <script>
@@ -339,13 +300,12 @@
 window.FZ_I18N = {
   en: {
     nav_features: "Features", nav_install: "Install", nav_upload: "Upload playlist", nav_donate: "Donate ❤", nav_download: "Download",
-    badge: "Version <b>4.3.5</b> · free · no ads",
+    badge: "Version <b>5.0.0</b> · free · no ads",
     h1: 'A <span class="grad">fast</span> IPTV player for Android TV and phones',
     lead: "Watch your own M3U or Xtream playlist with a clean look, channels that open fast and automatic recovery when a channel stalls. Send your playlist to the TV from this page with MAC and PIN.",
     dl_tv: "Download for TV", dl_tv_sub: "Android TV · Mi TV Stick · Fire TV (~5 MB)",
     dl_phone: "Download for phone", dl_phone_sub: "Android 64-bit · tablet (~5 MB)",
     dl_note: "Not sure which one? For TV sticks take <b>TV</b>. If it doesn't install on your phone, try the TV version — it runs everywhere.",
-    m_all: "All channels", m_fav: "★ Favorites", m_news: "News", m_sport: "Sport", m_movies: "Movies", m_kids: "Kids", m_music: "Music",
     f_title: "Everything you need, nothing you don't", f_sub: "Made for the TV remote and for touch on phones.",
     f1_t: "Channels open fast", f1_p: "Your list opens instantly from the copy on the device; switching groups is instant even with thousands of channels.",
     f2_t: "Automatic recovery", f2_p: "When the picture freezes or a channel stalls, Faznet reopens it by itself — and remembers what works for that channel.",
@@ -384,13 +344,12 @@ window.FZ_I18N = {
   },
   sq: {
     nav_features: "Veçoritë", nav_install: "Instalimi", nav_upload: "Ngarko playlist", nav_donate: "Dhuro ❤", nav_download: "Shkarko",
-    badge: "Versioni <b>4.3.5</b> · falas · pa reklama",
+    badge: "Versioni <b>5.0.0</b> · falas · pa reklama",
     h1: 'IPTV player <span class="grad">i shpejtë</span> për Android TV dhe telefon',
     lead: "Shiko playlist-ën tënde M3U ose Xtream me një pamje të pastër, kanale që hapen shpejt dhe rregullim automatik kur një kanal ngec. E ngarkon playlist-ën nga kjo faqe me MAC dhe PIN.",
     dl_tv: "Shkarko për TV", dl_tv_sub: "Android TV · Mi TV Stick · Fire TV (~5 MB)",
     dl_phone: "Shkarko për telefon", dl_phone_sub: "Android 64-bit · tablet (~5 MB)",
     dl_note: "Nuk e di cilin? Për TV stick merr <b>TV</b>. Nëse në telefon nuk instalohet, provo versionin TV — punon kudo.",
-    m_all: "Të gjitha kanalet", m_fav: "★ Të preferuarat", m_news: "Lajme", m_sport: "Sport", m_movies: "Filma", m_kids: "Fëmijë", m_music: "Muzikë",
     f_title: "Gjithçka që të duhet, asgjë tepër", f_sub: "Bërë për telekomandën e TV-së dhe për prekje në telefon.",
     f1_t: "Kanale që hapen shpejt", f1_p: "Lista hapet menjëherë nga kopja në pajisje; grupet ndërrohen pa pritur edhe me mijëra kanale.",
     f2_t: "Rregullim automatik", f2_p: "Kur figura ngrin ose kanali ngec, Faznet e rihap vetë — dhe e mban mend mënyrën që punon.",
@@ -402,10 +361,10 @@ window.FZ_I18N = {
     i1_t: "Lejo instalimin", i1_p: "Settings → Device Preferences → Security → lejo <b>Unknown sources</b> për aplikacionin me të cilin e hap APK-në.",
     i2_t: "Shkarko APK-në", i2_p: "Me aplikacionin <b>Downloader</b> në TV shkruaj:",
     i3_t: "Instalo", i3_p: "Hape file-in dhe shtyp <b>Install</b>. Versionet e reja përditësohen nga vetë Faznet.",
-    i4_t: "Shto playlist-ën", i4_p: 'Hap Faznet, shiko <b>MAC</b> dhe <b>PIN</b> te “Upload from the web” dhe shkruaji <a href="#upload">më poshtë</a>.',
+    i4_t: "Shto playlist-ën", i4_p: 'Hap Faznet, shiko <b>MAC</b> dhe <b>PIN</b> te “Ngarko nga webi” dhe shkruaji <a href="#upload">më poshtë</a>.',
     u_title: "Ngarko playlist", u_sub: "Dërgoje në TV ose telefon me MAC dhe PIN",
     u_connect: "Lidhu me pajisjen", u_s1: "Hap Faznet në TV / telefon.",
-    u_s2: "Shko te <b>Upload from the web</b> (ose ekrani i mirëseardhjes) dhe shiko MAC dhe PIN.", u_s3: "Shkruaji këtu poshtë.",
+    u_s2: "Shko te <b>Ngarko nga webi</b> (ose ekrani i mirëseardhjes) dhe shiko MAC dhe PIN.", u_s3: "Shkruaji këtu poshtë.",
     u_mac: "MAC adresa", u_continue: "Vazhdo", u_device: "Pajisja:", u_logout: "Dil",
     u_add: "Shto playlist", u_file_tab: "File", u_name: "Emri (opsional)", u_name_ph: "p.sh. Kanalet e mia",
     u_url: "URL e playlist-ës", u_server: "Serveri", u_user: "Përdoruesi", u_pass: "Fjalëkalimi", u_file: "File .m3u / .m3u8",

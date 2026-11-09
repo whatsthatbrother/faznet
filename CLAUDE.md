@@ -15,8 +15,8 @@ built-in lists). Talk to Diar in **Albanian**; code, comments and commit message
 - `./gradlew lintDebug` before every release: an error stops it, and is usually a crash on some device (minSdk 23).
 - Every release: bump `versionCode` / `versionName` in `app/build.gradle.kts` (4.0.0 = code 40) and keep R8's `mapping.txt`
   as `archive/<version>/mapping.txt` (not in git), or crash reports can't be read.
-- This folder is the git repository. `main` is what users run; `v5` is the restructure (plan and measurements in
-  `ROADMAP.md`), and it stays local until Diar agrees to publish.
+- This folder is the git repository. `main` is what users run: since 5.0.0 (2026-11-09) the tvOS-style redesign made in
+  `../Faznet-Design`. `v5` is the old restructure branch (plan and measurements in `ROADMAP.md`).
 
 ## Test device
 Xiaomi Mi TV Stick (MiTV-AYFR0), Android 11, armeabi-v7a, 384 MB heap, Amlogic decoder. Use adb over Wi-Fi
@@ -28,7 +28,7 @@ re-opening); HTTP 403 when zapping fast (account connection limit).
 - `ui/PlayerActivity.kt` — live player. Fresh player per channel, clean start (hidden until the picture runs),
   watchdogs in `player/PlaybackWatch.kt`: frozen picture, stuck playback, stall, 403 retries, last-resort re-open
   (15→30→60→120 s, counts frames). The channel list reads pages (`data/ChannelPages.kt`).
-- `player/PlayerFactory.kt` (ExoPlayer/Media3 1.9 + Jellyfin FFmpeg audio). VLC was removed: it almost never helped and was 80% of the APK.
+- `player/PlayerFactory.kt` (ExoPlayer/Media3 1.11 + Jellyfin FFmpeg audio 1.9.0+1, the newest Jellyfin build). VLC was removed: it almost never helped and was 80% of the APK.
 - `ui/MainActivity.kt` (thin host), `ui/HomeViewModel.kt`, `ui/compose/HomeScreen.kt` — Compose home (groups, channel grid
   from Paging, top bar, update button). `ui/compose/Theme.kt` — colours, `FocusBox` (remote + touch), `PivotScroll`
   (tvOS-style scrolling). `ui/compose/Logo.kt` — logos drawn straight from Coil, without composition.

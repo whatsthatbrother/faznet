@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Faznet 5 logo: an F whose middle bar is a play arrow. Drawn from the same shapes as the website's icon (1024 grid),
+     scaled to sit inside the adaptive icon's 66 dp safe zone. Also the themed (monochrome) icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.088"
+        android:scaleY="0.088"
+        android:translateX="8.24"
+        android:translateY="8.94">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M382,262 A64,64 0 0 1 446,326 L446,698 A64,64 0 0 1 318,698 L318,326 A64,64 0 0 1 382,262 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M382,262 L658,262 A64,64 0 0 1 658,390 L382,390 A64,64 0 0 1 382,262 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="56"
+            android:strokeLineJoin="round"
+            android:pathData="M418,452 L650,526 L418,600 Z" />
+    </group>
+</vector>

@@ -45,8 +45,7 @@ object Updater {
         c.applicationInfo.nativeLibraryDir?.let { it.endsWith("arm64") || it.contains("arm64") } ?: false
 
     /** Newest version on the website, or null if this one is current / the site can't be reached. */
-    // Design preview app: never offered updates from the website (that would install the real Faznet).
-    suspend fun check(c: Context): Info? = if (true) null else withContext(Dispatchers.IO) {
+    suspend fun check(c: Context): Info? = withContext(Dispatchers.IO) {
         runCatching {
             val req = Request.Builder().url(VERSION_URL + "?t=" + System.currentTimeMillis() / 600_000).build()
             Http.api.newCall(req).execute().use { r ->

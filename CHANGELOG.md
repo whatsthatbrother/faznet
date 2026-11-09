@@ -1,5 +1,28 @@
 # Changelog
 
+## 5.0.0
+
+### New
+- A new look, in the style of Apple TV: a dark graphite design with white focus, on every screen.
+- A new Faznet logo.
+- A new start screen with three cards: Live TV, Movies and Series. Channels, movies and series load only when you choose them.
+- Movies and series: posters in a grid, and a page for each series with its seasons and episodes. The poster under the remote stands out clearly.
+- Series: the next episode starts by itself when one ends.
+- Movies and series: a picture size button (Fit, Stretch, Zoom) next to the settings, remembered for every film. Zoom removes black bars inside the picture.
+- Live TV holds live channels only, so big Xtream lists load much faster and use less memory.
+- The player shows a floating info card and a clear channel list over the picture.
+- A new TV guide, settings, playlists, device and internet test screens.
+
+### Fixed
+- Movies and series: when the server does not answer, Faznet says so and OK tries again (before it said "nothing here").
+- Movies and series: going back from a series no longer moves the focus to the Back button.
+- Movies and series continue by themselves when the internet comes back.
+- Series on phones held upright: the episodes are visible again.
+- The channel list, options or a half-typed channel number no longer stay on the screen after leaving the player and coming back.
+- The TV guide's "now / next" stays right after a programme ends.
+- Crash reports never contain stream addresses.
+- Newer video engine (Media3 1.11).
+
 ## 4.3.5
 
 ### New
