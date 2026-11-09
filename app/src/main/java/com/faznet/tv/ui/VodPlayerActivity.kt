@@ -72,10 +72,39 @@ class VodPlayerActivity : AppCompatActivity() {
         tvError = findViewById(R.id.vodError)
         titleView = findViewById(R.id.vodTitle)
         titleView.text = title
+        playerView.resizeMode = ASPECT_MODES[repo.vodAspectMode.coerceIn(0, ASPECT_MODES.size - 1)]
+        addAspectButton()
         playerView.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v ->
             findViewById<View>(R.id.vodTitle).visibility = v
         })
         hideSystemUi()
+    }
+
+    /**
+     * Fit / stretch / zoom, as in Live TV: many films have black bars inside the picture itself (a cinema film in a 16:9
+     * file), which only zoom takes away. A button among the player's own, beside the settings gear, so the remote
+     * reaches it like the others; the choice is kept for every film.
+     */
+    private fun addAspectButton() {
+        val gear = playerView.findViewById<View>(androidx.media3.ui.R.id.exo_settings) ?: return
+        val bar = gear.parent as? android.view.ViewGroup ?: return
+        val button = android.widget.ImageButton(this).apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(gear.layoutParams)
+            background = gear.background?.constantState?.newDrawable()?.mutate()
+            setPadding(gear.paddingLeft, gear.paddingTop, gear.paddingRight, gear.paddingBottom)
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setImageResource(R.drawable.ic_aspect)
+            contentDescription = getString(R.string.aspect)
+            setOnClickListener { cycleAspect() }
+        }
+        bar.addView(button, bar.indexOfChild(gear))
+    }
+
+    private fun cycleAspect() {
+        val next = (repo.vodAspectMode + 1) % ASPECT_MODES.size
+        repo.vodAspectMode = next
+        playerView.resizeMode = ASPECT_MODES[next]
+        Toast.makeText(this, getString(R.string.picture, getString(ASPECT_LABELS[next])), Toast.LENGTH_SHORT).show()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -238,6 +267,12 @@ class VodPlayerActivity : AppCompatActivity() {
         private const val EXTRA_NEXT_URLS = "next_urls"
         private const val EXTRA_NEXT_TITLES = "next_titles"
         private const val MAX_RETRIES = 5
+        private val ASPECT_MODES = intArrayOf(
+            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
+            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL,
+            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+        )
+        private val ASPECT_LABELS = intArrayOf(R.string.aspect_fit, R.string.aspect_fill, R.string.aspect_zoom)
 
         private fun prefs(c: Context) = c.applicationContext.getSharedPreferences("resume", Context.MODE_PRIVATE)
         private fun key(url: String) = url.hashCode().toString(36) + "_" + url.length

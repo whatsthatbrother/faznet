@@ -294,6 +294,11 @@ class Repository private constructor(private val ctx: Context) {
         get() = prefs.getInt(KEY_ASPECT, 0)
         set(v) = prefs.edit().putInt(KEY_ASPECT, v).apply()
 
+    /** Picture size in the movie and series player (fit / stretch / zoom), apart from Live TV's. */
+    var vodAspectMode: Int
+        get() = prefs.getInt("vod_aspect", 0)
+        set(v) = prefs.edit().putInt("vod_aspect", v).apply()
+
     companion object {
         const val DEFAULT_UA = "Faznet/1.0 (Linux; Android)"
         /** A list of 175 000 channels is about 40 MB. */

@@ -13,6 +13,7 @@
         android:layout_height="@dimen/poster_h"
         android:background="@drawable/bg_poster"
         android:duplicateParentState="true"
+        android:foreground="@drawable/fg_poster_focus"
         android:importantForAccessibility="no"
         android:scaleType="centerCrop" />
 

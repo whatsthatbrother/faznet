@@ -179,10 +179,17 @@ class LibraryActivity : AppCompatActivity() {
                 error(R.drawable.ic_tv)
             }
             h.itemView.setOnClickListener { item.play() }
-            // Apple TV: the focused poster lifts above its neighbours and grows.
+            // Apple TV: the focused poster lifts above its neighbours and grows, with a white ring (fg_poster_focus). On a
+            // TV the others step back a little while the remote is in the grid, so the one OK will play stands out.
+            val tv = !h.itemView.isInTouchMode
+            h.itemView.alpha = if (h.itemView.isFocused || !tv) 1f else UNFOCUSED_ALPHA
+            // A recycled tile may still be grown from the poster it showed before.
+            (if (h.itemView.isFocused) 1.14f else 1f).let { h.itemView.scaleX = it; h.itemView.scaleY = it }
+            h.itemView.translationZ = if (h.itemView.isFocused) 16f * h.itemView.resources.displayMetrics.density else 0f
             h.itemView.setOnFocusChangeListener { v, f ->
-                val sc = if (f) 1.1f else 1f
-                v.animate().scaleX(sc).scaleY(sc).translationZ(if (f) 12f * v.resources.displayMetrics.density else 0f)
+                val sc = if (f) 1.14f else 1f
+                v.animate().scaleX(sc).scaleY(sc).alpha(if (f || v.isInTouchMode) 1f else UNFOCUSED_ALPHA)
+                    .translationZ(if (f) 16f * v.resources.displayMetrics.density else 0f)
                     .setDuration(160).start()
             }
         }
@@ -191,6 +198,7 @@ class LibraryActivity : AppCompatActivity() {
     companion object {
         private const val ALL = "\u0000all"
         private const val CATEGORY_DELAY_MS = 350L
+        private const val UNFOCUSED_ALPHA = 0.7f
         const val EXTRA_SERIES = "series"
 
         fun start(c: Context, series: Boolean) =

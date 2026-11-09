@@ -83,7 +83,7 @@ class StartActivity : AppCompatActivity() {
         if (savedInstanceState == null && repo.activePlaylist() != null && (repo.autoPlayLast || repo.startWithLive)) {
             openLive(autoPlay = repo.autoPlayLast)
         }
-        setContent { FaznetTheme { StartScreen(state, ::openLive, ::openLibrary, ::openPlaylists, ::openDevice, ::openSettings) } }
+        setContent { FaznetTheme { StartScreen(state, ::openLive, ::openLibrary, ::openDevice, ::openSettings) } }
 
         if (savedInstanceState == null) {
             lifecycleScope.launch {
@@ -136,7 +136,6 @@ private fun StartScreen(
     state: StartActivity.StartState,
     live: () -> Unit,
     library: (Boolean) -> Unit,
-    playlists: () -> Unit,
     device: () -> Unit,
     settings: () -> Unit,
 ) {
@@ -158,12 +157,8 @@ private fun StartScreen(
                 IconAction(R.drawable.ic_settings, stringResource(R.string.settings), settings)
             }
 
-            Spacer(Modifier.weight(if (narrow) 0.3f else 1f))
-            Text(
-                stringResource(R.string.start_title), color = Fz.text, fontSize = if (narrow) 26.sp else 34.sp,
-                fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp),
-            )
-            Spacer(Modifier.height(if (narrow) 14.dp else 24.dp))
+            // Only the three cards, in the middle (no title above them, no playlist pill below: Diar, 2026-11-09).
+            Spacer(Modifier.weight(1f))
 
             val cards: @Composable (Modifier) -> Unit = { m ->
                 HubCard(R.drawable.ic_tv, stringResource(R.string.start_live), stringResource(R.string.start_live_sub),
@@ -179,9 +174,11 @@ private fun StartScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) { cards(Modifier.weight(1f).height(250.dp)) }
             }
 
-            Spacer(Modifier.height(if (narrow) 18.dp else 32.dp))
-            PlaylistRow(state, playlists)
             Spacer(Modifier.weight(1f))
+            Text(
+                "made by d1@rf", color = Fz.dim.copy(alpha = 0.7f), fontSize = 13.sp, letterSpacing = 0.5.sp,
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 4.dp),
+            )
         }
     }
 }
@@ -208,31 +205,6 @@ private fun HubCard(icon: Int, title: String, sub: String, enabled: Boolean, onC
                 Spacer(Modifier.height(4.dp))
                 Text(sub, color = dim, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-        }
-    }
-}
-
-/** The active playlist, as a small pill under the cards: OK opens the playlists. */
-@Composable
-private fun PlaylistRow(state: StartActivity.StartState, playlists: () -> Unit) {
-    FocusBox(
-        onClick = playlists,
-        modifier = Modifier.height(44.dp).widthIn(max = 520.dp),
-        shape = RoundedCornerShape(22.dp),
-        color = Color(0x1FFFFFFF),
-        focusedColor = Fz.focusLight,
-        focusedBrush = null,
-        outline = false,
-        focusScale = 1.05f,
-    ) { focused ->
-        Row(Modifier.padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.ic_playlist), null, tint = if (focused) Fz.onLight else Fz.dim, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(
-                if (state.hasPlaylist) stringResource(R.string.start_playlist, state.playlistName) else stringResource(R.string.add_playlist),
-                color = if (focused) Fz.onLight else Fz.text.copy(alpha = 0.85f), fontSize = 15.sp, maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }
