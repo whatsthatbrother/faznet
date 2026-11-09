@@ -8,7 +8,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -85,7 +87,22 @@ class SeriesActivity : AppCompatActivity() {
                 Screen(name, cover, plot, rating, episodes, resumeVersion.intValue, ::play)
             }
         }
-        lifecycleScope.launch { episodes = XtreamApi.episodes(account, id) }
+        seriesId = id
+        load()
+    }
+
+    private var seriesId = ""
+    /** The server could not be reached: the screen says so, and OK asks again. */
+    private var failed by mutableStateOf(false)
+
+    private fun load() {
+        failed = false
+        episodes = null
+        lifecycleScope.launch {
+            val found = XtreamApi.episodes(account, seriesId)
+            failed = found == null
+            episodes = found.orEmpty()
+        }
     }
 
     override fun onResume() {
@@ -97,7 +114,12 @@ class SeriesActivity : AppCompatActivity() {
 
     private fun play(e: XEpisode) {
         val name = intent.getStringExtra(EXTRA_NAME).orEmpty()
-        VodPlayerActivity.start(this, url(e), "$name · S${e.season} E${e.number}")
+        fun title(x: XEpisode) = "$name · S${x.season} E${x.number}"
+        // The episodes after it follow by themselves, across seasons, in the order the screen shows them.
+        val all = episodes.orEmpty()
+        // At most a few hundred: they travel inside the Intent, which has a size limit.
+        val after = all.drop(all.indexOf(e) + 1).take(MAX_QUEUE).map { url(it) to title(it) }
+        VodPlayerActivity.start(this, url(e), title(e), after)
     }
 
     @Composable
@@ -110,63 +132,112 @@ class SeriesActivity : AppCompatActivity() {
         var season by remember(seasons) { mutableStateOf(seasons.firstOrNull() ?: 0) }
         val shown = remember(eps, season) { eps?.filter { it.season == season }.orEmpty() }
         val firstEpisode = remember { FocusRequester() }
+        val episodesPart: @Composable ColumnScope.() -> Unit = {
+            Episodes(eps, seasons, season, { season = it }, shown, resume, firstEpisode, onPlay)
+        }
 
-        Row(
+        BoxWithConstraints(
             Modifier.fillMaxSize()
                 .background(Brush.verticalGradient(0f to Color(0xFF2A2A2E), 0.5f to Color(0xFF0E0E10), 1f to Color.Black))
-                .padding(horizontal = 48.dp, vertical = 32.dp)
         ) {
-            // Left: poster, title, rating, story
-            Column(Modifier.width(300.dp).fillMaxHeight()) {
-                Box(
-                    Modifier.size(width = 220.dp, height = 320.dp).clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF1C1C1E)).channelLogo(cover?.takeIf { it.isNotBlank() }, tvIcon)
-                )
-                Spacer(Modifier.height(18.dp))
-                Text(name, color = Fz.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 2,
-                    overflow = TextOverflow.Ellipsis, lineHeight = 30.sp)
-                if (rating.isNotEmpty() && rating != "0") {
-                    Spacer(Modifier.height(6.dp))
-                    Text("★ $rating", color = Color(0xFFFFD60A), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            // A phone held upright: 300 dp of poster and story beside the episodes left them no room at all (360 dp wide
+            // screen, 96 dp of padding), so the episodes could not be seen. There the story goes above them.
+            if (maxWidth < 600.dp) {
+                Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Row {
+                        Box(
+                            Modifier.size(width = 96.dp, height = 140.dp).clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF1C1C1E)).channelLogo(cover?.takeIf { it.isNotBlank() }, tvIcon)
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(name, color = Fz.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+                                overflow = TextOverflow.Ellipsis, lineHeight = 26.sp)
+                            if (rating.isNotEmpty() && rating != "0") {
+                                Spacer(Modifier.height(4.dp))
+                                Text("★ $rating", color = Color(0xFFFFD60A), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            }
+                            if (plot.isNotEmpty()) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(plot, color = Fz.dim, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Column(Modifier.weight(1f).fillMaxWidth(), content = episodesPart)
                 }
-                if (plot.isNotEmpty()) {
-                    Spacer(Modifier.height(10.dp))
-                    Text(plot, color = Fz.dim, fontSize = 14.sp, lineHeight = 20.sp, maxLines = 8, overflow = TextOverflow.Ellipsis)
+            } else {
+                Row(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 32.dp)) {
+                    // Left: poster, title, rating, story
+                    Column(Modifier.width(300.dp).fillMaxHeight()) {
+                        Box(
+                            Modifier.size(width = 220.dp, height = 320.dp).clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFF1C1C1E)).channelLogo(cover?.takeIf { it.isNotBlank() }, tvIcon)
+                        )
+                        Spacer(Modifier.height(18.dp))
+                        Text(name, color = Fz.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+                            overflow = TextOverflow.Ellipsis, lineHeight = 30.sp)
+                        if (rating.isNotEmpty() && rating != "0") {
+                            Spacer(Modifier.height(6.dp))
+                            Text("★ $rating", color = Color(0xFFFFD60A), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        }
+                        if (plot.isNotEmpty()) {
+                            Spacer(Modifier.height(10.dp))
+                            Text(plot, color = Fz.dim, fontSize = 14.sp, lineHeight = 20.sp, maxLines = 8, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Spacer(Modifier.width(36.dp))
+                    // Right: seasons and episodes
+                    Column(Modifier.weight(1f).fillMaxHeight(), content = episodesPart)
                 }
             }
-            Spacer(Modifier.width(36.dp))
+        }
+    }
 
-            // Right: seasons and episodes
-            Column(Modifier.weight(1f).fillMaxHeight()) {
-                when {
-                    eps == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(44.dp))
-                    }
-                    eps.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(stringResource(R.string.no_items), color = Fz.dim, fontSize = 16.sp)
-                    }
-                    else -> {
-                        if (seasons.size > 1) {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
-                                items(seasons) { s ->
-                                    SeasonTab(stringResource(R.string.season_n, s), selected = s == season,
-                                        onFocus = { season = s }, onClick = { season = s; runCatching { firstEpisode.requestFocus() } })
-                                }
-                            }
-                            Spacer(Modifier.height(14.dp))
-                        } else {
-                            Text(stringResource(R.string.season_n, season), color = Fz.text, fontSize = 20.sp,
-                                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
+    @Composable
+    private fun Episodes(
+        eps: List<XEpisode>?, seasons: List<Int>, season: Int, onSeason: (Int) -> Unit, shown: List<XEpisode>,
+        resume: Int, firstEpisode: FocusRequester, onPlay: (XEpisode) -> Unit,
+    ) {
+        when {
+            eps == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(44.dp))
+            }
+            failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                FocusBox(
+                    onClick = ::load, modifier = Modifier.focusRequester(firstEpisode), shape = RoundedCornerShape(14.dp),
+                    color = Fz.surface, focusedColor = Fz.focusLight, focusedBrush = null, outline = false, focusScale = 1.04f,
+                ) { focused ->
+                    Text(stringResource(R.string.err_library), color = if (focused) Fz.onLight else Fz.text, fontSize = 16.sp,
+                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 14.dp))
+                }
+                LaunchedEffect(Unit) { delay(80); runCatching { firstEpisode.requestFocus() } }
+            }
+            eps.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.no_items), color = Fz.dim, fontSize = 16.sp)
+            }
+            else -> Column(Modifier.fillMaxSize()) {
+                if (seasons.size > 1) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                        items(seasons) { s ->
+                            SeasonTab(stringResource(R.string.season_n, s), selected = s == season,
+                                onFocus = { onSeason(s) }, onClick = { onSeason(s); runCatching { firstEpisode.requestFocus() } })
                         }
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(4.dp)) {
-                            items(shown, key = { it.id }) { e ->
-                                val at = remember(e.id, resume) { VodPlayerActivity.resumePosition(this@SeriesActivity, url(e)) }
-                                EpisodeRow(e, at, if (e === shown.firstOrNull()) firstEpisode else null) { onPlay(e) }
-                            }
-                        }
-                        LaunchedEffect(eps) { delay(80); runCatching { firstEpisode.requestFocus() } }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                } else {
+                    Text(stringResource(R.string.season_n, season), color = Fz.text, fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
+                }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(4.dp)) {
+                    // No key from the server's episode ids: a panel that repeats one, or sends none, would close the app
+                    // ("key was already used").
+                    items(shown) { e ->
+                        val at = remember(e.id, resume) { VodPlayerActivity.resumePosition(this@SeriesActivity, url(e)) }
+                        EpisodeRow(e, at, if (e === shown.firstOrNull()) firstEpisode else null) { onPlay(e) }
                     }
                 }
+                LaunchedEffect(eps) { delay(80); runCatching { firstEpisode.requestFocus() } }
             }
         }
     }
@@ -225,6 +296,7 @@ class SeriesActivity : AppCompatActivity() {
         private const val EXTRA_COVER = "cover"
         private const val EXTRA_PLOT = "plot"
         private const val EXTRA_RATING = "rating"
+        private const val MAX_QUEUE = 300
 
         fun start(c: Context, id: String, name: String, cover: String?, plot: String, rating: String) =
             c.startActivity(

@@ -357,6 +357,16 @@ class PlayerActivity : AppCompatActivity() {
         runCatching { (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(netCallback) }
         pendingZap = -1
         handler.removeCallbacksAndMessages(null)
+        // Their timers to hide them are gone with the line above: left as they are, the list, the options, a toast or a
+        // half-typed channel number stayed on the screen for good after coming back (Home, the TV's standby).
+        // Not when onCreate finished early (no channel to play after the process was restarted): no views then.
+        if (::tvNumberEntry.isInitialized) {
+            hideChannelList()
+            hideOptions()
+            tvToast.visibility = View.GONE
+            numberBuffer = ""
+            tvNumberEntry.visibility = View.GONE
+        }
         problems.left(SystemClock.elapsedRealtime())
         releasePlayer()
         PlayerFactory.freeBuffers()

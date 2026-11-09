@@ -209,4 +209,6 @@
     <string name="season_n">Sezoni %1$d</string>
     <string name="episode_n">Episodi %1$d</string>
     <string name="resume_at">Vazhdo nga %1$s</string>
+    <string name="err_library">Serveri nuk u arrit. Shtyp OK për të provuar sërish.</string>
+    <string name="next_episode">Në vazhdim: %1$s</string>
 </resources>

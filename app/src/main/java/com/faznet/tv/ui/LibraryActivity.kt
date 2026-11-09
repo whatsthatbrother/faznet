@@ -55,7 +55,12 @@ class LibraryActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.libTitle).setText(if (series) R.string.series else R.string.movies)
         findViewById<View>(R.id.libBack).setOnClickListener { finish() }
         progress = findViewById(R.id.libProgress)
-        empty = findViewById(R.id.libEmpty)
+        empty = findViewById<TextView>(R.id.libEmpty).apply {
+            setBackgroundResource(R.drawable.bg_choice)
+            val pad = (16 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, pad / 2)
+            gravity = android.view.Gravity.CENTER
+        }
         search = findViewById(R.id.libSearch)
         search.doAfterTextChanged { applyFilter() }
 
@@ -82,13 +87,14 @@ class LibraryActivity : AppCompatActivity() {
             list.add(GroupItem(ALL, getString(R.string.library_all), -1))
             cats.forEach { list.add(GroupItem(it.id, it.name, -1)) }
             categories.submit(list, ALL)
-            loadItems(if (cats.isNotEmpty()) cats.first().id else ALL)
+            val first = if (cats.isNotEmpty()) cats.first().id else ALL
+            loadItems(first)
+            // The remote starts on the category being shown, not on the Back button (one OK there closed the screen).
+            if (!portrait) findViewById<RecyclerView>(R.id.libCategories).let { rv ->
+                val at = list.indexOfFirst { it.key == first }.coerceAtLeast(0)
+                rv.post { rv.findViewHolderForAdapterPosition(at)?.itemView?.requestFocus() }
+            }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        grid.notifyDataSetChanged() // "continue watching" times may have changed
     }
 
     /** [now] false = the remote is only passing over the category: load it once the remote stops there. */
@@ -102,8 +108,9 @@ class LibraryActivity : AppCompatActivity() {
             if (!now) delay(CATEGORY_DELAY_MS)
             val cat = key.takeUnless { it == ALL }
             // "All" can be tens of thousands of titles: the tiles are made off the main thread too.
+            failed = false
             items = if (series) {
-                val found = XtreamApi.series(account, cat)
+                val found = XtreamApi.series(account, cat) ?: emptyList<com.faznet.tv.data.XSeries>().also { failed = true }
                 withContext(Dispatchers.Default) {
                     found.map { s ->
                         Item(s.id, s.name, s.cover, s.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" } ?: "") {
@@ -112,7 +119,7 @@ class LibraryActivity : AppCompatActivity() {
                     }
                 }
             } else {
-                val found = XtreamApi.vodStreams(account, cat)
+                val found = XtreamApi.vodStreams(account, cat) ?: emptyList<com.faznet.tv.data.XVod>().also { failed = true }
                 withContext(Dispatchers.Default) {
                     found.map { v ->
                         val url = XtreamApi.vodUrl(account, v)
@@ -130,9 +137,19 @@ class LibraryActivity : AppCompatActivity() {
         val q = search.text.toString().trim().lowercase()
         val shown = if (q.isEmpty()) items else items.filter { it.title.lowercase().contains(q) }
         grid.submit(shown)
-        empty.text = getString(R.string.no_items)
-        empty.visibility = if (shown.isEmpty() && progress.visibility != View.VISIBLE) View.VISIBLE else View.GONE
+        val show = shown.isEmpty() && progress.visibility != View.VISIBLE
+        // The server did not answer: say so, and OK on the message asks again (before it read "nothing here", as if the
+        // account had no movies, with no way to try again but choosing another category).
+        empty.text = getString(if (failed) R.string.err_library else R.string.no_items)
+        empty.isFocusable = failed
+        empty.isClickable = failed
+        empty.setOnClickListener(if (failed) View.OnClickListener { loadItems(selected) } else null)
+        empty.visibility = if (show) View.VISIBLE else View.GONE
+        if (show && failed) empty.requestFocus()
     }
+
+    /** The last load could not reach the server. */
+    private var failed = false
 
     private inner class PosterAdapter : RecyclerView.Adapter<PosterAdapter.VH>() {
         private var list: List<Item> = emptyList()

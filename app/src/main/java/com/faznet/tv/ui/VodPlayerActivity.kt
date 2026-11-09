@@ -2,12 +2,17 @@ package com.faznet.tv.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
 import android.widget.TextView
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -37,6 +42,11 @@ class VodPlayerActivity : AppCompatActivity() {
     private lateinit var tvError: TextView
     private var player: ExoPlayer? = null
     private var url = ""
+    private var title = ""
+    private lateinit var titleView: TextView
+    /** The episodes after this one, in order: they follow by themselves (series only; empty for a movie). */
+    private var nextUrls = ArrayList<String>()
+    private var nextTitles = ArrayList<String>()
     private val handler = Handler(Looper.getMainLooper())
     private var retries = 0
     /** prepare() after an error goes on from where the player stopped. */
@@ -53,20 +63,86 @@ class VodPlayerActivity : AppCompatActivity() {
         if (!isTv()) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         setContentView(R.layout.activity_vod_player)
         repo = Repository.get(this)
-        url = intent.getStringExtra(EXTRA_URL) ?: run { finish(); return }
+        val from = savedInstanceState ?: intent.extras
+        url = from?.getString(EXTRA_URL) ?: run { finish(); return }
+        title = from.getString(EXTRA_TITLE).orEmpty()
+        nextUrls = from.getStringArrayList(EXTRA_NEXT_URLS) ?: ArrayList()
+        nextTitles = from.getStringArrayList(EXTRA_NEXT_TITLES) ?: ArrayList()
         playerView = findViewById(R.id.vodPlayerView)
         tvError = findViewById(R.id.vodError)
-        findViewById<TextView>(R.id.vodTitle).text = intent.getStringExtra(EXTRA_TITLE) ?: ""
+        titleView = findViewById(R.id.vodTitle)
+        titleView.text = title
         playerView.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v ->
             findViewById<View>(R.id.vodTitle).visibility = v
         })
         hideSystemUi()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // Several episodes in a row: after the app was restarted it goes on with the one playing, not the first.
+        outState.putString(EXTRA_URL, url)
+        outState.putString(EXTRA_TITLE, title)
+        outState.putStringArrayList(EXTRA_NEXT_URLS, nextUrls)
+        outState.putStringArrayList(EXTRA_NEXT_TITLES, nextTitles)
+    }
+
+    /** The internet came back after it was lost: go on at once if the player had given up. */
+    private val netCallback = object : ConnectivityManager.NetworkCallback() {
+        // onAvailable also fires right after registering: only react to a network that comes back after a loss.
+        @Volatile private var lost = false
+
+        override fun onLost(network: Network) { lost = true }
+
+        override fun onAvailable(network: Network) {
+            if (!lost) return
+            lost = false
+            handler.post { if (player?.playerError != null) retryNow() }
+        }
+    }
+
+    private fun retryNow() {
+        retries = 0
+        handler.removeCallbacks(retry)
+        tvError.setText(R.string.reconnecting)
+        retry.run()
+    }
+
+    /** Puts [url] into the player, at the place it was left last time. */
+    private fun open(p: ExoPlayer) {
+        val ch = Channel(0, "", url, null, "", null, null)
+        val type = StreamProbe.guess(url) ?: StreamType.PROGRESSIVE
+        p.setMediaSource(PlayerFactory.mediaSource(this, ch, repo.userAgent, type))
+        resumePosition(this, url).takeIf { it > 0 }?.let { p.seekTo(it) }
+        p.prepare()
+    }
+
+    /** An episode ended: the next one of the series starts by itself. @return false when there is none. */
+    private fun playNext(): Boolean {
+        val p = player ?: return false
+        if (nextUrls.isEmpty()) return false
+        url = nextUrls.removeAt(0)
+        title = nextTitles.removeAtOrNull() ?: ""
+        titleView.text = title
+        retries = 0
+        tvError.visibility = View.GONE
+        Toast.makeText(this, getString(R.string.next_episode, title), Toast.LENGTH_LONG).show()
+        open(p)
+        p.play()
+        return true
+    }
+
+    private fun ArrayList<String>.removeAtOrNull() = if (isEmpty()) null else removeAt(0)
+
     override fun onStart() {
         super.onStart()
         val p = PlayerFactory.create(this, repo.useFfmpeg)
         retries = 0
+        runCatching {
+            (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).registerNetworkCallback(
+                NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), netCallback
+            )
+        }
         p.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 // The network or the server failed for a moment: go on from the same place by itself, as the live
@@ -85,22 +161,22 @@ class VodPlayerActivity : AppCompatActivity() {
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) { tvError.visibility = View.GONE; retries = 0 }
-                if (state == Player.STATE_ENDED) { clearPosition(); finish() }
+                if (state == Player.STATE_ENDED) {
+                    clearPosition()
+                    if (!playNext()) finish()
+                }
             }
         })
-        val ch = Channel(0, "", url, null, "", null, null)
-        val type = StreamProbe.guess(url) ?: StreamType.PROGRESSIVE
-        p.setMediaSource(PlayerFactory.mediaSource(this, ch, repo.userAgent, type))
-        resumePosition(this, url).takeIf { it > 0 }?.let { p.seekTo(it) }
-        p.prepare()
-        p.playWhenReady = true
         playerView.player = p
         player = p
+        open(p)
+        p.playWhenReady = true
         handler.postDelayed(saveTick, 10_000)
     }
 
     override fun onStop() {
         super.onStop()
+        runCatching { (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(netCallback) }
         savePosition()
         handler.removeCallbacksAndMessages(null)
         playerView.player = null
@@ -136,6 +212,13 @@ class VodPlayerActivity : AppCompatActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val p = player
+        // The player gave up (no internet for a while): OK tries again from the same place.
+        if (p != null && p.playerError != null && event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
+            event.keyCode in intArrayOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER)
+        ) {
+            retryNow()
+            return true
+        }
         if (p != null && event.action == KeyEvent.ACTION_DOWN && !playerView.isControllerFullyVisible) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> {
@@ -152,6 +235,8 @@ class VodPlayerActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
+        private const val EXTRA_NEXT_URLS = "next_urls"
+        private const val EXTRA_NEXT_TITLES = "next_titles"
         private const val MAX_RETRIES = 5
 
         private fun prefs(c: Context) = c.applicationContext.getSharedPreferences("resume", Context.MODE_PRIVATE)
@@ -160,8 +245,13 @@ class VodPlayerActivity : AppCompatActivity() {
         /** Saved position (ms) to continue from, 0 if none. */
         fun resumePosition(c: Context, url: String): Long = prefs(c).getLong(key(url), 0)
 
-        fun start(c: Context, url: String, title: String) {
-            c.startActivity(Intent(c, VodPlayerActivity::class.java).putExtra(EXTRA_URL, url).putExtra(EXTRA_TITLE, title))
+        /** [next]: what follows by itself when this ends (the next episodes of a series), as address → title. */
+        fun start(c: Context, url: String, title: String, next: List<Pair<String, String>> = emptyList()) {
+            c.startActivity(
+                Intent(c, VodPlayerActivity::class.java).putExtra(EXTRA_URL, url).putExtra(EXTRA_TITLE, title)
+                    .putStringArrayListExtra(EXTRA_NEXT_URLS, ArrayList(next.map { it.first }))
+                    .putStringArrayListExtra(EXTRA_NEXT_TITLES, ArrayList(next.map { it.second }))
+            )
         }
     }
 }

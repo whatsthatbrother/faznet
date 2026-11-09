@@ -54,6 +54,17 @@ class ReportsExitTest {
     }
 
     @Test
+    fun aCrashReportHoldsNoAccountOrAddress() {
+        val trace = "java.io.IOException: unexpected end of stream on http://example.host:8080/live/alice/s3cret/123.ts\n" +
+            "\tat com.faznet.tv.player.PlayerFactory.create(PlayerFactory.kt:42)\n" +
+            "Caused by: java.net.ConnectException: failed to connect to /203.0.113.7:8080"
+        val clean = Reports.scrub(trace)
+        assertFalse(clean, clean.contains("alice") || clean.contains("s3cret") || clean.contains("example.host"))
+        assertFalse(clean, clean.contains("203.0.113.7"))
+        assertTrue("the stack trace stays readable", clean.contains("com.faznet.tv.player.PlayerFactory.create(PlayerFactory.kt:42)"))
+    }
+
+    @Test
     fun severalComeOldestFirst() {
         val text = Reports.exitText(listOf(exit(9_000, Reports.REASON_ANR), exit(5_000, Reports.REASON_CRASH_NATIVE)), since = 0)!!
         assertEquals(listOf("native crash", "not responding"), Regex("(native crash|not responding)").findAll(text).map { it.value }.toList())

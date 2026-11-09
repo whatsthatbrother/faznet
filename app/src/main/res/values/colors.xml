@@ -8,9 +8,6 @@
     <color name="accent2">#409CFF</color>
     <color name="text">#FFFFFF</color>
     <color name="text_dim">#8E8E93</color>
-    <color name="focus_bg">#1FFFFFFF</color>
-    <color name="overlay">#CC000000</color>
     <color name="line">#38383A</color>
-    <color name="focus_fill">#48484A</color>
     <color name="dialog_bg">#2C2C2E</color>
 </resources>

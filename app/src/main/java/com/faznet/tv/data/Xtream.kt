@@ -103,8 +103,10 @@ object XtreamApi {
         }
     }
 
-    suspend fun vodStreams(a: XtreamAccount, categoryId: String?): List<XVod> = parsed(
-        if (categoryId != null) call(a, "get_vod_streams", "category_id" to categoryId) else call(a, "get_vod_streams")
+    /** Null when the server could not be reached: the screen says so and offers to try again, instead of "nothing here". */
+    suspend fun vodStreams(a: XtreamAccount, categoryId: String?): List<XVod>? = parsed(
+        (if (categoryId != null) call(a, "get_vod_streams", "category_id" to categoryId) else call(a, "get_vod_streams"))
+            ?: return null
     ) { body ->
         val j = arr(body)
         (0 until j.length()).mapNotNull { i ->
@@ -114,8 +116,10 @@ object XtreamApi {
         }
     }
 
-    suspend fun series(a: XtreamAccount, categoryId: String?): List<XSeries> = parsed(
-        if (categoryId != null) call(a, "get_series", "category_id" to categoryId) else call(a, "get_series")
+    /** Null when the server could not be reached. */
+    suspend fun series(a: XtreamAccount, categoryId: String?): List<XSeries>? = parsed(
+        (if (categoryId != null) call(a, "get_series", "category_id" to categoryId) else call(a, "get_series"))
+            ?: return null
     ) { body ->
         val j = arr(body)
         (0 until j.length()).mapNotNull { i ->
@@ -124,7 +128,8 @@ object XtreamApi {
         }
     }
 
-    suspend fun episodes(a: XtreamAccount, seriesId: String): List<XEpisode> = parsed(call(a, "get_series_info", "series_id" to seriesId)) { body ->
+    /** Null when the server could not be reached. */
+    suspend fun episodes(a: XtreamAccount, seriesId: String): List<XEpisode>? = parsed(call(a, "get_series_info", "series_id" to seriesId) ?: return null) { body ->
         val eps = obj(body).optJSONObject("episodes") ?: return@parsed emptyList()
         val out = ArrayList<XEpisode>()
         for (season in eps.keys()) {

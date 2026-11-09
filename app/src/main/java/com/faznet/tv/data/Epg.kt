@@ -18,9 +18,14 @@ object Epg {
     class Programme(val title: String, val start: Long, val end: Long)
     class NowNext(val now: Programme?, val next: Programme?)
 
-    private class Entry(val at: Long, val value: NowNext?)
+    /** All the programmes the server sent (up to three), so "next" is still there after the first one ended. */
+    private class Entry(val at: Long, val value: List<Programme>?)
 
-    private val cache = HashMap<String, Entry>()
+    /** At most [MAX_ENTRIES] channels, the least recently asked go first: hours of zapping must not grow it forever. */
+    private val cache = object : LinkedHashMap<String, Entry>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Entry>) = size > MAX_ENTRIES
+    }
+    private const val MAX_ENTRIES = 400
     private val XTREAM_LIVE = Regex("""^(https?://[^/]+)(?:/live)?/([^/]+)/([^/]+)/(\d+)(?:\.[A-Za-z0-9]+)?$""")
     private const val TTL_MS = 5 * 60 * 1000L
 
@@ -60,7 +65,7 @@ object Epg {
         return value?.let { current(it) }
     }
 
-    private fun parse(body: String): NowNext? {
+    internal fun parse(body: String): List<Programme>? {
         val arr = JSONObject(body).optJSONArray("epg_listings") ?: return null
         val list = ArrayList<Programme>()
         for (i in 0 until arr.length()) {
@@ -71,13 +76,11 @@ object Epg {
         }
         if (list.isEmpty()) return null
         list.sortBy { it.start }
-        return NowNext(list.getOrNull(0), list.getOrNull(1))
+        return list
     }
 
     /** Re-pick now/next from what we have, so a cached answer stays right as programmes change. */
-    private fun current(v: NowNext): NowNext? {
-        val all = listOfNotNull(v.now, v.next)
-        val t = System.currentTimeMillis()
+    internal fun current(all: List<Programme>, t: Long = System.currentTimeMillis()): NowNext? {
         val i = all.indexOfFirst { t < it.end }
         if (i < 0) return null
         return NowNext(all[i], all.getOrNull(i + 1))

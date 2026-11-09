@@ -32,9 +32,18 @@ object Reports {
         runCatching {
             val sw = StringWriter()
             t.printStackTrace(PrintWriter(sw))
-            crashFile(c).writeText(sw.toString().take(15_000))
+            crashFile(c).writeText(scrub(sw.toString()).take(15_000))
         }
     }
+
+    /**
+     * Exception messages can hold a stream's whole address, and an Xtream address has the account's user name and
+     * password in it (http://host/user/pass/123). The report goes to the developer's server: addresses and IP numbers
+     * are taken out. Class names (com.faznet.tv.…) stay, so the stack trace can still be read.
+     */
+    internal fun scrub(text: String): String = text
+        .replace(Regex("""[a-zA-Z][a-zA-Z0-9+.-]*://\S+"""), "<address>")
+        .replace(Regex("""\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b"""), "<ip>")
 
     private fun summary(c: Context, repo: Repository): String = buildString {
         append("Faznet ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n")
