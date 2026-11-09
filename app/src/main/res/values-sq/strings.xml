@@ -211,4 +211,5 @@
     <string name="resume_at">Vazhdo nga %1$s</string>
     <string name="err_library">Serveri nuk u arrit. Shtyp OK për të provuar sërish.</string>
     <string name="next_episode">Në vazhdim: %1$s</string>
+    <string name="net_details">Detajet</string>
 </resources>

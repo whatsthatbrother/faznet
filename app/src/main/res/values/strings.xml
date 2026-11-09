@@ -212,4 +212,5 @@
     <string name="resume_at">Continue at %1$s</string>
     <string name="err_library">Could not reach the server. Press OK to try again.</string>
     <string name="next_episode">Next: %1$s</string>
+    <string name="net_details">Details</string>
 </resources>
