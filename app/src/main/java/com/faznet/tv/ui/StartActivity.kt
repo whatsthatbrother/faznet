@@ -161,11 +161,11 @@ private fun StartScreen(
             Spacer(Modifier.weight(1f))
 
             val cards: @Composable (Modifier) -> Unit = { m ->
-                HubCard(R.drawable.ic_tv, stringResource(R.string.start_live), stringResource(R.string.start_live_sub),
+                HubCard(R.drawable.ic_tv, stringResource(R.string.start_live), narrow,
                     enabled = true, onClick = live, modifier = m.focusRequester(first))
-                HubCard(R.drawable.ic_movie, stringResource(R.string.movies), stringResource(R.string.start_movies_sub),
+                HubCard(R.drawable.ic_movie, stringResource(R.string.movies), narrow,
                     enabled = state.xtream, onClick = { library(false) }, modifier = m)
-                HubCard(R.drawable.ic_series, stringResource(R.string.series), stringResource(R.string.start_series_sub),
+                HubCard(R.drawable.ic_series, stringResource(R.string.series), narrow,
                     enabled = state.xtream, onClick = { library(true) }, modifier = m)
             }
             if (narrow) {
@@ -183,9 +183,10 @@ private fun StartScreen(
     }
 }
 
-/** One big section card: white with black text when focused (tvOS), quiet grey otherwise. */
+/** One big section card: only the icon and a bold title (no subtitle: Diar, 2026-11-10).
+ *  White with black text when focused (tvOS), quiet grey otherwise. */
 @Composable
-private fun HubCard(icon: Int, title: String, sub: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier) {
+private fun HubCard(icon: Int, title: String, narrow: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier) {
     FocusBox(
         onClick = onClick,
         modifier = modifier,
@@ -197,13 +198,19 @@ private fun HubCard(icon: Int, title: String, sub: String, enabled: Boolean, onC
         focusScale = 1.07f,
     ) { focused ->
         val main = when { focused -> Fz.onLight; enabled -> Fz.text; else -> Fz.text.copy(alpha = 0.35f) }
-        val dim = if (focused) Fz.onLight.copy(alpha = 0.6f) else Fz.dim.copy(alpha = if (enabled) 1f else 0.5f)
-        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            Icon(painterResource(icon), null, tint = if (focused) Fz.accent else main, modifier = Modifier.size(44.dp))
-            Column {
-                Text(title, color = main, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                Spacer(Modifier.height(4.dp))
-                Text(sub, color = dim, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        val iconTint = if (focused) Fz.accent else main
+        if (narrow) {
+            Row(Modifier.fillMaxSize().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(icon), null, tint = iconTint, modifier = Modifier.size(44.dp))
+                Spacer(Modifier.width(20.dp))
+                Text(title, color = main, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1,
+                    letterSpacing = 0.3.sp, overflow = TextOverflow.Ellipsis)
+            }
+        } else {
+            Column(Modifier.fillMaxSize().padding(26.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                Icon(painterResource(icon), null, tint = iconTint, modifier = Modifier.size(48.dp))
+                Text(title, color = main, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1,
+                    letterSpacing = 0.3.sp, overflow = TextOverflow.Ellipsis)
             }
         }
     }

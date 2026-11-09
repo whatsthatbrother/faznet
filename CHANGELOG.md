@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.0.1
+
+### New
+- A cleaner start screen: the Live TV, Movies and Series cards show only their name, in bigger, bolder letters.
+
 ## 5.0.0
 
 ### New

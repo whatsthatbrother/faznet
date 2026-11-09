@@ -198,9 +198,6 @@
     <string name="net_r_wifi">The Wi-Fi signal is weak: move the router closer or use a cable.</string>
     <string name="update_banner">Update %1$s · Update now</string>
     <string name="start_live">Live TV</string>
-    <string name="start_live_sub">The channels of your playlist</string>
-    <string name="start_movies_sub">Films from your account, on demand</string>
-    <string name="start_series_sub">Series and episodes, on demand</string>
     <string name="start_xtream_only">Movies and series come with an Xtream account (server, username, password).</string>
     <string name="start_with_live">Open Live TV straight away (skip the start screen)</string>
     <string name="parental_new_pin">Type a new 4-digit PIN, or leave it empty to keep the current one.</string>

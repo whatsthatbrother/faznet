@@ -197,9 +197,6 @@
     <string name="net_r_wifi">Sinjali Wi-Fi është i dobët: afroje ruterin ose përdor kabllo.</string>
     <string name="update_banner">Përditësimi %1$s · Përditëso</string>
     <string name="start_live">TV Live</string>
-    <string name="start_live_sub">Kanalet e playlist-ës tënde</string>
-    <string name="start_movies_sub">Filma nga llogaria jote, sipas kërkesës</string>
-    <string name="start_series_sub">Seriale dhe episode, sipas kërkesës</string>
     <string name="start_xtream_only">Filmat dhe serialet vijnë me një llogari Xtream (server, emër përdoruesi, fjalëkalim).</string>
     <string name="start_with_live">Hap direkt TV Live (pa ekranin hyrës)</string>
     <string name="parental_new_pin">Shkruaj një PIN të ri me 4 shifra, ose lëre bosh për ta mbajtur të njëjtin.</string>
