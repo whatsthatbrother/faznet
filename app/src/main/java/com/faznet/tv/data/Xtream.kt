@@ -27,7 +27,10 @@ data class XtreamAccount(val server: String, val user: String, val pass: String)
                 val url = p.source.toHttpUrlOrNull() ?: return null
                 val u = url.queryParameter("username") ?: return null
                 val pw = url.queryParameter("password") ?: return null
-                val base = url.newBuilder().encodedPath("/").query(null).build().toString().trimEnd('/')
+                // The API sits next to get.php: http://host/xc/get.php?… → http://host/xc. Before, the path was dropped
+                // and such providers had live TV (the list itself) but no movies, series or guide.
+                val dir = url.encodedPathSegments.dropLast(1).filter { it.isNotEmpty() }.joinToString("/")
+                val base = url.newBuilder().encodedPath("/$dir").query(null).fragment(null).build().toString().trimEnd('/')
                 return XtreamAccount(base, u, pw)
             }
             return null

@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.0.5
+
+### Fixed
+- Playlists added as a link from providers whose address has an extra folder (such as /xc/get.php): movies, series, the TV guide, catch-up and "now / next" work now.
+- Live TV loads faster for these providers.
+
 ## 5.0.4
 
 ### New
