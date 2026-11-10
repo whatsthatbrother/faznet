@@ -6,7 +6,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import java.util.concurrent.ConcurrentHashMap
 
-enum class StreamType { HLS, DASH, PROGRESSIVE }
+enum class StreamType { HLS, DASH, PROGRESSIVE, RTSP }
 
 /**
  * Works out a stream's container before playback, so extension-less IPTV URLs open on the first try
@@ -32,7 +32,10 @@ object StreamProbe {
             path.endsWith(".ts") || path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".avi") ||
                 path.endsWith(".mp3") || path.endsWith(".aac") || path.endsWith(".flv") || path.endsWith(".mov") ||
                 lower.contains("output=ts") -> StreamType.PROGRESSIVE
-            lower.startsWith("rtmp") || lower.startsWith("rtsp") || lower.startsWith("udp") -> StreamType.PROGRESSIVE
+            lower.startsWith("rtsp") -> StreamType.RTSP
+            // rtmp:// goes through RtmpDataSource (picked by DefaultDataSource), udp:// through UdpDataSource: both carry
+            // a plain stream.
+            lower.startsWith("rtmp") || lower.startsWith("udp") -> StreamType.PROGRESSIVE
             // Xtream Codes live URLs: http://host/[live/]user/pass/12345 — MPEG-TS by default.
             // Never probe these: many panels allow a single connection and cut the stream if a second one appears.
             XTREAM_LIVE.containsMatchIn(path) -> StreamType.PROGRESSIVE

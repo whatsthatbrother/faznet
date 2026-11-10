@@ -266,9 +266,6 @@ class Repository private constructor(private val ctx: Context) {
         set(v) = prefs.edit().putBoolean(KEY_FFMPEG, v).apply()
 
     /** Android TV tunneled playback: picture and sound go straight through the TV chip (smoother on Amlogic). */
-    var tunneling: Boolean
-        get() = prefs.getBoolean("tunneling", false)
-        set(v) = prefs.edit().putBoolean("tunneling", v).apply()
 
     /** Software video decoder for SD channels (the Mi TV Stick's hardware decoder sometimes stalls on 576i). */
     var softwareSd: Boolean

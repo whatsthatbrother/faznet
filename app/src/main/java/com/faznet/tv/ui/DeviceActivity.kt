@@ -1,13 +1,10 @@
 package com.faznet.tv.ui
 
-import android.graphics.Bitmap
-import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
-import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -18,9 +15,6 @@ import com.faznet.tv.R
 import com.faznet.tv.data.RemoteSync
 import com.faznet.tv.data.Repository
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.EncodeHintType
-import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -35,7 +29,6 @@ class DeviceActivity : AppCompatActivity() {
     private val hidePin = Runnable { pinVisible = false; render() }
     private lateinit var tvUrl: TextView
     private lateinit var tvStatus: TextView
-    private lateinit var ivQr: ImageView
     private var knownCount = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,7 +40,6 @@ class DeviceActivity : AppCompatActivity() {
         tvPin = findViewById(R.id.tvPin)
         tvUrl = findViewById(R.id.tvUrl)
         tvStatus = findViewById(R.id.tvStatus)
-        ivQr = findViewById(R.id.ivQr)
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<Button>(R.id.btnSync).setOnClickListener { syncOnce(manual = true) }
@@ -81,11 +73,9 @@ class DeviceActivity : AppCompatActivity() {
         tvMac.text = repo.deviceMac
         tvPin.text = if (pinVisible) repo.devicePin else "••••"
         findViewById<Button>(R.id.btnShowPin).setText(if (pinVisible) R.string.hide_pin else R.string.show_pin)
-        // The upload website is given to users separately: the app never shows its address (no URL, no QR).
+        // The upload website is given to users separately: the app never shows its address (no URL).
         tvUrl.visibility = View.GONE
         findViewById<View>(R.id.tvOpenSite).visibility = View.GONE
-        ivQr.setImageBitmap(null)
-        ivQr.visibility = View.GONE
     }
 
     private fun syncOnce(manual: Boolean) {
@@ -140,14 +130,5 @@ class DeviceActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
-    }
-
-    private fun qr(text: String, size: Int): Bitmap {
-        val matrix = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size, mapOf(EncodeHintType.MARGIN to 1))
-        val pixels = IntArray(size * size)
-        for (y in 0 until size) for (x in 0 until size) {
-            pixels[y * size + x] = if (matrix.get(x, y)) Color.BLACK else Color.WHITE
-        }
-        return Bitmap.createBitmap(pixels, size, size, Bitmap.Config.RGB_565)
     }
 }

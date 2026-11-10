@@ -28,8 +28,8 @@ android {
         targetSdk = 35
         // The bench app must never be offered an update from the website. Only for trying the updater against a site on
         // this PC does it take a real number: -PbenchVersion=43 -PfaznetWeb=http://127.0.0.1:8765
-        versionCode = if (bench) (project.findProperty("benchVersion") as String?)?.toInt() ?: 999_999 else 60
-        versionName = "5.0.5"
+        versionCode = if (bench) (project.findProperty("benchVersion") as String?)?.toInt() ?: 999_999 else 61
+        versionName = "5.0.6"
 
         // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
         // "REPLACE" counts as no server (Repository.serverUrl): the bench app registers nothing and sends no reports.
@@ -141,6 +141,9 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-exoplayer-dash:$media3")
+    // rtsp:// and rtmp:// channels: without these they were opened as plain files and could never play.
+    implementation("androidx.media3:media3-exoplayer-rtsp:$media3")
+    implementation("androidx.media3:media3-datasource-rtmp:$media3")
     implementation("androidx.media3:media3-ui:$media3")
     implementation("androidx.media3:media3-datasource-okhttp:$media3")
     implementation("androidx.media3:media3-extractor:$media3")
@@ -148,7 +151,6 @@ dependencies {
     // it was checked on the Mi TV Stick (MP2 and AAC-LATM channels play through it). Move it up when Jellyfin publishes one.
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.9.0+1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.google.zxing:core:3.5.3")
     implementation("io.coil-kt:coil:2.7.0")
     // Installs the ahead-of-time (baseline) profiles also for APKs installed outside Google Play
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")

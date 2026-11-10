@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only in the measuring build (-Pbench): no launcher icon, and a receiver the scripts in tools/ talk to. -->
+<!-- Only in the measuring build (-Pbench): no launcher icon, a receiver the scripts in tools/ talk to, and the home
+     screen startable by them (tools/ui-bench.ps1); in the real app nothing outside it may start that screen. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -7,6 +8,11 @@
         <activity android:name="com.faznet.tv.ui.StartActivity">
             <intent-filter tools:node="removeAll" />
         </activity>
+
+        <activity
+            android:name="com.faznet.tv.ui.MainActivity"
+            android:exported="true"
+            tools:replace="android:exported" />
 
         <receiver
             android:name="com.faznet.tv.bench.BenchReceiver"

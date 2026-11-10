@@ -514,7 +514,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun initPlayer() {
         softwareVideo = wantsSoftwareVideo(current)
-        val p = PlayerFactory.create(this, repo.useFfmpeg, tunneling = false, softwareVideo = softwareVideo)
+        val p = PlayerFactory.create(this, repo.useFfmpeg, softwareVideo = softwareVideo)
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {

@@ -415,7 +415,7 @@ private fun ChannelArea(state: HomeState, pages: Flow<PagingData<Channel>>, acti
         val check = state.checkVersion
         ScrollToFocusedChannel(state, gridState, channels.itemCount)
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(if (tv) 160.dp else 160.dp),
+            columns = GridCells.Adaptive(160.dp),
             state = gridState,
             // tvOS: generous air between the cards, room for the focused one to grow.
             contentPadding = PaddingValues(16.dp, 14.dp, 16.dp, 32.dp),

@@ -85,22 +85,16 @@ object PlayerFactory {
     fun isSoftwareDecoder(name: String) =
         name.startsWith("OMX.google.", ignoreCase = true) || name.startsWith("c2.android.", ignoreCase = true)
 
-    fun create(context: Context, useFfmpeg: Boolean, tunneling: Boolean = false, softwareVideo: Boolean = false): ExoPlayer {
+    fun create(context: Context, useFfmpeg: Boolean, softwareVideo: Boolean = false): ExoPlayer {
         val renderers = DefaultRenderersFactory(context)
             .setExtensionRendererMode(
-                when {
-                    !useFfmpeg -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
-                    // Tunneling needs the platform audio decoder: use FFmpeg only for what the TV can't decode (MP2, AC3…)
-                    tunneling -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-                    else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-                }
+                if (useFfmpeg) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
             )
             .setEnableDecoderFallback(true)
             .setMediaCodecSelector(codecSelector(softwareVideo))
 
-        val trackSelector = DefaultTrackSelector(context).apply {
-            setParameters(buildUponParameters().setTunnelingEnabled(tunneling))
-        }
+        val trackSelector = DefaultTrackSelector(context)
 
         // Live IPTV: start quickly (1 s) and keep a healthy cushion.
         // Many IPTV TS streams are muxed with audio and video several seconds apart, so one track must be
@@ -168,6 +162,10 @@ object PlayerFactory {
                 .setLoadErrorHandlingPolicy(errors)
                 .createMediaSource(item.setMimeType(MimeTypes.APPLICATION_MPD).build())
             StreamType.PROGRESSIVE -> ProgressiveMediaSource.Factory(dataSource, extractors(flags))
+                .setLoadErrorHandlingPolicy(errors)
+                .createMediaSource(item.build())
+            StreamType.RTSP -> androidx.media3.exoplayer.rtsp.RtspMediaSource.Factory()
+                .setUserAgent(userAgent)
                 .setLoadErrorHandlingPolicy(errors)
                 .createMediaSource(item.build())
         }

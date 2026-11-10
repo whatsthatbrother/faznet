@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.6
+
+### New
+- Live TV: channels with rtsp:// and rtmp:// addresses play.
+
+### Fixed
+- Live TV: what Faznet learned about channels (for example which decoder works best) is no longer all forgotten once the list of remembered channels gets full; only the channels not watched for longest make room.
+
 ## 5.0.5
 
 ### Fixed

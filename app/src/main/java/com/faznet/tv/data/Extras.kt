@@ -47,16 +47,38 @@ object ChannelMemory {
         )
     }
 
-    internal fun format(info: Info) = "${info.type ?: ""}|${info.height}|${info.fixes}|${if (info.software) 1 else 0}"
+    /** Written with the time of the change (minutes), so the oldest can make room: "type|height|fixes|software|minute". */
+    internal fun format(info: Info, minute: Long = System.currentTimeMillis() / 60_000) =
+        "${info.type ?: ""}|${info.height}|${info.fixes}|${if (info.software) 1 else 0}|$minute"
 
+    /** When it was last changed; 0 for entries from versions before the time was kept (they go first). */
+    internal fun minute(raw: String): Long = raw.split('|').getOrNull(4)?.toLongOrNull() ?: 0
+
+    /** The number of entries, counted once: before, every change copied the whole map ([SharedPreferences.getAll]). */
+    @Volatile private var count = -1
+
+    @Synchronized
     private fun update(c: Context, url: String, change: (Info) -> Info) {
         val old = get(c, url) ?: Info(null, 0, 0)
         val new = change(old)
         if (new == old) return
         val sp = prefs(c)
-        if (sp.all.size > MAX_ENTRIES) sp.edit().clear().apply()
-        sp.edit().putString(key(url), format(new)).apply()
+        val k = key(url)
+        if (count < 0) count = sp.all.size
+        if (!sp.contains(k)) count++
+        val edit = sp.edit()
+        // Full: the channels changed longest ago make room. Before, everything learnt (decoder choices too) was wiped.
+        if (count > MAX_ENTRIES) {
+            val drop = oldest(sp.all, MAX_ENTRIES / 10)
+            drop.forEach { edit.remove(it) }
+            count -= drop.size
+        }
+        edit.putString(k, format(new)).apply()
     }
+
+    /** The [n] keys changed longest ago. */
+    internal fun oldest(all: Map<String, *>, n: Int): List<String> =
+        all.entries.sortedBy { (it.value as? String)?.let(::minute) ?: 0 }.take(n).map { it.key }
 
     fun rememberType(c: Context, url: String, type: String) = update(c, url) { it.copy(type = type) }
 
@@ -77,17 +99,28 @@ object ProblemLog {
 
     private fun file(c: Context) = File(c.applicationContext.filesDir, "problems.log")
 
-    @Synchronized
+    /**
+     * Called from the player at the moment of a freeze or an error: the file is read and written on a thread of its
+     * own, in the order the problems came, not on the main thread while the picture is being fixed.
+     */
     fun add(c: Context, channel: String, what: String, at: Long = System.currentTimeMillis()) {
+        val app = c.applicationContext
+        val line = "${synchronized(fmt) { fmt.format(Date(at)) }}  ${channel.take(40)}  —  $what".replace('\n', ' ')
+        io.execute { if (write(app, line)) Reports.problemAdded(app) }
+    }
+
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "problem-log").apply { isDaemon = true } }
+
+    @Synchronized
+    internal fun write(c: Context, line: String): Boolean {
         val f = file(c)
-        try {
+        return try {
             val lines = (if (f.exists()) f.readLines() else emptyList()).takeLast(MAX - 1)
-            val line = "${fmt.format(Date(at))}  ${channel.take(40)}  —  $what".replace('\n', ' ')
             f.writeText((lines + line).joinToString("\n"))
+            true
         } catch (e: IOException) {
-            return // the device's storage is full: not a reason to close the channel someone is watching
+            false // the device's storage is full: not a reason to close the channel someone is watching
         }
-        Reports.problemAdded(c)
     }
 
     @Synchronized
@@ -120,12 +153,5 @@ object Parental {
 
     /** True if this group must stay hidden right now. */
     fun isLocked(c: Context, group: String) = !unlocked && enabled(c) && group in lockedGroups(c)
-
-    /** Channels the user may see now (locked groups removed until unlocked). */
-    fun visible(c: Context, list: List<Channel>): List<Channel> {
-        if (unlocked || !enabled(c)) return list
-        val locked = lockedGroups(c)
-        return list.filter { it.group !in locked }
-    }
 }
 

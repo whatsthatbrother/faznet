@@ -51,15 +51,6 @@
                 android:paddingEnd="48dp"
                 android:paddingBottom="36dp">
 
-                <ImageView
-                    android:id="@+id/ivQr"
-                    android:layout_width="200dp"
-                    android:layout_height="200dp"
-                    android:layout_marginEnd="32dp"
-                    android:background="@drawable/bg_qr"
-                    android:contentDescription="QR"
-                    android:padding="8dp"
-                    android:scaleType="fitCenter" />
 
                 <include layout="@layout/part_device_info" />
             </LinearLayout>

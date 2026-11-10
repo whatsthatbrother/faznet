@@ -107,7 +107,7 @@ val LocalTvMode = staticCompositionLocalOf { false }
 
 /**
  * A focusable, clickable box made for the TV remote and for touch:
- * OK = click, OK held = long click; grows and turns blue-violet when focused.
+ * OK = click, OK held = long click; grows and lights up when focused.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
