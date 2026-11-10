@@ -18,7 +18,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.faznet.tv.R
+import com.faznet.tv.data.LibraryCache
 import com.faznet.tv.data.Repository
+import com.faznet.tv.data.XSeries
+import com.faznet.tv.data.XVod
 import com.faznet.tv.data.XtreamAccount
 import com.faznet.tv.data.XtreamApi
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -32,7 +35,10 @@ import kotlinx.coroutines.withContext
 class LibraryActivity : AppCompatActivity() {
 
     /** One poster in the grid (a movie or a series). */
-    private class Item(val id: String, val title: String, val image: String?, val sub: String, val play: () -> Unit)
+    private class Item(val id: String, val title: String, val image: String?, val sub: String, val play: () -> Unit) {
+        /** For the search: lowered once, not at every letter for every title. */
+        val key = title.lowercase()
+    }
 
     private lateinit var account: XtreamAccount
     private var series = false
@@ -43,6 +49,7 @@ class LibraryActivity : AppCompatActivity() {
     private lateinit var search: EditText
     private var items: List<Item> = emptyList()
     private var loadJob: Job? = null
+    private var filterJob: Job? = null
     private var selected = ALL
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,7 +69,7 @@ class LibraryActivity : AppCompatActivity() {
             gravity = android.view.Gravity.CENTER
         }
         search = findViewById(R.id.libSearch)
-        search.doAfterTextChanged { applyFilter() }
+        search.doAfterTextChanged { applyFilter(typing = true) }
 
         val portrait = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
         categories = GroupAdapter(horizontal = portrait, selectOnFocus = !portrait, onSelect = { key, fromClick -> loadItems(key, fromClick) })
@@ -102,6 +109,7 @@ class LibraryActivity : AppCompatActivity() {
         selected = key
         categories.select(key)
         loadJob?.cancel()
+        filterJob?.cancel()
         progress.visibility = View.VISIBLE
         empty.visibility = View.GONE
         loadJob = lifecycleScope.launch {
@@ -109,8 +117,12 @@ class LibraryActivity : AppCompatActivity() {
             val cat = key.takeUnless { it == ALL }
             // "All" can be tens of thousands of titles: the tiles are made off the main thread too.
             failed = false
+            // A category seen before in this session comes from memory, not from the server again.
+            val cacheKey = LibraryCache.key(account, series, cat)
             items = if (series) {
-                val found = XtreamApi.series(account, cat) ?: emptyList<com.faznet.tv.data.XSeries>().also { failed = true }
+                val found = LibraryCache.get<XSeries>(cacheKey)
+                    ?: XtreamApi.series(account, cat)?.also { LibraryCache.put(cacheKey, it) }
+                    ?: emptyList<XSeries>().also { failed = true }
                 withContext(Dispatchers.Default) {
                     found.map { s ->
                         Item(s.id, s.name, s.cover, s.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" } ?: "") {
@@ -119,7 +131,9 @@ class LibraryActivity : AppCompatActivity() {
                     }
                 }
             } else {
-                val found = XtreamApi.vodStreams(account, cat) ?: emptyList<com.faznet.tv.data.XVod>().also { failed = true }
+                val found = LibraryCache.get<XVod>(cacheKey)
+                    ?: XtreamApi.vodStreams(account, cat)?.also { LibraryCache.put(cacheKey, it) }
+                    ?: emptyList<XVod>().also { failed = true }
                 withContext(Dispatchers.Default) {
                     found.map { v ->
                         val url = XtreamApi.vodUrl(account, v)
@@ -133,9 +147,22 @@ class LibraryActivity : AppCompatActivity() {
         }
     }
 
-    private fun applyFilter() {
+    /**
+     * Shows the titles that match the search. With tens of thousands of titles, filtering at every letter on the main
+     * thread made typing stick on the Mi Stick: it waits until the typing pauses and runs in the background.
+     */
+    private fun applyFilter(typing: Boolean = false) {
+        filterJob?.cancel()
         val q = search.text.toString().trim().lowercase()
-        val shown = if (q.isEmpty()) items else items.filter { it.title.lowercase().contains(q) }
+        val all = items
+        if (q.isEmpty()) { show(all); return }
+        filterJob = lifecycleScope.launch {
+            if (typing) delay(SEARCH_DELAY_MS)
+            show(withContext(Dispatchers.Default) { all.filter { it.key.contains(q) } })
+        }
+    }
+
+    private fun show(shown: List<Item>) {
         grid.submit(shown)
         val show = shown.isEmpty() && progress.visibility != View.VISIBLE
         // The server did not answer: say so, and OK on the message asks again (before it read "nothing here", as if the
@@ -198,6 +225,7 @@ class LibraryActivity : AppCompatActivity() {
     companion object {
         private const val ALL = "\u0000all"
         private const val CATEGORY_DELAY_MS = 350L
+        private const val SEARCH_DELAY_MS = 250L
         private const val UNFOCUSED_ALPHA = 0.7f
         const val EXTRA_SERIES = "series"
 

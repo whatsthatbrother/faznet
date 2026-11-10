@@ -1,9 +1,18 @@
 # Changelog
 
+## 5.0.3
+
+### New
+- Movies and series: a category you already opened comes back at once, without loading again.
+
+### Fixed
+- Movies and series: typing in the search no longer gets slow with big lists.
+- Live TV: "now / next" also shows for providers whose channel addresses have another form.
+
 ## 5.0.2
 
 ### Fixed
-- Movies and series: big lists load with much less memory (on a Mi TV Stick, from about 60 MB to 17 MB for all movies), so small TV sticks stay stable.
+- Movies and series: big lists load with much less memory, so small TV sticks stay stable.
 - Movies and series: an answer from the server that breaks off half way is shown as a server failure (OK tries again), not as a shorter list.
 - Movies, series and the TV guide use the User-Agent chosen in Settings, as live TV does.
 - Problem reports no longer contain server names.

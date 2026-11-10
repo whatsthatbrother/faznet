@@ -26,10 +26,30 @@ object Epg {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Entry>) = size > MAX_ENTRIES
     }
     private const val MAX_ENTRIES = 400
-    private val XTREAM_LIVE = Regex("""^(https?://[^/]+)(?:/live)?/([^/]+)/([^/]+)/(\d+)(?:\.[A-Za-z0-9]+)?$""")
+    /**
+     * http://host[/sub/path][/live]/user/pass/123[.ts][?…]: the address a channel of an Xtream account has, as the
+     * provider's own M3U list writes it (the learnt [XtreamLive.Template] can have a sub-path and a query). The API is
+     * asked where the stream is, so a provider under a sub-path gets it right.
+     */
+    private val XTREAM_LIVE =
+        Regex("""^(https?://[^/?#]+(?:/[^?#]+?)??)(?:/live)?/([^/?#]+)/([^/?#]+)/(\d+)(?:\.[A-Za-z0-9]+)?(?:[?#].*)?$""")
     private const val TTL_MS = 5 * 60 * 1000L
 
-    fun supports(ch: Channel): Boolean = XTREAM_LIVE.matches(ch.url)
+    /** Where a channel's now/next is asked: the API base, the login and the stream id. */
+    internal data class Target(val base: String, val user: String, val pass: String, val id: String)
+
+    /**
+     * From the channel's address; else, for a channel of an Xtream playlist ([account]) whose address has another
+     * form, the account and the stream id at the end of the address. Null: no EPG for this channel.
+     */
+    internal fun target(url: String, account: XtreamAccount?): Target? {
+        XTREAM_LIVE.matchEntire(url)?.destructured?.let { (base, user, pass, id) -> return Target(base, user, pass, id) }
+        account ?: return null
+        val id = XtreamAccount.liveStreamId(url) ?: return null
+        return Target(account.server, account.user, account.pass, id)
+    }
+
+    fun supports(ch: Channel, account: XtreamAccount?): Boolean = target(ch.url, account) != null
 
     /** Cached value if fresh (null = unknown or no EPG). */
     fun cached(ch: Channel): NowNext? {
@@ -37,14 +57,13 @@ object Epg {
         return if (System.currentTimeMillis() - e.at < TTL_MS) e.value?.let { current(it) } else null
     }
 
-    suspend fun nowNext(ch: Channel, userAgent: String): NowNext? {
-        val m = XTREAM_LIVE.matchEntire(ch.url) ?: return null
+    suspend fun nowNext(ch: Channel, account: XtreamAccount?, userAgent: String): NowNext? {
+        val (base, user, pass, id) = target(ch.url, account) ?: return null
         synchronized(cache) { cache[ch.url] }?.let { e ->
             if (System.currentTimeMillis() - e.at < TTL_MS) return e.value?.let { current(it) }
         }
         val value = withContext(Dispatchers.IO) {
             try {
-                val (base, user, pass, id) = m.destructured
                 val url = "$base/player_api.php".toHttpUrlOrNull()?.newBuilder()
                     ?.addQueryParameter("username", user)
                     ?.addQueryParameter("password", pass)

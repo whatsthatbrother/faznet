@@ -24,6 +24,12 @@ class FaznetApp : Application(), ImageLoaderFactory {
         }
     }
 
+    /** Downloaded movie and series lists are only a shortcut: give them back first when memory gets short. */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_RUNNING_LOW) com.faznet.tv.data.LibraryCache.clear()
+    }
+
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
         .okHttpClient { Http.images }
         // At most two logos at a time are decoded: the screen and the player come first on four small cores.

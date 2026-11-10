@@ -53,6 +53,7 @@ import com.faznet.tv.data.ChannelCheck
 import com.faznet.tv.data.DbErrors
 import com.faznet.tv.data.Epg
 import com.faznet.tv.data.Repository
+import com.faznet.tv.data.XtreamAccount
 import com.faznet.tv.data.safeMessage
 import com.faznet.tv.player.ExoWatch
 import com.faznet.tv.player.OpeningErrorPolicy
@@ -1083,15 +1084,23 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** The Xtream account of the playlist being watched (for now/next of channels whose address does not tell it). */
+    private fun xtream(): XtreamAccount? {
+        val id = ChannelStore.playlistId
+        xtreamFor?.let { if (it.first == id) return it.second }
+        return XtreamAccount.from(repo.playlists().firstOrNull { it.id == id }).also { xtreamFor = id to it }
+    }
+    private var xtreamFor: Pair<String, XtreamAccount?>? = null
+
     private fun showInfoEpg(ch: Channel) {
         infoEpgJob?.cancel()
         infoEpg.visibility = View.GONE
         infoEpgProgress.visibility = View.GONE
-        if (!Epg.supports(ch)) return
+        if (!Epg.supports(ch, xtream())) return
         infoEpgJob = lifecycleScope.launch {
             // While zapping quickly, only ask for the channel the user stops on.
             if (Epg.cached(ch) == null) kotlinx.coroutines.delay(500)
-            val nn = Epg.nowNext(ch, ch.userAgent ?: repo.userAgent) ?: return@launch
+            val nn = Epg.nowNext(ch, xtream(), ch.userAgent ?: repo.userAgent) ?: return@launch
             infoEpg.text = epgText(nn)
             infoEpg.visibility = View.VISIBLE
             nn.now?.let { pr ->
@@ -1104,12 +1113,12 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showListEpg(ch: Channel?) {
         listEpgJob?.cancel()
-        if (ch == null || !Epg.supports(ch)) { listEpg.visibility = View.GONE; return }
+        if (ch == null || !Epg.supports(ch, xtream())) { listEpg.visibility = View.GONE; return }
         Epg.cached(ch)?.let { listEpg.text = epgText(it); listEpg.visibility = View.VISIBLE } ?: run { listEpg.visibility = View.GONE }
         // Small delay: scrolling quickly through the list must not fire a request per row.
         listEpgJob = lifecycleScope.launch {
             kotlinx.coroutines.delay(600)
-            val nn = Epg.nowNext(ch, ch.userAgent ?: repo.userAgent)
+            val nn = Epg.nowNext(ch, xtream(), ch.userAgent ?: repo.userAgent)
             if (nn == null) { listEpg.visibility = View.GONE; return@launch }
             listEpg.text = epgText(nn)
             listEpg.visibility = View.VISIBLE
