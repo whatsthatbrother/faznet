@@ -65,6 +65,19 @@ class ReportsExitTest {
     }
 
     @Test
+    fun aServerNameWithoutAnAddressIsTakenOutToo() {
+        val trace = "java.net.UnknownHostException: Unable to resolve host \"tv.example-iptv.com\": No address associated with hostname\n" +
+            "\tat com.faznet.tv.data.XtreamApi.fetch(Xtream.kt:70)\n" +
+            "Caused by: java.net.ConnectException: Failed to connect to panel.example.net/203.0.113.7:8080\n" +
+            "javax.net.ssl.SSLPeerUnverifiedException: Hostname cdn.example.org not verified\n" +
+            "java.lang.ClassNotFoundException: Didn't find class \"com.faznet.tv.ui.PlayerActivity\""
+        val clean = Reports.scrub(trace)
+        for (host in listOf("tv.example-iptv.com", "panel.example.net", "cdn.example.org")) assertFalse(clean, clean.contains(host))
+        assertTrue(clean, clean.contains("com.faznet.tv.data.XtreamApi.fetch(Xtream.kt:70)"))
+        assertTrue(clean, clean.contains("\"com.faznet.tv.ui.PlayerActivity\""))
+    }
+
+    @Test
     fun severalComeOldestFirst() {
         val text = Reports.exitText(listOf(exit(9_000, Reports.REASON_ANR), exit(5_000, Reports.REASON_CRASH_NATIVE)), since = 0)!!
         assertEquals(listOf("native crash", "not responding"), Regex("(native crash|not responding)").findAll(text).map { it.value }.toList())

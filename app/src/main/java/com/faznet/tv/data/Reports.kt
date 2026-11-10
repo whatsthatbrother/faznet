@@ -44,6 +44,16 @@ object Reports {
     internal fun scrub(text: String): String = text
         .replace(Regex("""[a-zA-Z][a-zA-Z0-9+.-]*://\S+"""), "<address>")
         .replace(Regex("""\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b"""), "<ip>")
+        // A server's name without an address around it, as network errors write it. Only where such a message puts one:
+        // a general "a.b.c" pattern would also eat the class names (com.faznet.tv.…) the stack trace is read by.
+        .replace(HOST_AFTER, "$1<host>")
+        .replace(QUOTED_HOST, "\"<host>\"")
+
+    /** "Unable to resolve host x", "failed to connect to x/…", "Hostname x not verified", "host x". */
+    private val HOST_AFTER = Regex("""(?i)((?:resolve host|connect to|hostname|host)\s+"?)[a-z0-9-]+(?:\.[a-z0-9-]+)+""")
+
+    /** A quoted name in lower case with a dot, as in `"tv.example.com"`; a quoted class name has capitals. */
+    private val QUOTED_HOST = Regex(""""[a-z0-9-]+(?:\.[a-z0-9-]+)+"""")
 
     private fun summary(c: Context, repo: Repository): String = buildString {
         append("Faznet ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n")

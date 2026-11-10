@@ -14,6 +14,8 @@ class FaznetApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         com.faznet.tv.player.StreamProbe.app = this
+        val repo = com.faznet.tv.data.Repository.get(this)
+        com.faznet.tv.data.XtreamApi.userAgent = { repo.userAgent }
         // Keep any crash for the next start, where it is sent as a report (Settings can turn that off).
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->

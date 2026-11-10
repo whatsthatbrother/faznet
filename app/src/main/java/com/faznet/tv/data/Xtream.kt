@@ -48,29 +48,49 @@ data class XProgramme(val title: String, val desc: String, val start: Long, val 
 object XtreamApi {
 
     /**
-     * One API request. Cancelling the caller (another category chosen, screen closed) cancels the download
-     * too: a blocking OkHttp call would otherwise keep loading a big list in the background and use one of
-     * the account's few connections.
+     * The User-Agent of every API request: the one chosen in Settings, as for the playlist and the channels. Set by
+     * FaznetApp. A provider that only answers that one used to show Live TV but no movies, series or guide.
      */
-    private suspend fun call(a: XtreamAccount, action: String, vararg params: Pair<String, String>): String? {
+    @Volatile var userAgent: () -> String = { Repository.DEFAULT_UA }
+
+    private fun request(a: XtreamAccount, action: String, params: Array<out Pair<String, String>>): Request? {
         val b = "${a.server}/player_api.php".toHttpUrlOrNull()?.newBuilder() ?: return null
         b.addQueryParameter("username", a.user).addQueryParameter("password", a.pass)
         if (action.isNotEmpty()) b.addQueryParameter("action", action)
         params.forEach { (k, v) -> b.addQueryParameter(k, v) }
-        val req = Request.Builder().url(b.build()).header("User-Agent", com.faznet.tv.data.Repository.DEFAULT_UA).build()
+        return Request.Builder().url(b.build()).header("User-Agent", userAgent()).build()
+    }
+
+    /**
+     * One API request; [read] gets the answer as it arrives, on a background thread. Cancelling the caller (another
+     * category chosen, screen closed) cancels the download too: a blocking OkHttp call would otherwise keep loading a
+     * big list in the background and use one of the account's few connections.
+     * @return null when the server could not be reached, did not say yes, or the answer broke off
+     */
+    private suspend fun <T> fetch(
+        a: XtreamAccount, action: String, vararg params: Pair<String, String>, read: (java.io.Reader) -> T,
+    ): T? {
+        val req = request(a, action, params) ?: return null
         val http = Http.api.newCall(req)
         return coroutineScope {
-            val body = async(Dispatchers.IO) {
-                runCatching { http.execute().use { r -> if (r.isSuccessful) r.body?.string() else null } }.getOrNull()
+            val result = async(Dispatchers.IO) {
+                // Also an OutOfMemoryError: the screen then offers to try again instead of the app closing.
+                runCatching {
+                    http.execute().use { r -> if (r.isSuccessful) r.body?.charStream()?.let(read) else null }
+                }.getOrNull()
             }
             try {
-                body.await()
+                result.await()
             } catch (e: CancellationException) {
                 http.cancel()
                 throw e
             }
         }
     }
+
+    /** A small answer (categories, one series, one channel's guide) as text. */
+    private suspend fun call(a: XtreamAccount, action: String, vararg params: Pair<String, String>): String? =
+        fetch(a, action, *params) { it.readText() }
 
     /**
      * Reads an answer off the main thread: "all movies" or every live channel of a big account is several MB of JSON,
@@ -103,30 +123,43 @@ object XtreamApi {
         }
     }
 
-    /** Null when the server could not be reached: the screen says so and offers to try again, instead of "nothing here". */
-    suspend fun vodStreams(a: XtreamAccount, categoryId: String?): List<XVod>? = parsed(
-        (if (categoryId != null) call(a, "get_vod_streams", "category_id" to categoryId) else call(a, "get_vod_streams"))
-            ?: return null
-    ) { body ->
-        val j = arr(body)
-        (0 until j.length()).mapNotNull { i ->
-            val o = j.optJSONObject(i) ?: return@mapNotNull null
-            XVod(o.str("stream_id"), o.str("name"), o.str("stream_icon").ifEmpty { null },
-                o.str("container_extension").ifEmpty { "mp4" }, o.str("rating"), o.str("year"))
-        }
+    /**
+     * Null when the server could not be reached: the screen says so and offers to try again, instead of "nothing here".
+     * Read as it arrives: "all movies" of a big account is tens of MB, which as one String and a JSONArray did not fit
+     * a TV stick's memory.
+     */
+    suspend fun vodStreams(a: XtreamAccount, categoryId: String?): List<XVod>? =
+        if (categoryId != null) fetch(a, "get_vod_streams", "category_id" to categoryId, read = ::readVods)
+        else fetch(a, "get_vod_streams", read = ::readVods)
+
+    /** Null when the server could not be reached. Read as it arrives, like [vodStreams]. */
+    suspend fun series(a: XtreamAccount, categoryId: String?): List<XSeries>? =
+        if (categoryId != null) fetch(a, "get_series", "category_id" to categoryId, read = ::readSeries)
+        else fetch(a, "get_series", read = ::readSeries)
+
+    internal fun readVods(r: java.io.Reader): List<XVod> = XtreamJson.objects(r, VOD_FIELDS) { o ->
+        XVod(o["stream_id"].orEmpty(), o["name"].orEmpty(), o["stream_icon"]?.ifEmpty { null },
+            o["container_extension"]?.ifEmpty { null } ?: "mp4", o["rating"].orEmpty(), o["year"].orEmpty())
     }
 
-    /** Null when the server could not be reached. */
-    suspend fun series(a: XtreamAccount, categoryId: String?): List<XSeries>? = parsed(
-        (if (categoryId != null) call(a, "get_series", "category_id" to categoryId) else call(a, "get_series"))
-            ?: return null
-    ) { body ->
-        val j = arr(body)
-        (0 until j.length()).mapNotNull { i ->
-            val o = j.optJSONObject(i) ?: return@mapNotNull null
-            XSeries(o.str("series_id"), o.str("name"), o.str("cover").ifEmpty { null }, o.str("plot"), o.str("rating"))
-        }
+    internal fun readSeries(r: java.io.Reader): List<XSeries> = XtreamJson.objects(r, SERIES_FIELDS) { o ->
+        XSeries(o["series_id"].orEmpty(), o["name"].orEmpty(), o["cover"]?.ifEmpty { null }, o["plot"].orEmpty(), o["rating"].orEmpty())
     }
+
+    /** Stream id → days kept, of the live channels that have a catch-up archive. */
+    internal fun readArchive(r: java.io.Reader): Map<String, Int> {
+        val out = HashMap<String, Int>()
+        XtreamJson.objects(r, ARCHIVE_FIELDS) { o ->
+            if (o["tv_archive"]?.toDoubleOrNull()?.toInt() == 1) {
+                o["stream_id"]?.let { out[it] = (o["tv_archive_duration"]?.toDoubleOrNull()?.toInt() ?: 1).coerceAtLeast(1) }
+            }
+        }
+        return out
+    }
+
+    private val VOD_FIELDS = setOf("stream_id", "name", "stream_icon", "container_extension", "rating", "year")
+    private val SERIES_FIELDS = setOf("series_id", "name", "cover", "plot", "rating")
+    private val ARCHIVE_FIELDS = setOf("stream_id", "tv_archive", "tv_archive_duration")
 
     /** Null when the server could not be reached. */
     suspend fun episodes(a: XtreamAccount, seriesId: String): List<XEpisode>? = parsed(call(a, "get_series_info", "series_id" to seriesId) ?: return null) { body ->
@@ -158,16 +191,8 @@ object XtreamApi {
      */
     suspend fun archiveDays(a: XtreamAccount): Map<String, Int> {
         archives[a]?.takeIf { System.currentTimeMillis() - it.at < ARCHIVE_TTL_MS }?.let { return it.days }
-        val body = call(a, "get_live_streams") ?: return emptyMap()
-        val days = parsed(body) {
-            val j = arr(it)
-            val out = HashMap<String, Int>()
-            for (i in 0 until j.length()) {
-                val o = j.optJSONObject(i) ?: continue
-                if (o.optInt("tv_archive") == 1) out[o.str("stream_id")] = o.optInt("tv_archive_duration", 1).coerceAtLeast(1)
-            }
-            out
-        }
+        // Read as it arrives, keeping only the three fields: the whole list was held twice in memory before.
+        val days = fetch(a, "get_live_streams", read = ::readArchive) ?: return emptyMap()
         archives[a] = Archive(System.currentTimeMillis(), days)
         return days
     }
