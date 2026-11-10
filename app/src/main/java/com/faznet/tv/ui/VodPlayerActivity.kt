@@ -23,6 +23,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.faznet.tv.player.TrackDialog
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
 import com.faznet.tv.data.Repository
@@ -86,6 +87,26 @@ class VodPlayerActivity : AppCompatActivity() {
      * reaches it like the others; the choice is kept for every film.
      */
     private fun addAspectButton() {
+        addBarButton(R.drawable.ic_aspect, R.string.aspect) { cycleAspect() }
+        // Many films (.mkv) carry subtitles in many languages, and some a second sound language: the player's own
+        // subtitle button is off by default, so there was no way to see or choose them.
+        // The choice is remembered: the next film or episode starts with the same subtitle (and sound) language if it
+        // has it.
+        addBarButton(R.drawable.ic_tracks, R.string.tracks) {
+            val p = player ?: return@addBarButton
+            TrackDialog.show(this, p) { c ->
+                when (c) {
+                    is TrackDialog.Choice.Subtitles -> c.language?.let { repo.vodSubtitles = it }
+                    TrackDialog.Choice.NoSubtitles -> repo.vodSubtitles = TrackDialog.OFF
+                    is TrackDialog.Choice.Sound -> c.language?.let { repo.vodSound = it }
+                }
+                p.trackSelectionParameters = TrackDialog.withRemembered(p.trackSelectionParameters, repo.vodSubtitles, repo.vodSound)
+            }
+        }
+    }
+
+    /** A button among the player's own, before the settings gear, looking like them. */
+    private fun addBarButton(icon: Int, label: Int, onClick: () -> Unit) {
         val gear = playerView.findViewById<View>(androidx.media3.ui.R.id.exo_settings) ?: return
         val bar = gear.parent as? android.view.ViewGroup ?: return
         val button = android.widget.ImageButton(this).apply {
@@ -93,9 +114,9 @@ class VodPlayerActivity : AppCompatActivity() {
             background = gear.background?.constantState?.newDrawable()?.mutate()
             setPadding(gear.paddingLeft, gear.paddingTop, gear.paddingRight, gear.paddingBottom)
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-            setImageResource(R.drawable.ic_aspect)
-            contentDescription = getString(R.string.aspect)
-            setOnClickListener { cycleAspect() }
+            setImageResource(icon)
+            contentDescription = getString(label)
+            setOnClickListener { onClick() }
         }
         bar.addView(button, bar.indexOfChild(gear))
     }
@@ -196,6 +217,7 @@ class VodPlayerActivity : AppCompatActivity() {
                 }
             }
         })
+        p.trackSelectionParameters = TrackDialog.withRemembered(p.trackSelectionParameters, repo.vodSubtitles, repo.vodSound)
         playerView.player = p
         player = p
         open(p)

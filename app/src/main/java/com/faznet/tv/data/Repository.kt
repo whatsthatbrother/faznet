@@ -295,6 +295,16 @@ class Repository private constructor(private val ctx: Context) {
         set(v) = prefs.edit().putInt(KEY_ASPECT, v).apply()
 
     /** Picture size in the movie and series player (fit / stretch / zoom), apart from Live TV's. */
+    /** Movies and series: the subtitle language last chosen ("off" = none, "" = never chosen). */
+    var vodSubtitles: String
+        get() = prefs.getString("vod_subs", "") ?: ""
+        set(v) = prefs.edit().putString("vod_subs", v).apply()
+
+    /** Movies and series: the sound language last chosen ("" = never chosen). */
+    var vodSound: String
+        get() = prefs.getString("vod_sound", "") ?: ""
+        set(v) = prefs.edit().putString("vod_sound", v).apply()
+
     var vodAspectMode: Int
         get() = prefs.getInt("vod_aspect", 0)
         set(v) = prefs.edit().putInt("vod_aspect", v).apply()

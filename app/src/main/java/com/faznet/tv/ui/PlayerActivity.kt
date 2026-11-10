@@ -1188,54 +1188,7 @@ class PlayerActivity : AppCompatActivity() {
 
     /** Sound language and subtitles of the current channel. */
     private fun showTracks() {
-        val p = player ?: return
-        val labels = ArrayList<String>()
-        val actions = ArrayList<() -> Unit>()
-        var checked = -1
-        fun name(f: androidx.media3.common.Format, n: Int): String {
-            val lang = f.language?.takeIf { it != "und" }?.let { java.util.Locale(it).displayLanguage.ifEmpty { it } }
-            val codec = f.sampleMimeType?.substringAfter('/') ?: ""
-            return listOfNotNull(f.label, lang).firstOrNull()?.let { "$it ($codec)" } ?: "#$n ($codec)"
-        }
-        var n = 0
-        for (g in p.currentTracks.groups) {
-            if (g.type != C.TRACK_TYPE_AUDIO) continue
-            n++
-            labels.add(getString(R.string.track_audio, name(g.getTrackFormat(0), n)))
-            if (g.isSelected) checked = labels.size - 1
-            val group = g.mediaTrackGroup
-            actions.add {
-                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
-                    .setOverrideForType(androidx.media3.common.TrackSelectionOverride(group, 0)).build()
-            }
-        }
-        labels.add(getString(R.string.track_subs_off))
-        val offIndex = labels.size - 1
-        actions.add {
-            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
-        }
-        var anyText = false
-        n = 0
-        for (g in p.currentTracks.groups) {
-            if (g.type != C.TRACK_TYPE_TEXT) continue
-            n++
-            anyText = true
-            labels.add(getString(R.string.track_subs, name(g.getTrackFormat(0), n)))
-            if (g.isSelected) checked = labels.size - 1
-            val group = g.mediaTrackGroup
-            actions.add {
-                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                    .setOverrideForType(androidx.media3.common.TrackSelectionOverride(group, 0)).build()
-            }
-        }
-        if (anyText && checked < 0) checked = offIndex
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.tracks)
-            .setSingleChoiceItems(labels.toTypedArray(), checked) { d, which -> actions[which](); d.dismiss() }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        com.faznet.tv.player.TrackDialog.show(this, player ?: return)
     }
 
     /** Another playlist straight from the player: the main screen loads it and opens its last channel. */

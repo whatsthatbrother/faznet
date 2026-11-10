@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.4
+
+### New
+- Movies and series: a "Sound & subtitles" button in the player, to choose the subtitles (or none) and the sound language a film offers.
+- The chosen subtitle and sound language is remembered for the next film or episode.
+- Subtitle and sound languages are shown by their full name.
+
 ## 5.0.3
 
 ### New
