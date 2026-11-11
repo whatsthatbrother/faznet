@@ -56,8 +56,9 @@ re-opening); HTTP 403 when zapping fast (account connection limit).
   `version.json` stay in English + Albanian.
   The app checks `version.json` on every start (30 min throttle) and offers "Update now".
 - `worker/` = Cloudflare Worker + KV (faznet.diarfazliu.workers.dev): device register, playlists, `/api/report`,
-  `/admin/reports` (needs the secret key — see CLAUDE.local.md, never commit it). Deploy = paste into the
-  Cloudflare dashboard editor.
+  `/admin/reports` (needs the `ADMIN_KEY` variable's value — see CLAUDE.local.md, never commit it; `SECRET` only
+  hashes the PINs and must never change). A device stores at most 10 reports a day (4 automatic), one KV key per
+  device and day. Deploy = paste `worker/src/index.js` into the Cloudflare dashboard editor.
 
 ## Working style
 - Small, tested steps: build after every change; test on the Mi Stick before publishing.

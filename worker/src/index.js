@@ -9,6 +9,10 @@
  *   pl:<MAC>    [{id, name, type, url?, server?, username?, password?, file?, created}]
  *   file:<tok>  raw M3U text
  *   fail:<MAC>  wrong-PIN counter (expires after 15 min)
+ *   rep:<inverted day>-<MAC>  [{at, kind, mac, version, device, text}], a device's problem reports of one day
+ *
+ * Variables: SECRET hashes the PINs (never change it: every device's PIN would stop working);
+ * ADMIN_KEY opens /admin/reports.
  *
  * Writes are kept rare on purpose (KV free tier: 1000 writes/day).
  *
@@ -26,6 +30,12 @@ const MAX_FILE = 20 * 1024 * 1024; // bytes; a KV value may be at most 25 MiB
 
 /** Per IP and minute: PIN checks, problem reports. */
 const IP_LIMITS = { pin: 20, report: 5 };
+/**
+ * Reports one device may store per day (UTC). The app sends an automatic one up to every 10 minutes while a device
+ * has problems; unlimited, a few such devices would use up the day's KV writes, and then registering devices and
+ * adding playlists stop for everyone.
+ */
+const REPORT_CAP = { auto: 4, all: 10 };
 const hits = new Map(); // "<kind>|<ip>|<minute>" -> count, per Worker instance
 
 /**
@@ -253,33 +263,64 @@ export default {
       const text = String(b.text || "").slice(0, 20000);
       if (!text) return json({ error: "fields" }, 400);
       const now = Date.now();
+      const kind = String(b.kind || "manual").slice(0, 20);
+      const mac = normMac(b.mac);
       const rep = {
         at: now,
-        kind: String(b.kind || "manual").slice(0, 20),
-        mac: normMac(b.mac).slice(0, 17),
+        kind,
+        mac: mac.slice(0, 17),
         version: String(b.version || "").slice(0, 20),
         device: String(b.device || "").slice(0, 120),
         text,
       };
-      // Newest first in KV listings: the key starts with an inverted timestamp. Kept for 30 days.
-      const key = `rep:${String(9999999999999 - now).padStart(13, "0")}-${token(4)}`;
-      await env.FAZNET.put(key, JSON.stringify(rep), { expirationTtl: 30 * 86400 });
+      // One key per device and day (UTC) holds that day's reports, so the daily cap needs no counter of its own:
+      // a report costs one write, and a device can cost at most REPORT_CAP.all writes a day.
+      // Newest day first in KV listings: the key starts with an inverted timestamp. Kept for 30 days.
+      const day = now - (now % 86400000);
+      const key = `rep:${String(9999999999999 - day).padStart(13, "0")}-${MAC_RE.test(mac) ? mac : "anon"}`;
+      const stored = await env.FAZNET.get(key, "json");
+      const today = Array.isArray(stored) ? stored : [];
+      const full = today.length >= REPORT_CAP.all;
+      if (kind === "auto" && (full || today.filter((r) => r.kind === "auto").length >= REPORT_CAP.auto)) {
+        // "ok" on purpose: the app sends an automatic report again until it is taken, and this one never will be.
+        return json({ ok: true, dropped: true });
+      }
+      if (full) return tooMany();
+      today.push(rep);
+      await env.FAZNET.put(key, JSON.stringify(today), { expirationTtl: 30 * 86400 });
       return json({ ok: true });
     }
 
-    if (path === "/admin/reports" && request.method === "GET") {
-      if (!env.SECRET || !safeEqual(String(url.searchParams.get("key") || ""), env.SECRET)) return new Response("Forbidden", { status: 403 });
+    if (path === "/admin/reports" && (request.method === "GET" || request.method === "POST")) {
+      // ADMIN_KEY only opens this page. Until it is set, SECRET (which also hashes the PINs) still does.
+      const want = env.ADMIN_KEY || env.SECRET;
+      let given = url.searchParams.get("key") || (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (!given && request.method === "POST") {
+        try { given = (await request.formData()).get("key"); } catch { /* not a form */ }
+      }
+      const page = (inner, status = 200) => new Response(
+        `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
+        `<meta name="referrer" content="no-referrer"><title>Faznet reports</title>` +
+        `<style>body{font:14px system-ui;background:#0e1116;color:#e8eaed;margin:16px;max-width:900px}` +
+        `section{background:#171b22;border-radius:10px;padding:12px;margin:12px 0}h3{margin:0 0 4px;color:#ff6a3d;font-size:15px}` +
+        `p{margin:0 0 8px;color:#9aa3ae}pre{white-space:pre-wrap;margin:0;font-size:12px}` +
+        `input,button{font:inherit;padding:8px 12px;border-radius:8px;border:0;margin-right:8px}</style>${inner}`,
+        { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      // Without a key: a form that posts it, so the key stays out of the address bar and the browser history.
+      if (!given && request.method === "GET") {
+        return page(`<h1>Faznet · raportet</h1><form method="post"><input type="password" name="key" placeholder="Çelësi" autofocus><button>Hap</button></form>`);
+      }
+      if (!want || !safeEqual(String(given || ""), want)) return new Response("Forbidden", { status: 403 });
       const list = await env.FAZNET.list({ prefix: "rep:", limit: 100 });
-      const reps = (await Promise.all(list.keys.map((k) => env.FAZNET.get(k.name, "json")))).filter(Boolean);
+      // A value is one report (keys written before the daily cap) or a device's reports of one day.
+      const reps = (await Promise.all(list.keys.map((k) => env.FAZNET.get(k.name, "json"))))
+        .flatMap((v) => (Array.isArray(v) ? v : [v])).filter(Boolean)
+        .sort((a, b) => b.at - a.at).slice(0, 200);
       if (url.searchParams.get("format") === "json") return json({ reports: reps });
       const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
       const rows = reps.map((r) => `<section><h3>${esc(new Date(r.at).toLocaleString("sq-AL", { timeZone: "Europe/Belgrade" }))} · ${esc(r.kind)} · v${esc(r.version)}</h3>` +
         `<p>${esc(r.device)} · MAC ${esc(r.mac)}</p><pre>${esc(r.text)}</pre></section>`).join("") || "<p>Asnjë raport.</p>";
-      const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
-        `<title>Faznet reports</title><style>body{font:14px system-ui;background:#0e1116;color:#e8eaed;margin:16px;max-width:900px}` +
-        `section{background:#171b22;border-radius:10px;padding:12px;margin:12px 0}h3{margin:0 0 4px;color:#ff6a3d;font-size:15px}` +
-        `p{margin:0 0 8px;color:#9aa3ae}pre{white-space:pre-wrap;margin:0;font-size:12px}</style><h1>Faznet · raportet (${reps.length})</h1>${rows}`;
-      return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      return page(`<h1>Faznet · raportet (${reps.length})</h1>${rows}`);
     }
 
     if (path === "/" || path === "/health") return json({ ok: true, service: "faznet" });
