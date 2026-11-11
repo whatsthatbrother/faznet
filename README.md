@@ -15,13 +15,12 @@ Grab the latest APK from **[Releases](../../releases/latest)**.
 - Remote-friendly: ↑/↓ and CH± zapping, number entry, D-pad UI, Android TV launcher
 - Swipe up/down to change channel on phones
 - English / Shqip
-- Upload playlists from the web with the device MAC + PIN (self-hosted server in `server/`)
+- Upload playlists from the web with the device MAC + PIN
 - FFmpeg audio (MP2/AC3/E-AC3), stall watchdog, stats overlay
 
 ## Upload a playlist from the web
 Open **https://whatsthatbrother.github.io/faznet**, enter the MAC + PIN shown in Faznet (device icon) and add an
-M3U URL, Xtream account or file. The API runs on a Cloudflare Worker (`worker/`); a self-hosted Flask
-alternative is in `server/`.
+M3U URL, Xtream account or file. The API runs on a Cloudflare Worker (`worker/`).
 
 ## Build
 CI builds a debug APK on every push. Signed releases are built locally — the signing key is not in this repo

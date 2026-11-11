@@ -31,7 +31,7 @@ android {
         versionCode = if (bench) (project.findProperty("benchVersion") as String?)?.toInt() ?: 999_999 else 61
         versionName = "5.0.6"
 
-        // MAC/PIN web upload: API (Cloudflare Worker or the Flask server in /server) and the public website.
+        // MAC/PIN web upload: API (the Cloudflare Worker in /worker) and the public website.
         // "REPLACE" counts as no server (Repository.serverUrl): the bench app registers nothing and sends no reports.
         val server = if (bench) "REPLACE" else (project.findProperty("faznetServer") as String?) ?: "https://faznet.diarfazliu.workers.dev"
         val web = (project.findProperty("faznetWeb") as String?) ?: "https://whatsthatbrother.github.io/faznet"

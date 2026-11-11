@@ -6,7 +6,6 @@ local.properties
 .DS_Store
 captures/
 __pycache__/
-server/data/
 app/src/debug/assets/
 release.flag
 debuggable.flag

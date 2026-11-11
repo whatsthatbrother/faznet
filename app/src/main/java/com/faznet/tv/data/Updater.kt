@@ -61,7 +61,10 @@ object Updater {
         }.getOrNull()
     }
 
-    private fun apkFile(c: Context, code: Int) = File(c.cacheDir, "update-$code.apk")
+    /** Downloads live in their own folder: it is the only one the FileProvider lets Android's installer read. */
+    private fun dir(c: Context) = File(c.cacheDir, "updates").apply { mkdirs() }
+
+    private fun apkFile(c: Context, code: Int) = File(dir(c), "update-$code.apk")
 
     /**
      * True if [f] is a whole, readable Faznet APK of version [code]. A download cut off half way used to be
@@ -79,8 +82,10 @@ object Updater {
     suspend fun download(c: Context, info: Info): File? = withContext(Dispatchers.IO) {
         val f = apkFile(c, info.code)
         if (isComplete(c, f, info.code)) return@withContext f
-        c.cacheDir.listFiles()?.filter { it.name.startsWith("update-") }?.forEach { it.delete() }
-        val tmp = File(c.cacheDir, "update-${info.code}.part.apk") // ".apk": some Android versions only parse that
+        // Also the cache folder itself: versions up to 5.0.6 kept the download there.
+        (dir(c).listFiles().orEmpty().toList() + c.cacheDir.listFiles().orEmpty())
+            .filter { it.isFile && it.name.startsWith("update-") }.forEach { it.delete() }
+        val tmp = File(dir(c), "update-${info.code}.part.apk") // ".apk": some Android versions only parse that
         runCatching {
             Http.client.newCall(Request.Builder().url(info.url).build()).execute().use { r ->
                 if (!r.isSuccessful) return@runCatching null
