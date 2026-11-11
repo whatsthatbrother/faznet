@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.7
+
+### Improved
+- Channel logos, playlists and updates use newer, more reliable network and image components.
+
+### Fixed
+- An update you download is shared only with Android's installer, nothing else the app keeps.
+
 ## 5.0.6
 
 ### New

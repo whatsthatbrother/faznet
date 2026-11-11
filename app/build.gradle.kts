@@ -28,8 +28,8 @@ android {
         targetSdk = 35
         // The bench app must never be offered an update from the website. Only for trying the updater against a site on
         // this PC does it take a real number: -PbenchVersion=43 -PfaznetWeb=http://127.0.0.1:8765
-        versionCode = if (bench) (project.findProperty("benchVersion") as String?)?.toInt() ?: 999_999 else 61
-        versionName = "5.0.6"
+        versionCode = if (bench) (project.findProperty("benchVersion") as String?)?.toInt() ?: 999_999 else 62
+        versionName = "5.0.7"
 
         // MAC/PIN web upload: API (the Cloudflare Worker in /worker) and the public website.
         // "REPLACE" counts as no server (Repository.serverUrl): the bench app registers nothing and sends no reports.
