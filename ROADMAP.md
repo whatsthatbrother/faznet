@@ -53,6 +53,12 @@ Done about it: the picture now appears at 10 frames, not 5. In a round of 18 cha
 start and stop. It costs clean channels about 0.2 s (1.25-1.3 s to picture); interlaced channels that freeze show after 2.8-3.2 s.
 Not tried yet: tunneling on interlaced channels only, the software decoder on them, vendor decoder parameters.
 
+2026-11-11, the "Big Brother" channels (1080i, six in a search for BROTHER): three of them froze at every first opening
+(93 frames in, 5 pictures out) and played on the re-open, 2.8-3.3 s to the picture instead of 1.2-1.6 s; the other three
+never froze, so it follows the channel, not the channel before it. Pausing the old player instead of stopping it while
+zapping changed nothing. Tunneling is no way out on the stick: with it no channel played at all
+(ERROR_CODE_AUDIO_TRACK_INIT_FAILED). Still not tried: vendor decoder parameters.
+
 On 2026-11-02 at about 20:28 the same channels showed **0 re-opens in 20** (11 and 14-17 among them) with nothing changed that
 touches the decoder, as at 15:41 the day before; at 22:41-23:58 and in the evening reports they froze at about 80%. So it does
 come in waves, also on interlaced channels, and something outside the app switches it. A fix can only be judged while it is on.
