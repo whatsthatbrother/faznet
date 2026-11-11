@@ -13,10 +13,8 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.GestureDetector
 import android.view.KeyEvent
-import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -27,16 +25,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.common.C
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.HttpDataSource
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.analytics.AnalyticsListener
-import androidx.media3.exoplayer.source.LoadEventInfo
-import androidx.media3.exoplayer.source.MediaLoadData
-import androidx.media3.exoplayer.util.EventLogger
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -47,27 +36,13 @@ import com.faznet.tv.data.Channel
 import com.faznet.tv.data.ChannelPages
 import com.faznet.tv.data.ChannelRepository
 import com.faznet.tv.data.ChannelStore
-import com.faznet.tv.data.ChannelMemory
 import com.faznet.tv.data.ProblemLog
-import com.faznet.tv.data.ChannelCheck
 import com.faznet.tv.data.DbErrors
 import com.faznet.tv.data.Epg
 import com.faznet.tv.data.Repository
 import com.faznet.tv.data.XtreamAccount
-import com.faznet.tv.data.safeMessage
-import com.faznet.tv.player.ExoWatch
-import com.faznet.tv.player.OpeningErrorPolicy
 import com.faznet.tv.player.PlayerFactory
-import com.faznet.tv.player.ProblemOutcome
-import com.faznet.tv.player.ProgressWatch
-import com.faznet.tv.player.RefusalWatch
-import com.faznet.tv.player.StreamProbe
-import com.faznet.tv.player.StuckDecoder
-import com.faznet.tv.player.loadErrorKind
-import com.faznet.tv.player.StreamType
-import com.faznet.tv.player.Throughput
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -109,15 +84,7 @@ class PlayerActivity : AppCompatActivity() {
     private var listEpgJob: Job? = null
     private val timeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
 
-    private var stallCount = 0
-    private var underruns = 0
-    private var bufferingSince = 0L
-    private var bufferingTotalMs = 0L
-    private var videoDecoder = ""
-    private var audioDecoder = ""
-    private var lastWarning = ""
 
-    private var player: ExoPlayer? = null
     private var groups: List<Group> = emptyList()
     /** Group the player zaps through (Up/Down, CH+/-). */
     private var playGroup = 0
@@ -128,25 +95,10 @@ class PlayerActivity : AppCompatActivity() {
     private var current: Channel? = null
     /** Place of [current] in [zapList]. */
     private var index = 0
-    private var forceHls = false
-    private var retries = 0
     private var numberBuffer = ""
 
-    private val exoWatch = ExoWatch(com.faznet.tv.BuildConfig.PLAYER_TRACE_WATCH)
-    /** Written on the player's thread: the time of the last picture and the distance between the last two. */
-    @Volatile private var lastFramePtsUs = -1L
-    @Volatile private var frameIntervalUs = 0L
-    private var recoveries = 0
-    private val refusals = RefusalWatch()
-    private val stuckDecoder = StuckDecoder()
-    /** Read on the loading thread: no picture has come yet from this opening, see [OpeningErrorPolicy]. */
-    @Volatile private var opening = true
-    private val openingErrors = OpeningErrorPolicy { opening }
-    private val problems = ProblemOutcome { channel, what, at -> ProblemLog.add(this, channel, what, at) }
-    private var lastLoadError = ""
-    private var readyAt = 0L
     private var okLong = false
-    private var totalRecoveries = 0
+    private lateinit var playback: LivePlayback
 
     private val handler = Handler(Looper.getMainLooper())
     private val hideInfo = Runnable { infoPanel.visibility = View.GONE }
@@ -154,7 +106,6 @@ class PlayerActivity : AppCompatActivity() {
     private val hideList = Runnable { hideChannelList() }
     private val hideToast = Runnable { tvToast.visibility = View.GONE }
     private val commitNumber = Runnable { jumpToNumber() }
-    private val retry = Runnable { startCurrent() }
     private var pendingZap = -1
     private val zapCommit = Runnable {
         val i = pendingZap
@@ -176,52 +127,11 @@ class PlayerActivity : AppCompatActivity() {
         override fun onAvailable(network: Network) {
             if (!lost) return
             lost = false
-            handler.post {
-                val p = player ?: return@post
-                if (pendingZap < 0 && (p.playerError != null || p.playbackState == Player.STATE_BUFFERING ||
-                        p.playbackState == Player.STATE_IDLE || tvError.visibility == View.VISIBLE)
-                ) {
-                    retries = 0
-                    refusals.reset()
-                    freshPlayer()
-                    startCurrent()
-                }
-            }
+            handler.post { playback.networkBack() }
         }
     }
 
-    /** If a live stream stays stuck in buffering, re-open it at the live edge instead of freezing. */
-    private val stallWatchdog = Runnable {
-        if (player?.playbackState == Player.STATE_BUFFERING) {
-            if (retries < MAX_RETRIES) {
-                retries++
-                problem("buffering for ${STALL_TIMEOUT_MS / 1000} s")
-                showReconnecting()
-                startCurrent()
-            } else {
-                tvError.text = getString(R.string.err_stream, "TIMEOUT")
-                pbStart.visibility = View.GONE
-                tvError.visibility = View.VISIBLE
-            }
-        }
-    }
 
-    /**
-     * Some TV decoders (Amlogic on the Mi TV Stick) start without a clean key frame, or wedge after a while:
-     * the sound keeps playing but the picture never appears or stops. Re-opening the channel fixes it, so do
-     * that automatically: no first frame shortly after READY, or no new frame while the clock still moves,
-     * or nothing moving at all while READY.
-     */
-    private val frameWatch = object : Runnable {
-        override fun run() {
-            checkFrames()
-            // Often while the channel is still behind the loading circle: it appears the moment it runs.
-            handler.postDelayed(this, if (revealed) 500 else 100)
-        }
-    }
-
-    private var playToken = 0
-    private var probeJob: Job? = null
 
     private val aspectModes = intArrayOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT,
@@ -268,7 +178,10 @@ class PlayerActivity : AppCompatActivity() {
         infoEpg = findViewById(R.id.infoEpg)
         infoEpgProgress = findViewById(R.id.infoEpgProgress)
         listEpg = findViewById(R.id.listEpg)
-        pbStart = findViewById(R.id.pbStart)
+        playback = LivePlayback(
+            this, repo, handler, playerView, tvError, findViewById(R.id.pbStart),
+            zapping = { pendingZap >= 0 }, onBadPeriod = ::suggestRestart,
+        )
 
         playerView.useController = false
         playerView.resizeMode = aspectModes[repo.aspectMode.coerceIn(0, aspectModes.size - 1)]
@@ -344,8 +257,7 @@ class PlayerActivity : AppCompatActivity() {
             )
         }
         if (repo.showStats) startStats()
-        handler.removeCallbacks(frameWatch)
-        handler.postDelayed(frameWatch, 1000)
+        playback.watch()
         // onStop clears the handler: a sleep timer set before goes on with the time it has left.
         if (sleepAt != 0L) {
             val left = sleepAt - SystemClock.elapsedRealtime()
@@ -368,8 +280,7 @@ class PlayerActivity : AppCompatActivity() {
             numberBuffer = ""
             tvNumberEntry.visibility = View.GONE
         }
-        problems.left(SystemClock.elapsedRealtime())
-        releasePlayer()
+        if (::playback.isInitialized) playback.close()
         PlayerFactory.freeBuffers()
     }
 
@@ -447,204 +358,14 @@ class PlayerActivity : AppCompatActivity() {
 
     // ---------- player ----------
 
-    /**
-     * Software video decoder for channels that kept stopping the hardware one (any size, see [StuckDecoder]), and for SD
-     * channels that froze before (or always for SD, if chosen in Settings).
-     */
-    private fun wantsSoftwareVideo(ch: Channel?): Boolean {
-        ch ?: return false
-        if (ch.url in softwareFailed) return false
-        val info = ChannelMemory.get(this, ch.url) ?: return false
-        // Only SD: the Mi TV Stick's processor shows about 5 pictures a second of a 1080 channel in software and falls
-        // into buffering every half minute (4.3.1 chose it for 1080 channels too; those go back to the hardware one).
-        val sd = info.height in 1..SOFTWARE_MAX_HEIGHT
-        return sd && (info.software || repo.softwareSd || info.fixes > 0)
-    }
-
-    private var softwareVideo = false
-    private val softwareFailed get() = PlayerFactory.softwareFailed
-
-    // ---- clean start: picture and sound stay hidden until the picture runs smoothly ----
-    private lateinit var pbStart: View
-    private var revealed = true
-    private var hiddenSince = 0L
-
-    private fun hideUntilStable() {
-        if (revealed) hiddenSince = SystemClock.elapsedRealtime()
-        revealed = false
-        playerView.alpha = 0f
-        player?.volume = 0f
-        pbStart.visibility = View.VISIBLE
-    }
-
-    // ---- how long a channel took to appear: logged when it does, tools/zap-test.ps1 reads it ----
-    private var openPressAt = 0L
-    private var openAt = 0L
-    private var openPreparedAt = 0L
-    private var openReadyAt = 0L
-    private var openFrameAt = 0L
-    private var openCount = 0
-
-    private fun logOpen() {
-        val ch = current ?: return
-        val now = Perf.now()
-        val press = if (openPressAt != 0L) openPressAt else openAt
-        fun after(t: Long) = if (t == 0L) -1 else t - openAt
-        Perf.log(
-            "open total=${now - press} wait=${openAt - press} prepare=${after(openPreparedAt)} ready=${after(openReadyAt)} " +
-                "frame=${after(openFrameAt)} show=${now - openAt} reopens=${(openCount - 1).coerceAtLeast(0)} " +
-                "forced=${now - hiddenSince > MAX_HIDDEN_MS} ch=${ch.number} ${ch.name}"
-        )
-        openPressAt = 0L
-        openAt = 0L
-    }
-
-    private fun reveal() {
-        if (revealed) return
-        logOpen()
-        revealed = true
-        playerView.alpha = 1f
-        player?.volume = 1f
-        pbStart.visibility = View.GONE
-        // Shown because it waited too long: an error on the screen has to stay readable.
-        if (player?.playerError == null && !refusals.told) tvError.visibility = View.GONE
-    }
-
-    private var trace: com.faznet.tv.player.PlayerTrace? = null
-
-    private fun initPlayer() {
-        softwareVideo = wantsSoftwareVideo(current)
-        val p = PlayerFactory.create(this, repo.useFfmpeg, softwareVideo = softwareVideo)
-        p.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                when (state) {
-                    Player.STATE_READY -> {
-                        if (openReadyAt == 0L) openReadyAt = Perf.now()
-                        tvError.visibility = View.GONE
-                        retries = 0
-                        handler.removeCallbacks(stallWatchdog)
-                        refusals.reset()
-                        opening = false
-                        readyAt = SystemClock.elapsedRealtime()
-                        exoWatch.onReady(readyAt)
-                    }
-                    Player.STATE_BUFFERING -> {
-                        stallCount++
-                        exoWatch.onNotReady()
-                        handler.removeCallbacks(stallWatchdog)
-                        handler.postDelayed(stallWatchdog, STALL_TIMEOUT_MS)
-                    }
-                    Player.STATE_ENDED -> {
-                        // A live stream should never "end": the server dropped us, reconnect. With a growing pause
-                        // and a limit: a channel that ends at once used to open a new connection every second
-                        // forever, which is what trips the provider's connection limit (HTTP 403). After the
-                        // limit hardWatch keeps re-opening it, 15 → 30 → 60 → 120 s apart.
-                        handler.removeCallbacks(retry)
-                        if (retries < MAX_RETRIES) {
-                            retries++
-                            problem("stream ended after ${(SystemClock.elapsedRealtime() - readyAt) / 1000} s")
-                            handler.postDelayed(retry, (1000L * retries).coerceAtMost(5000L))
-                        } else {
-                            pbStart.visibility = View.GONE
-                            tvError.text = getString(R.string.err_stream, "ENDED")
-                            tvError.visibility = View.VISIBLE
-                            current?.let { ProblemLog.add(this@PlayerActivity, it.name, "stream ended $MAX_RETRIES times") }
-                        }
-                    }
-                    else -> exoWatch.onNotReady()
-                }
-            }
-
-            override fun onRenderedFirstFrame() {
-                if (openFrameAt == 0L) openFrameAt = Perf.now()
-                exoWatch.onFirstFrame(SystemClock.elapsedRealtime())
-            }
-
-            override fun onPlayerError(error: PlaybackException) = handleError(error)
-        })
-        p.addAnalyticsListener(object : AnalyticsListener {
-            override fun onAudioUnderrun(t: AnalyticsListener.EventTime, bufferSize: Int, bufferSizeMs: Long, elapsedSinceLastFeedMs: Long) {
-                underruns++
-            }
-            override fun onVideoDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
-                videoDecoder = decoderName
-                Perf.log("video decoder $decoderName software=$softwareVideo ch=${current?.number}")
-            }
-            override fun onVideoInputFormatChanged(t: AnalyticsListener.EventTime, format: androidx.media3.common.Format, decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?) {
-                current?.let { ChannelMemory.rememberHeight(this@PlayerActivity, it.url, format.height) }
-            }
-            override fun onAudioDecoderInitialized(t: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
-                audioDecoder = decoderName
-            }
-            override fun onLoadError(t: AnalyticsListener.EventTime, l: LoadEventInfo, m: MediaLoadData, error: java.io.IOException, wasCanceled: Boolean) {
-                lastWarning = "load: ${error.javaClass.simpleName} ${error.safeMessage()}".take(60)
-                lastLoadError = loadErrorKind(error)
-            }
-            override fun onAudioSinkError(t: AnalyticsListener.EventTime, audioSinkError: Exception) {
-                lastWarning = "audio: ${audioSinkError.javaClass.simpleName}".take(60)
-            }
-            override fun onPlaybackStateChanged(t: AnalyticsListener.EventTime, state: Int) {
-                val now = SystemClock.elapsedRealtime()
-                if (state == Player.STATE_BUFFERING) bufferingSince = now
-                else if (bufferingSince != 0L) { bufferingTotalMs += now - bufferingSince; bufferingSince = 0L }
-            }
-        })
-        if (com.faznet.tv.BuildConfig.DEBUG) p.addAnalyticsListener(EventLogger("FaznetPlayer"))
-        if (com.faznet.tv.BuildConfig.PLAYER_TRACE) {
-            trace?.stop()
-            trace = com.faznet.tv.player.PlayerTrace(p, handler, current?.let { "${it.number} ${it.name}" } ?: "")
-        }
-        p.setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
-            if (lastFramePtsUs >= 0) frameIntervalUs = presentationTimeUs - lastFramePtsUs
-            lastFramePtsUs = presentationTimeUs
-            if (com.faznet.tv.BuildConfig.PLAYER_TRACE) trace?.frame(presentationTimeUs)
-        }
-        // Live TV has no pause button, so nothing may pause it. Android sends "audio becoming noisy" whenever the
-        // HDMI signal drops for a moment (TV switched input or off and on, CEC standby, a loose cable); ExoPlayer
-        // then paused, and since the watchdogs only look at a player that is meant to play, the channel stayed
-        // frozen until the user left it (Mi TV Stick, 31.10: HDMI gone for 0.6 s → paused for good).
-        p.setHandleAudioBecomingNoisy(false)
-        p.addListener(object : Player.Listener {
-            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                if (playWhenReady || player !== p) return
-                // Paused by the system anyway (audio focus, a remote, …): open the channel again at the live edge,
-                // since the picture in the buffer is old by now.
-                current?.let { ProblemLog.add(this@PlayerActivity, it.name, "paused by the system ($reason) → re-open") }
-                handler.post { if (player === p) { freshPlayer(); startCurrent() } }
-            }
-        })
-        p.playWhenReady = true
-        playerView.player = p
-        player = p
-    }
 
     private fun play(ch: Channel, i: Int) {
-        problems.left(SystemClock.elapsedRealtime())
-        openAt = Perf.now()
-        openCount = 0
         handler.removeCallbacks(zapCommit)
         pendingZap = -1
         index = i
         current = ch
-        forceHls = false
-        retries = 0
-        refusals.reset()
-        lastLoadError = ""
-        recoveries = 0
-        stuckDecoder.reset()
-        progressWatch.reset(SystemClock.elapsedRealtime())
-        handler.removeCallbacks(retry)
-        handler.removeCallbacks(stallWatchdog)
         ChannelStore.lastPlayed = ch
-        stallCount = 0
-        underruns = 0
-        bufferingTotalMs = 0
-        bufferingSince = 0
-        lastWarning = ""
-        // A brand-new player (and video decoder) for every channel: re-using the decoder across channels is what
-        // left the Mi TV Stick with sound but a frozen picture; re-opening always fixed it, so always do that.
-        freshPlayer()
-        startCurrent()
+        playback.open(ch)
         warmNeighbours()
         showInfo(ch)
         tvTitle.text = "${ch.number}. ${ch.name}"
@@ -668,199 +389,7 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun releasePlayer() {
-        probeJob?.cancel()
-        player?.let {
-            playerView.player = null
-            it.release()
-        }
-        player = null
-    }
 
-    private fun freshPlayer() {
-        releasePlayer()
-        videoDecoder = ""
-        audioDecoder = ""
-        initPlayer()
-    }
-
-    private fun startCurrent() {
-        refused = false
-        opening = true
-        // A re-open long after the channel appeared is timed by itself.
-        if (openAt == 0L) openAt = Perf.now()
-        openCount++
-        openPreparedAt = 0L
-        openReadyAt = 0L
-        openFrameAt = 0L
-        val p = player ?: return
-        val ch = current ?: return
-        val token = ++playToken
-        tvError.visibility = View.GONE
-        exoWatch.onOpen()
-        lastFramePtsUs = -1L
-        frameIntervalUs = 0L
-        hideUntilStable()
-        // A quiet try after the viewer was told: the message stays until the channel really plays.
-        if (refusals.told) {
-            tvError.visibility = View.VISIBLE
-            pbStart.visibility = View.GONE
-        }
-        val ua = ch.userAgent ?: repo.userAgent
-        probeJob?.cancel()
-        // stop() disables the renderers, so the video decoder is released and re-created for the new stream:
-        // a decoder that wedged on the previous channel cannot carry over.
-        p.stop()
-        p.clearMediaItems()
-        probeJob = lifecycleScope.launch {
-            val type = if (forceHls) StreamType.HLS else StreamProbe.detect(ch.url, ua, ch.referrer)
-            if (token != playToken || player !== p) return@launch
-            p.setMediaSource(PlayerFactory.mediaSource(this@PlayerActivity, ch, ua, type, openingErrors))
-            openPreparedAt = Perf.now()
-            p.prepare()
-            p.play()
-        }
-    }
-
-    private val progressWatch = ProgressWatch()
-    /** The server said no, for good as far as this opening goes: nothing re-opens it until the viewer does something. */
-    private var refused = false
-
-    /** @return true if it re-opened the channel. */
-    private fun hardWatch(pos: Long, frames: Long): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        // Retries after a refusal are under way: starting over here would only make more connections.
-        val waited = progressWatch.check(now, pos, frames, revealed, pendingZap >= 0 || refusals.active) ?: return false
-        current ?: return false
-        problem("no progress for ${waited / 1000} s")
-        lastWarning = "watchdog re-open"
-        retries = 0
-        recoveries = 0
-        refusals.reset()
-        handler.removeCallbacks(retry)
-        handler.removeCallbacks(stallWatchdog)
-        showReconnecting()
-        freshPlayer()
-        startCurrent()
-        return true
-    }
-
-    /** A line for the problem log with what the player knows right now, written once it is known how it ended. */
-    private fun problem(what: String, extra: String = "") {
-        val ch = current ?: return
-        val facts = listOf(extra, player?.let { facts(it) }.orEmpty()).filter { it.isNotEmpty() }.joinToString(" ")
-        problems.problem(SystemClock.elapsedRealtime(), System.currentTimeMillis(), ch.name, "$what [$facts]")
-    }
-
-    /** No addresses, playlists or error texts in here: this goes to the developer with the problem log. */
-    private fun facts(p: ExoPlayer): String {
-        val v = p.videoDecoderCounters?.also { it.ensureUpdated() }
-        val a = p.audioDecoderCounters?.also { it.ensureUpdated() }
-        val state = when (p.playbackState) {
-            Player.STATE_IDLE -> "idle"
-            Player.STATE_BUFFERING -> "buffering"
-            Player.STATE_READY -> "ready"
-            else -> "ended"
-        }
-        return buildString {
-            append("state=$state load=${p.isLoading} buf=${p.totalBufferedDuration} net=${Throughput.msSinceLastBytes()}")
-            if (v != null) append(" in=${v.queuedInputBufferCount} out=${v.renderedOutputBufferCount} drop=${v.droppedBufferCount} skip=${v.skippedOutputBufferCount}")
-            if (a != null) append(" audio=${a.queuedInputBufferCount}/${a.renderedOutputBufferCount}")
-            append(" under=$underruns stalls=$stallCount")
-            p.videoFormat?.let { append(" ${it.width}x${it.height}@${it.frameRate.toInt()} ${it.sampleMimeType?.substringAfter('/')}") }
-            if (videoDecoder.isNotEmpty()) append(" ${videoDecoder.take(30)}")
-            if (lastLoadError.isNotEmpty()) append(" err=$lastLoadError")
-        }
-    }
-
-    private fun checkFrames() {
-        if (refused) return
-        val p = player ?: return
-        if (p.playWhenReady) {
-            val frames = p.videoDecoderCounters?.let { it.ensureUpdated(); it.renderedOutputBufferCount.toLong() } ?: 0L
-            if (hardWatch(p.currentPosition, frames)) return
-        }
-        // Never keep a channel hidden for long: if it can't settle, show it anyway.
-        val now = SystemClock.elapsedRealtime()
-        if (!revealed && now - hiddenSince > MAX_HIDDEN_MS) reveal()
-        if (p.playbackState != Player.STATE_READY || !p.playWhenReady ||
-            p.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE || !exoWatch.isReady
-        ) return
-        val counters = p.videoDecoderCounters?.also { it.ensureUpdated() }
-        val rendered = counters?.renderedOutputBufferCount ?: 0
-        val activity = if (counters == null) 0L else counters.queuedInputBufferCount.toLong() + rendered +
-            counters.skippedOutputBufferCount + counters.droppedBufferCount + counters.droppedInputBufferCount
-        if (softwareTooSlow(counters)) return
-        val result = exoWatch.check(
-            ExoWatch.Sample(
-                now, p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO), rendered, activity, p.currentPosition,
-                lastFramePtsUs, frameIntervalUs,
-            )
-        )
-        if (result.healthy) {
-            recoveries = 0
-            stuckDecoder.reset()
-        }
-        if (result.canShow) {
-            problems.back(now)
-            if (!revealed) reveal()
-        }
-        val problem = result.problem ?: return
-        val reason = problem.reason
-        // The numbers say what really happened; they reach the developer with the problem log.
-        val detail = "wedged=${problem.wedged} behind=${problem.behindMs} frame=${problem.sinceFrameMs} clock=${problem.sinceClockMs} decoder=${problem.sinceDecoderMs}"
-        Perf.log("freeze $reason $detail in=${counters?.queuedInputBufferCount} out=$rendered buf=${p.totalBufferedDuration} ch=${current?.number}")
-        // Enough quick fixes on this channel: from here the last-resort watch opens it again, less often.
-        if (recoveries >= MAX_RECOVERIES) return
-        // No picture at all in strict key-frame mode: this stream probably never sends IDR frames.
-        if (problem.noPicture) current?.let { PlayerFactory.looseKeyframes.add(it.url) }
-        recoveries++
-        totalRecoveries++
-        lastWarning = "auto-fix: $reason"
-        current?.let { ch ->
-            // One freeze right at the start says nothing about the channel (the next opening usually plays), so it does
-            // not count as a fix; the same decoder freezing again at once does, see StuckDecoder.
-            if (!problem.atStart) ChannelMemory.addFix(this, ch.url)
-            p.videoFormat?.let { ChannelMemory.rememberHeight(this, ch.url, it.height) }
-            val decoderFroze = problem.wedged || reason.startsWith("picture frozen")
-            // The other decoder from the next opening on, which is right below, and on every later one. Which one froze
-            // is the one that really ran, not the one asked for.
-            val software = PlayerFactory.isSoftwareDecoder(videoDecoder)
-            // Software only where it can keep up: a bigger picture stays with the hardware decoder and its re-opens.
-            val small = (p.videoFormat?.height ?: 0) in 1..SOFTWARE_MAX_HEIGHT
-            val change = decoderFroze && (software || small) && stuckDecoder.froze()
-            if (change) ChannelMemory.useSoftware(this, ch.url, !software)
-            val switched = when {
-                !change -> ""
-                software -> " → hardware decoder"
-                else -> " → software decoder"
-            }
-            problem(reason + (if (software) " (software)" else "") + switched, detail)
-            if (decoderFroze && problem.atStart && !software && PlayerFactory.badPeriod.froze(ch.url, now)) suggestRestart()
-        }
-        showReconnecting()
-        freshPlayer()
-        startCurrent()
-    }
-
-    /**
-     * The software decoder drops more pictures than it shows: it can't keep up with this channel on this device. Back to
-     * the hardware one, for good, and at once. @return true if it re-opened the channel.
-     */
-    private fun softwareTooSlow(counters: androidx.media3.exoplayer.DecoderCounters?): Boolean {
-        counters ?: return false
-        if (!softwareVideo || !PlayerFactory.isSoftwareDecoder(videoDecoder)) return false
-        val shown = counters.renderedOutputBufferCount
-        val dropped = counters.droppedBufferCount + counters.droppedInputBufferCount
-        if (shown + dropped < SLOW_CHECK_FRAMES || dropped <= shown) return false
-        val ch = current ?: return false
-        softwareFailed.add(ch.url)
-        ChannelMemory.useSoftware(this, ch.url, false)
-        problem("software decoder too slow (shown $shown, dropped $dropped) → hardware decoder")
-        freshPlayer()
-        startCurrent()
-        return true
-    }
 
     /**
      * Several channels froze at their start the same way: the device's decoder is in a bad period, which a restart
@@ -901,130 +430,14 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnFullscreen).setImageResource(if (on) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen)
     }
 
-    private fun showReconnecting() {
-        // While a channel is still opening behind the loading circle, a quiet retry needs no message.
-        if (!revealed) return
-        tvError.text = getString(R.string.reconnecting)
-        tvError.visibility = View.VISIBLE
-    }
-
-    private fun handleError(error: PlaybackException) {
-        val p = player ?: return
-        handler.removeCallbacks(stallWatchdog)
-        when (error.errorCode) {
-            PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
-            PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED -> if (!forceHls) {
-                // Extension-less URLs are often HLS: retry as HLS once and remember it
-                forceHls = true
-                current?.let { StreamProbe.remember(it.url, StreamType.HLS) }
-                startCurrent()
-                return
-            }
-            PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW -> {
-                p.seekToDefaultPosition()
-                p.prepare()
-                return
-            }
-        }
-        // The server refused the channel (not in the package, offline, or the account's connection limit while
-        // zapping fast): say so soon, and try a little longer for the old connection to close.
-        val http = generateSequence<Throwable>(error) { it.cause }
-            .filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
-        if (http != null && http in 400..499) {
-            val step = refusals.onRefused()
-            if (step.tell) {
-                reveal()
-                pbStart.visibility = View.GONE
-                tvError.text = getString(R.string.err_refused, http)
-                tvError.visibility = View.VISIBLE
-                current?.let { problems.problem(SystemClock.elapsedRealtime(), System.currentTimeMillis(), it.name, "refused by server (HTTP $http)") }
-            } else if (!refusals.told) {
-                showReconnecting()
-            }
-            handler.removeCallbacks(retry)
-            if (step.retryInMs != null) {
-                handler.postDelayed(retry, step.retryInMs)
-            } else {
-                // Leave it: every further try is one more connection on an account that has a limit.
-                refused = true
-                reveal()
-            }
-            return
-        }
-        // The software decoder chosen for this channel can't play it (too big for it, or it does not start): back to the
-        // hardware one, for good, and at once.
-        if (softwareVideo && error.errorCode in PlaybackException.ERROR_CODE_DECODER_INIT_FAILED..PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED) {
-            current?.let { ch ->
-                softwareFailed.add(ch.url)
-                ChannelMemory.useSoftware(this, ch.url, false)
-                problem("software decoder failed (${error.errorCodeName}) → hardware decoder")
-            }
-            freshPlayer()
-            startCurrent()
-            return
-        }
-        val transient = error.errorCode in 1000..2999 || error.errorCode in 4000..4999
-        if (transient && retries < MAX_RETRIES) {
-            retries++
-            lastLoadError = loadErrorKind(error)
-            problem("network error")
-            showReconnecting()
-            handler.removeCallbacks(retry)
-            handler.postDelayed(retry, (1500L * retries).coerceAtMost(6000L))
-            return
-        }
-        tvError.text = getString(R.string.err_stream, error.errorCodeName)
-        pbStart.visibility = View.GONE
-        current?.let { ProblemLog.add(this, it.name, "error ${error.errorCodeName}") }
-        tvError.visibility = View.VISIBLE
-    }
 
     // ---------- stats ----------
 
     private val statsTick = object : Runnable {
         override fun run() {
-            val p = player
-            if (p != null) {
-                val v = p.videoFormat
-                val a = p.audioFormat
-                val counters = p.videoDecoderCounters?.also { it.ensureUpdated() }
-                val dropped = counters?.droppedBufferCount ?: 0
-                val frames = counters?.renderedOutputBufferCount ?: 0
-                tvStats.text = buildString {
-                    append("Buffer  %.1f s\n".format(p.totalBufferedDuration / 1000.0))
-                    append("Net     %.2f Mbps\n".format(Throughput.sampleMbps()))
-                    if (v != null) append("Video   ${v.width}x${v.height} ${v.sampleMimeType?.substringAfter('/') ?: ""}\n")
-                    if (a != null) append("Audio   ${a.sampleMimeType?.substringAfter('/') ?: ""} ${a.channelCount}ch ${a.sampleRate}Hz\n")
-                    val audioTracks = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-                    if (audioTracks.isNotEmpty()) {
-                        append("ATracks ")
-                        append(audioTracks.joinToString(" ") { g ->
-                            val f = g.getTrackFormat(0)
-                            val mark = if (g.isSelected) "*" else ""
-                            "$mark${f.sampleMimeType?.substringAfter('/') ?: "?"}${f.language?.let { "/$it" } ?: ""}"
-                        })
-                        append("\n")
-                    }
-                    val keyMode = if (current?.url?.let { it in PlayerFactory.looseKeyframes } == true) "loose" else "IDR"
-                    append("Frames  $frames   Drops $dropped   Fixes $totalRecoveries   Start $keyMode\n")
-                    if (counters != null) append("Late    skip ${counters.skippedOutputBufferCount}  toKey ${counters.droppedToKeyframeCount}  inDrop ${counters.droppedInputBufferCount}  maxRun ${counters.maxConsecutiveDroppedBufferCount}\n")
-                    append("Stalls  ${(stallCount - 1).coerceAtLeast(0)}   Underruns $underruns\n")
-                    val buffering = bufferingTotalMs + if (bufferingSince != 0L) SystemClock.elapsedRealtime() - bufferingSince else 0L
-                    append("Waiting %.1f s   ${stateName(p.playbackState)}\n".format(buffering / 1000.0))
-                    if (videoDecoder.isNotEmpty()) append("VDec    ${videoDecoder.take(34)}${if (softwareVideo) " (SW)" else ""}\n")
-                    if (audioDecoder.isNotEmpty()) append("ADec    ${audioDecoder.take(34)}\n")
-                    val rt = Runtime.getRuntime()
-                    append("Memory  ${(rt.totalMemory() - rt.freeMemory()) / 1048576}/${rt.maxMemory() / 1048576} MB")
-                    if (PlayerFactory.isLowMemory(this@PlayerActivity)) append(" (low)")
-                    if (lastWarning.isNotEmpty()) append("\nWarn    $lastWarning")
-                }
-            }
+            playback.statsText()?.let { tvStats.text = it }
             handler.postDelayed(this, 1000)
         }
-    }
-
-    private fun stateName(s: Int) = when (s) {
-        Player.STATE_IDLE -> "IDLE"; Player.STATE_BUFFERING -> "BUFFERING"; Player.STATE_READY -> "READY"; else -> "ENDED"
     }
 
     private fun startStats() {
@@ -1050,7 +463,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun zap(delta: Int) {
         val n = zapList.size
         if (n == 0 || !listReady) return
-        openPressAt = Perf.now()
+        playback.pressed()
         val from = if (pendingZap >= 0) pendingZap else index
         val at = ((from + delta) % n + n) % n
         pendingZap = at
@@ -1058,10 +471,7 @@ class PlayerActivity : AppCompatActivity() {
             val ch = zapList.get(at)
             if (ch != null && pendingZap == at) showZapTarget(ch)
         }
-        handler.removeCallbacks(stallWatchdog)
-        handler.removeCallbacks(retry)
-        probeJob?.cancel()
-        player?.stop()
+        playback.stopForZap()
         tvError.visibility = View.GONE
         handler.removeCallbacks(zapCommit)
         val now = Perf.now()
@@ -1188,7 +598,7 @@ class PlayerActivity : AppCompatActivity() {
 
     /** Sound language and subtitles of the current channel. */
     private fun showTracks() {
-        com.faznet.tv.player.TrackDialog.show(this, player ?: return)
+        com.faznet.tv.player.TrackDialog.show(this, playback.player ?: return)
     }
 
     /** Another playlist straight from the player: the main screen loads it and opens its last channel. */
@@ -1488,14 +898,6 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val STALL_TIMEOUT_MS = 8_000L
-        private const val MAX_RETRIES = 5
-        private const val MAX_HIDDEN_MS = 9_000L
-        private const val MAX_RECOVERIES = 4
-        /** The tallest picture the software video decoder gets (SD). */
-        private const val SOFTWARE_MAX_HEIGHT = 576
-        /** Pictures (shown and dropped) before the software decoder's speed is judged: a few seconds. */
-        private const val SLOW_CHECK_FRAMES = 100
         private const val RESTART_HINT_EVERY_MS = 24 * 60 * 60 * 1000L
         private const val INFO_MS = 4_000L
         private const val OPTIONS_MS = 8_000L
@@ -1504,78 +906,5 @@ class PlayerActivity : AppCompatActivity() {
         private const val ZAP_FIRST_DELAY_MS = 200L
         private const val ZAP_DELAY_MS = 350L
         private const val ZAP_IDLE_MS = 1_000L
-    }
-}
-
-/** Compact channel rows for the list over the picture; the channels come a page at a time as the list reaches them. */
-internal class OverlayChannelAdapter(
-    private val scope: CoroutineScope,
-    private val onPick: (Int) -> Unit,
-) : RecyclerView.Adapter<OverlayChannelAdapter.VH>() {
-
-    private var pages: ChannelPages? = null
-    private var playingUrl: String? = null
-    private val reading = HashSet<Int>()
-
-    fun submit(list: ChannelPages, playing: String?) {
-        pages = list
-        playingUrl = playing
-        reading.clear()
-        notifyDataSetChanged()
-    }
-
-    fun setPlaying(url: String) {
-        playingUrl = url
-        notifyDataSetChanged()
-    }
-
-    private fun read(list: ChannelPages, position: Int) {
-        // Its page came without this row (the list is shorter than it said): nothing more will arrive for it.
-        if (list.isRead(position)) return
-        val page = position / ChannelPages.PAGE
-        if (!reading.add(page)) return
-        // Not Main.immediate: this is called while the list is laid out, and a page that is there at once (search
-        // results, a very quick read) would then change the list in the middle of that, which RecyclerView refuses.
-        scope.launch(Dispatchers.Main) {
-            list.get(position)
-            if (pages !== list) return@launch
-            reading.remove(page)
-            if (list.isRead(position)) notifyItemRangeChanged(page * ChannelPages.PAGE, ChannelPages.PAGE)
-        }
-    }
-
-    class VH(v: View) : RecyclerView.ViewHolder(v) {
-        val number: TextView = v.findViewById(R.id.ovNumber)
-        val logo: ImageView = v.findViewById(R.id.ovLogo)
-        val name: TextView = v.findViewById(R.id.ovName)
-        val playing: ImageView = v.findViewById(R.id.ovPlaying)
-    }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-        VH(LayoutInflater.from(parent.context).inflate(R.layout.item_overlay_channel, parent, false))
-
-    override fun getItemCount() = pages?.size ?: 0
-
-    override fun onBindViewHolder(h: VH, position: Int) {
-        val list = pages ?: return
-        val ch = list.peek(position)
-        if (ch == null) {
-            read(list, position)
-            h.number.text = (position + 1).toString()
-            h.name.text = ""
-            h.logo.setImageDrawable(null)
-            h.playing.visibility = View.GONE
-            h.itemView.isSelected = false
-            h.itemView.setOnClickListener(null)
-            return
-        }
-        val isPlaying = ch.url == playingUrl
-        h.number.text = ch.number.toString()
-        h.name.text = ch.name
-        h.itemView.isSelected = isPlaying
-        h.itemView.alpha = if (ChannelCheck.isDead(ch.url)) 0.45f else 1f
-        h.playing.visibility = if (isPlaying) View.VISIBLE else View.GONE
-        loadLogo(h.logo, ch.logo)
-        h.itemView.setOnClickListener { h.bindingAdapterPosition.takeIf { it >= 0 }?.let(onPick) }
     }
 }
