@@ -21,7 +21,7 @@ object ChannelCheck {
                 if (!r.isSuccessful) false
                 else {
                     val buf = ByteArray(2048)
-                    (r.body?.byteStream()?.read(buf) ?: -1) > 0
+                    r.body.byteStream().read(buf) > 0
                 }
             }
         } catch (e: Exception) {

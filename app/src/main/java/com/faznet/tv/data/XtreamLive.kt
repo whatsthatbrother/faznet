@@ -77,7 +77,7 @@ object XtreamLive {
         val req = okhttp3.Request.Builder().url(m3uUrl).header("User-Agent", userAgent).build()
         com.faznet.tv.net.Http.api.newCall(req).execute().use { r ->
             if (!r.isSuccessful) return@use null
-            val reader = java.io.BufferedReader(InputStreamReader(LimitedStream(r.body!!.byteStream(), MAX_HEAD), Charsets.UTF_8))
+            val reader = java.io.BufferedReader(InputStreamReader(LimitedStream(r.body.byteStream(), MAX_HEAD), Charsets.UTF_8))
             learnTemplate(generateSequence { reader.readLine() }, a)
         }
     }.getOrNull()

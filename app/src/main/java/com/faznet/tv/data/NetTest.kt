@@ -106,7 +106,7 @@ object NetTest {
                 val req = Request.Builder().url(url + "?t=" + System.nanoTime()).header("Cache-Control", "no-cache").build()
                 Http.client.newCall(req).execute().use { r ->
                     val body = r.body
-                    if (!r.isSuccessful || body == null) throw IOException("HTTP ${r.code}")
+                    if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
                     val input = body.byteStream()
                     while (true) {
                         val n = input.read(buf)

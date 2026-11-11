@@ -58,7 +58,7 @@ object StreamProbe {
                     val ct = (resp.header("Content-Type") ?: "").lowercase()
                     val head = ByteArray(512)
                     var n = 0
-                    resp.body?.byteStream()?.let { s ->
+                    resp.body.byteStream().let { s ->
                         while (n < head.size) {
                             val r = s.read(head, n, head.size - n)
                             if (r <= 0) break

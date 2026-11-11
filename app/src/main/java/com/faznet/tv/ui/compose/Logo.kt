@@ -1,7 +1,5 @@
 package com.faznet.tv.ui.compose
 
-import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.Drawable
 import android.os.SystemClock
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
@@ -20,11 +18,13 @@ import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import coil.imageLoader
-import coil.request.Disposable
-import coil.request.ImageRequest
-import coil.size.Precision
-import coil.size.Scale
+import coil3.SingletonImageLoader
+import coil3.request.Disposable
+import coil3.request.ImageRequest
+import coil3.request.target
+import coil3.size.Precision
+import coil3.size.Scale
+import coil3.toBitmap
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -114,23 +114,22 @@ private class LogoNode(private var url: String?, private var placeholder: Painte
         if (!isAttached || image != null || measured.width <= 0 || measured.height <= 0 || FailedLogos.has(u)) return
         request?.dispose()
         val context = currentValueOf(LocalContext)
-        request = context.imageLoader.enqueue(
+        request = SingletonImageLoader.get(context).enqueue(
             ImageRequest.Builder(context)
                 .data(u)
                 .size(measured.width, measured.height)
                 .scale(Scale.FIT)
                 .precision(Precision.INEXACT)
                 .target(
-                    onSuccess = { drawable -> show(drawable) },
+                    onSuccess = { image -> show(image) },
                     onError = { FailedLogos.add(u) },
                 )
                 .build()
         )
     }
 
-    private fun show(drawable: Drawable) {
-        val bitmap = (drawable as? BitmapDrawable)?.bitmap ?: return
-        image = bitmap.asImageBitmap()
+    private fun show(loaded: coil3.Image) {
+        image = loaded.toBitmap().asImageBitmap()
         invalidateDraw()
     }
 

@@ -74,7 +74,7 @@ object Epg {
                 val req = Request.Builder().url(url).header("User-Agent", userAgent).build()
                 Http.probe.newCall(req).execute().use { r ->
                     if (!r.isSuccessful) return@withContext null
-                    parse(r.body?.string() ?: return@withContext null)
+                    parse(r.body.string())
                 }
             } catch (e: Exception) {
                 null

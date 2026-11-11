@@ -150,8 +150,10 @@ dependencies {
     // FFmpeg audio decoder (AC3, E-AC3, MP2, DTS...) built by Jellyfin. Its newest build is for Media3 1.9.0; with 1.11.1
     // it was checked on the Mi TV Stick (MP2 and AAC-LATM channels play through it). Move it up when Jellyfin publishes one.
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.9.0+1")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("io.coil-kt:coil:2.7.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.1")
+    implementation("io.coil-kt.coil3:coil:3.6.3")
+    // Coil 3 has no network of its own: logos come through the app's OkHttp client (Http.images).
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3")
     // Installs the ahead-of-time (baseline) profiles also for APKs installed outside Google Play
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     // 2.0: the screens are drawn with Jetpack Compose (made for the TV remote and for touch)

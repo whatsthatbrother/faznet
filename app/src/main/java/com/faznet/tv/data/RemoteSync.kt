@@ -42,7 +42,7 @@ object RemoteSync {
                 }
                 resp.use { resp ->
                     if (!resp.isSuccessful) return@withContext Result.Error("HTTP ${resp.code}")
-                    val arr = JSONObject(resp.body?.string() ?: "{}").optJSONArray("playlists")
+                    val arr = JSONObject(resp.body.string()).optJSONArray("playlists")
                     val list = ArrayList<Playlist>()
                     if (arr != null) for (i in 0 until arr.length()) {
                         val o = arr.getJSONObject(i)

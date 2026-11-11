@@ -79,7 +79,7 @@ object XtreamApi {
             val result = async(Dispatchers.IO) {
                 // Also an OutOfMemoryError: the screen then offers to try again instead of the app closing.
                 runCatching {
-                    http.execute().use { r -> if (r.isSuccessful) r.body?.charStream()?.let(read) else null }
+                    http.execute().use { r -> if (r.isSuccessful) r.body.charStream().let(read) else null }
                 }.getOrNull()
             }
             try {

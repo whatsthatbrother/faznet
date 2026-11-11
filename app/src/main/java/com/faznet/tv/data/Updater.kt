@@ -50,7 +50,7 @@ object Updater {
             val req = Request.Builder().url(VERSION_URL + "?t=" + System.currentTimeMillis() / 600_000).build()
             Http.api.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) return@use null
-                val o = JSONObject(r.body?.string() ?: "{}")
+                val o = JSONObject(r.body.string())
                 val code = o.optInt("code")
                 if (code <= BuildConfig.VERSION_CODE) return@use null
                 val path = if (isArm64(c)) o.optString("arm64") else o.optString("tv")
@@ -89,8 +89,8 @@ object Updater {
         runCatching {
             Http.client.newCall(Request.Builder().url(info.url).build()).execute().use { r ->
                 if (!r.isSuccessful) return@runCatching null
-                val expected = r.body?.contentLength() ?: -1L
-                r.body?.byteStream()?.use { i -> tmp.outputStream().use { o -> i.copyTo(o, 256 * 1024) } }
+                val expected = r.body.contentLength()
+                r.body.byteStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o, 256 * 1024) } }
                 if (expected > 0 && tmp.length() != expected) { tmp.delete(); return@runCatching null }
             }
             if (!isComplete(c, tmp, info.code) || !tmp.renameTo(f)) { tmp.delete(); null } else f
