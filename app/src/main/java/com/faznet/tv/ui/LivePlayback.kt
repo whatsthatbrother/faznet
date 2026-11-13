@@ -2,8 +2,8 @@ package com.faznet.tv.ui
 
 import android.os.Handler
 import android.os.SystemClock
-import android.view.View
-import android.widget.TextView
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -49,14 +49,21 @@ import kotlinx.coroutines.launch
  * [zapping]: the viewer is still choosing a channel, so nothing may be re-opened. [onBadPeriod]: several channels
  * froze at their start, the device's decoder is in a bad period.
  */
+/** The two things [LivePlayback] puts over the picture: the loading circle and a message. Compose draws them. */
+@androidx.compose.runtime.Stable
+internal class PlayerMessages {
+    var spinner by androidx.compose.runtime.mutableStateOf(false)
+    var errorText by androidx.compose.runtime.mutableStateOf("")
+    var errorShown by androidx.compose.runtime.mutableStateOf(false)
+}
+
 @OptIn(UnstableApi::class)
 internal class LivePlayback(
     private val activity: AppCompatActivity,
     private val repo: Repository,
     private val handler: Handler,
     private val playerView: PlayerView,
-    private val tvError: TextView,
-    private val pbStart: View,
+    private val ui: PlayerMessages,
     private val zapping: () -> Boolean,
     private val onBadPeriod: () -> Unit,
 ) {
@@ -105,9 +112,9 @@ internal class LivePlayback(
                 showReconnecting()
                 startCurrent()
             } else {
-                tvError.text = activity.getString(R.string.err_stream, "TIMEOUT")
-                pbStart.visibility = View.GONE
-                tvError.visibility = View.VISIBLE
+                ui.errorText = activity.getString(R.string.err_stream, "TIMEOUT")
+                ui.spinner = false
+                ui.errorShown = true
             }
         }
     }
@@ -155,7 +162,7 @@ internal class LivePlayback(
         revealed = false
         playerView.alpha = 0f
         player?.volume = 0f
-        pbStart.visibility = View.VISIBLE
+        ui.spinner = true
     }
 
     // ---- how long a channel took to appear: logged when it does, tools/zap-test.ps1 reads it ----
@@ -186,9 +193,9 @@ internal class LivePlayback(
         revealed = true
         playerView.alpha = 1f
         player?.volume = 1f
-        pbStart.visibility = View.GONE
+        ui.spinner = false
         // Shown because it waited too long: an error on the screen has to stay readable.
-        if (player?.playerError == null && !refusals.told) tvError.visibility = View.GONE
+        if (player?.playerError == null && !refusals.told) ui.errorShown = false
     }
 
     private var trace: com.faznet.tv.player.PlayerTrace? = null
@@ -201,7 +208,7 @@ internal class LivePlayback(
                 when (state) {
                     Player.STATE_READY -> {
                         if (openReadyAt == 0L) openReadyAt = Perf.now()
-                        tvError.visibility = View.GONE
+                        ui.errorShown = false
                         retries = 0
                         handler.removeCallbacks(stallWatchdog)
                         refusals.reset()
@@ -226,9 +233,9 @@ internal class LivePlayback(
                             problem("stream ended after ${(SystemClock.elapsedRealtime() - readyAt) / 1000} s")
                             handler.postDelayed(retry, (1000L * retries).coerceAtMost(5000L))
                         } else {
-                            pbStart.visibility = View.GONE
-                            tvError.text = activity.getString(R.string.err_stream, "ENDED")
-                            tvError.visibility = View.VISIBLE
+                            ui.spinner = false
+                            ui.errorText = activity.getString(R.string.err_stream, "ENDED")
+                            ui.errorShown = true
                             channel?.let { ProblemLog.add(activity, it.name, "stream ended $MAX_RETRIES times") }
                         }
                     }
@@ -327,15 +334,15 @@ internal class LivePlayback(
         val p = player ?: return
         val ch = channel ?: return
         val token = ++playToken
-        tvError.visibility = View.GONE
+        ui.errorShown = false
         exoWatch.onOpen()
         lastFramePtsUs = -1L
         frameIntervalUs = 0L
         hideUntilStable()
         // A quiet try after the viewer was told: the message stays until the channel really plays.
         if (refusals.told) {
-            tvError.visibility = View.VISIBLE
-            pbStart.visibility = View.GONE
+            ui.errorShown = true
+            ui.spinner = false
         }
         val ua = ch.userAgent ?: repo.userAgent
         probeJob?.cancel()
@@ -496,8 +503,8 @@ internal class LivePlayback(
     private fun showReconnecting() {
         // While a channel is still opening behind the loading circle, a quiet retry needs no message.
         if (!revealed) return
-        tvError.text = activity.getString(R.string.reconnecting)
-        tvError.visibility = View.VISIBLE
+        ui.errorText = activity.getString(R.string.reconnecting)
+        ui.errorShown = true
     }
 
     private fun handleError(error: PlaybackException) {
@@ -526,9 +533,9 @@ internal class LivePlayback(
             val step = refusals.onRefused()
             if (step.tell) {
                 reveal()
-                pbStart.visibility = View.GONE
-                tvError.text = activity.getString(R.string.err_refused, http)
-                tvError.visibility = View.VISIBLE
+                ui.spinner = false
+                ui.errorText = activity.getString(R.string.err_refused, http)
+                ui.errorShown = true
                 channel?.let { problems.problem(SystemClock.elapsedRealtime(), System.currentTimeMillis(), it.name, "refused by server (HTTP $http)") }
             } else if (!refusals.told) {
                 showReconnecting()
@@ -565,10 +572,10 @@ internal class LivePlayback(
             handler.postDelayed(retry, (1500L * retries).coerceAtMost(6000L))
             return
         }
-        tvError.text = activity.getString(R.string.err_stream, error.errorCodeName)
-        pbStart.visibility = View.GONE
+        ui.errorText = activity.getString(R.string.err_stream, error.errorCodeName)
+        ui.spinner = false
         channel?.let { ProblemLog.add(activity, it.name, "error ${error.errorCodeName}") }
-        tvError.visibility = View.VISIBLE
+        ui.errorShown = true
     }
 
     private fun stateName(s: Int) = when (s) {
@@ -632,7 +639,7 @@ internal class LivePlayback(
     fun networkBack() {
         val p = player ?: return
         if (!zapping() && (p.playerError != null || p.playbackState == Player.STATE_BUFFERING ||
-                p.playbackState == Player.STATE_IDLE || tvError.visibility == View.VISIBLE)
+                p.playbackState == Player.STATE_IDLE || ui.errorShown)
         ) {
             retries = 0
             refusals.reset()

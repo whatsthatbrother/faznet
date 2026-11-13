@@ -14,13 +14,16 @@ import android.os.SystemClock
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.view.View
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.ProgressBar
-import android.widget.TextView
+import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -28,8 +31,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.faznet.tv.Perf
 import com.faznet.tv.R
 import com.faznet.tv.data.Channel
@@ -42,6 +43,8 @@ import com.faznet.tv.data.Epg
 import com.faznet.tv.data.Repository
 import com.faznet.tv.data.XtreamAccount
 import com.faznet.tv.player.PlayerFactory
+import com.faznet.tv.ui.compose.FaznetTheme
+import com.faznet.tv.ui.compose.PagedChannels
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -60,26 +63,11 @@ class PlayerActivity : AppCompatActivity() {
 
     private lateinit var repo: Repository
     private lateinit var playerView: PlayerView
-    private lateinit var topBar: View
-    private lateinit var tvTitle: TextView
-    private lateinit var btnFav: ImageButton
-    private lateinit var infoPanel: View
-    private lateinit var infoNumber: TextView
-    private lateinit var infoLogo: ImageView
-    private lateinit var infoName: TextView
-    private lateinit var infoGroup: TextView
-    private lateinit var tvNumberEntry: TextView
-    private lateinit var tvError: TextView
-    private lateinit var tvStats: TextView
-    private lateinit var tvToast: TextView
-    private lateinit var listPanel: View
-    private lateinit var listGroup: TextView
-    private lateinit var listCount: TextView
-    private lateinit var listChannels: RecyclerView
-    private lateinit var listAdapter: OverlayChannelAdapter
-    private lateinit var infoEpg: TextView
-    private lateinit var infoEpgProgress: ProgressBar
-    private lateinit var listEpg: TextView
+    /** What Compose draws over the picture. */
+    private val ui = PlayerOverlayState()
+    private val messages = PlayerMessages()
+    /** False when onCreate finished early (no channel to play after the process was restarted). */
+    private var created = false
     private var infoEpgJob: Job? = null
     private var listEpgJob: Job? = null
     private val timeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
@@ -101,10 +89,10 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var playback: LivePlayback
 
     private val handler = Handler(Looper.getMainLooper())
-    private val hideInfo = Runnable { infoPanel.visibility = View.GONE }
+    private val hideInfo = Runnable { ui.infoShown = false }
     private val hideTopBar = Runnable { hideOptions() }
     private val hideList = Runnable { hideChannelList() }
-    private val hideToast = Runnable { tvToast.visibility = View.GONE }
+    private val hideToast = Runnable { ui.toast = null }
     private val commitNumber = Runnable { jumpToNumber() }
     private var pendingZap = -1
     private val zapCommit = Runnable {
@@ -146,7 +134,6 @@ class PlayerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         // Phones: upright, whichever way the phone is held; sideways only with the full screen button.
         if (!isTv()) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        setContentView(R.layout.activity_player)
         repo = Repository.get(this)
 
         val startChannel = ChannelStore.startChannel
@@ -158,68 +145,33 @@ class PlayerActivity : AppCompatActivity() {
         current = startChannel
         index = 0
 
-        playerView = findViewById(R.id.playerView)
-        topBar = findViewById(R.id.topBar)
-        tvTitle = findViewById(R.id.tvTitle)
-        btnFav = findViewById(R.id.btnFav)
-        infoPanel = findViewById(R.id.infoPanel)
-        infoNumber = findViewById(R.id.infoNumber)
-        infoLogo = findViewById(R.id.infoLogo)
-        infoName = findViewById(R.id.infoName)
-        infoGroup = findViewById(R.id.infoGroup)
-        tvNumberEntry = findViewById(R.id.tvNumberEntry)
-        tvError = findViewById(R.id.tvError)
-        tvStats = findViewById(R.id.tvStats)
-        tvToast = findViewById(R.id.tvToast)
-        listPanel = findViewById(R.id.listPanel)
-        listGroup = findViewById(R.id.listGroup)
-        listCount = findViewById(R.id.listCount)
-        listChannels = findViewById(R.id.listChannels)
-        infoEpg = findViewById(R.id.infoEpg)
-        infoEpgProgress = findViewById(R.id.infoEpgProgress)
-        listEpg = findViewById(R.id.listEpg)
+        playerView = PlayerView(this).apply {
+            setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+            isFocusable = false
+            keepScreenOn = true
+        }
         playback = LivePlayback(
-            this, repo, handler, playerView, tvError, findViewById(R.id.pbStart),
+            this, repo, handler, playerView, messages,
             zapping = { pendingZap >= 0 }, onBadPeriod = ::suggestRestart,
         )
 
         playerView.useController = false
         playerView.resizeMode = aspectModes[repo.aspectMode.coerceIn(0, aspectModes.size - 1)]
-
-        listAdapter = OverlayChannelAdapter(lifecycleScope) { pos -> onListPick(pos) }
-        listChannels.layoutManager = LinearLayoutManager(this)
-        listChannels.adapter = listAdapter
-        listChannels.itemAnimator = null
-        listChannels.setHasFixedSize(true)
-        listPanel.isClickable = true  // taps on the panel must not reach the picture behind it
+        ui.fullscreenButton = !isTv()
         sizeListPanel()
-
-        findViewById<View>(R.id.listPrev).setOnClickListener { switchListGroup(-1) }
-        findViewById<View>(R.id.listNext).setOnClickListener { switchListGroup(1) }
-        findViewById<View>(R.id.btnList).setOnClickListener { hideOptions(); showChannelList() }
-        btnFav.setOnClickListener { toggleFavorite(); bumpOptions() }
-        findViewById<View>(R.id.btnAspect).setOnClickListener { cycleAspect(); bumpOptions() }
-        findViewById<View>(R.id.btnStats).setOnClickListener { toggleStats(); bumpOptions() }
-        findViewById<View>(R.id.btnTracks).setOnClickListener { hideOptions(); showTracks() }
-        findViewById<View>(R.id.btnSleep).setOnClickListener { hideOptions(); showSleep() }
-        findViewById<View>(R.id.btnPlaylistSwitch).setOnClickListener { hideOptions(); switchPlaylist() }
-        if (!isTv()) findViewById<View>(R.id.btnFullscreen).apply {
-            visibility = View.VISIBLE
-            setOnClickListener { setFullscreen(!fullscreen); bumpOptions() }
-        }
 
         gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 when {
-                    listPanel.visibility == View.VISIBLE -> hideChannelList()
-                    topBar.visibility == View.VISIBLE -> hideOptions()
+                    ui.listShown -> hideChannelList()
+                    ui.optionsShown -> hideOptions()
                     else -> showOptions()
                 }
                 return true
             }
 
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
-                if (e1 == null || listPanel.visibility == View.VISIBLE) return false
+                if (e1 == null || ui.listShown) return false
                 val dy = e2.y - e1.y
                 val dx = e2.x - e1.x
                 val min = 80 * resources.displayMetrics.density
@@ -236,6 +188,17 @@ class PlayerActivity : AppCompatActivity() {
         })
         playerView.setOnTouchListener { _, ev -> gestures.onTouchEvent(ev); true }
 
+        val tv = isTv()
+        window.setBackgroundDrawable(null)
+        setContent {
+            FaznetTheme {
+                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                    AndroidView({ playerView }, Modifier.fillMaxSize())
+                    PlayerOverlay(ui, messages, overlayActions, tv, wide = resources.configuration.screenWidthDp >= 900)
+                }
+            }
+        }
+        created = true
         hideSystemUi()
         loadLists()
     }
@@ -273,12 +236,12 @@ class PlayerActivity : AppCompatActivity() {
         // Their timers to hide them are gone with the line above: left as they are, the list, the options, a toast or a
         // half-typed channel number stayed on the screen for good after coming back (Home, the TV's standby).
         // Not when onCreate finished early (no channel to play after the process was restarted): no views then.
-        if (::tvNumberEntry.isInitialized) {
+        if (created) {
             hideChannelList()
             hideOptions()
-            tvToast.visibility = View.GONE
+            ui.toast = null
             numberBuffer = ""
-            tvNumberEntry.visibility = View.GONE
+            ui.numberEntry = ""
         }
         if (::playback.isInitialized) playback.close()
         PlayerFactory.freeBuffers()
@@ -368,9 +331,9 @@ class PlayerActivity : AppCompatActivity() {
         playback.open(ch)
         warmNeighbours()
         showInfo(ch)
-        tvTitle.text = "${ch.number}. ${ch.name}"
+        ui.title = "${ch.number}. ${ch.name}"
         updateFavIcon()
-        if (listPanel.visibility == View.VISIBLE) listAdapter.setPlaying(ch.url)
+        ui.listPlaying = ch.url
         playlist?.let { p -> lifecycleScope.launch(DbErrors) { channelRepo.markWatched(p, ch) } }
     }
 
@@ -427,7 +390,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun setFullscreen(on: Boolean) {
         fullscreen = on
         requestedOrientation = if (on) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        findViewById<ImageButton>(R.id.btnFullscreen).setImageResource(if (on) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen)
+        ui.fullscreen = on
     }
 
 
@@ -435,13 +398,13 @@ class PlayerActivity : AppCompatActivity() {
 
     private val statsTick = object : Runnable {
         override fun run() {
-            playback.statsText()?.let { tvStats.text = it }
+            playback.statsText()?.let { ui.stats = it }
             handler.postDelayed(this, 1000)
         }
     }
 
     private fun startStats() {
-        tvStats.visibility = View.VISIBLE
+        if (ui.stats == null) ui.stats = ""
         handler.removeCallbacks(statsTick)
         handler.post(statsTick)
     }
@@ -450,7 +413,7 @@ class PlayerActivity : AppCompatActivity() {
         repo.showStats = !repo.showStats
         if (repo.showStats) startStats() else {
             handler.removeCallbacks(statsTick)
-            tvStats.visibility = View.GONE
+            ui.stats = null
         }
     }
 
@@ -472,7 +435,7 @@ class PlayerActivity : AppCompatActivity() {
             if (ch != null && pendingZap == at) showZapTarget(ch)
         }
         playback.stopForZap()
-        tvError.visibility = View.GONE
+        messages.errorShown = false
         handler.removeCallbacks(zapCommit)
         val now = Perf.now()
         handler.postDelayed(zapCommit, if (now - lastZapPressAt > ZAP_IDLE_MS) ZAP_FIRST_DELAY_MS else ZAP_DELAY_MS)
@@ -481,7 +444,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showZapTarget(ch: Channel) {
         showInfo(ch)
-        tvTitle.text = "${ch.number}. ${ch.name}"
+        ui.title = "${ch.number}. ${ch.name}"
     }
 
     private var lastZapPressAt = 0L
@@ -504,53 +467,48 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showInfoEpg(ch: Channel) {
         infoEpgJob?.cancel()
-        infoEpg.visibility = View.GONE
-        infoEpgProgress.visibility = View.GONE
+        ui.infoEpg = null
+        ui.infoProgress = null
         if (!Epg.supports(ch, xtream())) return
         infoEpgJob = lifecycleScope.launch {
             // While zapping quickly, only ask for the channel the user stops on.
             if (Epg.cached(ch) == null) kotlinx.coroutines.delay(500)
             val nn = Epg.nowNext(ch, xtream(), ch.userAgent ?: repo.userAgent) ?: return@launch
-            infoEpg.text = epgText(nn)
-            infoEpg.visibility = View.VISIBLE
+            ui.infoEpg = epgText(nn)
             nn.now?.let { pr ->
                 val span = (pr.end - pr.start).coerceAtLeast(1)
-                infoEpgProgress.progress = (((System.currentTimeMillis() - pr.start) * 1000) / span).toInt().coerceIn(0, 1000)
-                infoEpgProgress.visibility = View.VISIBLE
+                ui.infoProgress = ((System.currentTimeMillis() - pr.start).toFloat() / span).coerceIn(0f, 1f)
             }
         }
     }
 
     private fun showListEpg(ch: Channel?) {
         listEpgJob?.cancel()
-        if (ch == null || !Epg.supports(ch, xtream())) { listEpg.visibility = View.GONE; return }
-        Epg.cached(ch)?.let { listEpg.text = epgText(it); listEpg.visibility = View.VISIBLE } ?: run { listEpg.visibility = View.GONE }
+        if (ch == null || !Epg.supports(ch, xtream())) { ui.listEpg = null; return }
+        ui.listEpg = Epg.cached(ch)?.let { epgText(it) }
         // Small delay: scrolling quickly through the list must not fire a request per row.
         listEpgJob = lifecycleScope.launch {
             kotlinx.coroutines.delay(600)
             val nn = Epg.nowNext(ch, xtream(), ch.userAgent ?: repo.userAgent)
-            if (nn == null) { listEpg.visibility = View.GONE; return@launch }
-            listEpg.text = epgText(nn)
-            listEpg.visibility = View.VISIBLE
+            ui.listEpg = nn?.let { epgText(it) }
         }
     }
 
     private fun showInfo(ch: Channel) {
         showInfoEpg(ch)
-        infoNumber.text = ch.number.toString()
-        infoName.text = ch.name
-        infoGroup.text = groups.getOrNull(playGroup)?.title ?: ch.group
-        loadLogo(infoLogo, ch.logo)
-        if (listPanel.visibility != View.VISIBLE && topBar.visibility != View.VISIBLE) infoPanel.visibility = View.VISIBLE
+        ui.infoNumber = ch.number.toString()
+        ui.infoName = ch.name
+        ui.infoGroup = groups.getOrNull(playGroup)?.title ?: ch.group.orEmpty()
+        ui.infoLogo = ch.logo
+        if (!ui.listShown && !ui.optionsShown) ui.infoShown = true
         handler.removeCallbacks(hideInfo)
         handler.postDelayed(hideInfo, INFO_MS)
     }
 
     private fun showOptions() {
         hideChannelList()
-        infoPanel.visibility = View.GONE
-        topBar.visibility = View.VISIBLE
-        findViewById<View>(R.id.btnList).requestFocus()
+        ui.infoShown = false
+        ui.optionsShown = true
         bumpOptions()
     }
 
@@ -561,13 +519,11 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun hideOptions() {
         handler.removeCallbacks(hideTopBar)
-        topBar.visibility = View.GONE
-        playerView.requestFocus()
+        ui.optionsShown = false
     }
 
     private fun toast(text: String) {
-        tvToast.text = text
-        tvToast.visibility = View.VISIBLE
+        ui.toast = text
         handler.removeCallbacks(hideToast)
         handler.postDelayed(hideToast, 2000)
     }
@@ -592,7 +548,7 @@ class PlayerActivity : AppCompatActivity() {
         val p = playlist ?: return
         lifecycleScope.launch(DbErrors) {
             val fav = channelRepo.isFavorite(p, ch)
-            btnFav.setImageResource(if (fav) R.drawable.ic_star else R.drawable.ic_star_border)
+            ui.favorite = fav
         }
     }
 
@@ -651,35 +607,29 @@ class PlayerActivity : AppCompatActivity() {
     // ---------- channel list over the picture ----------
 
     private fun sizeListPanel() {
-        if (isTv()) {
-            // Overscan: keep the list inside the visible area of the TV. The floating panel's own margin (20 dp) does
-            // most of it, so the inside only needs a little more.
-            val d = resources.displayMetrics.density
-            listPanel.setPadding((18 * d).toInt(), (20 * d).toInt(), listPanel.paddingRight, (16 * d).toInt())
-        }
         val dm = resources.displayMetrics
         val widthDp = dm.widthPixels / dm.density
         val target = when {
             widthDp < 600 -> widthDp * 0.82f
             else -> (widthDp * 0.40f).coerceIn(340f, 520f) + if (isTv()) 24f else 0f
         }
-        listPanel.layoutParams = listPanel.layoutParams.apply { width = (target * dm.density).toInt() }
+        ui.listWidth = target.dp
     }
 
     private fun showChannelList() {
         hideOptions()
-        infoPanel.visibility = View.GONE
+        ui.infoShown = false
         listGroupIndex = playGroup
-        listPanel.visibility = View.VISIBLE
+        ui.listShown = true
         fillList()
         bumpList()
     }
 
     private fun hideChannelList() {
         handler.removeCallbacks(hideList)
-        if (listPanel.visibility != View.VISIBLE) return
-        listPanel.visibility = View.GONE
-        playerView.requestFocus()
+        if (!ui.listShown) return
+        ui.listShown = false
+        ui.listEpg = null
     }
 
     private fun bumpList() {
@@ -695,30 +645,23 @@ class PlayerActivity : AppCompatActivity() {
         bumpList()
     }
 
+    /** The paged reader of each group's list, kept while the screen is open. */
+    private val pagedLists = HashMap<ChannelPages, PagedChannels>()
+
     private fun fillList() {
         val g = groups[listGroupIndex]
         val ch = current
-        listGroup.text = g.title
-        listCount.text = ""
-        listAdapter.submit(g.pages, ch?.url)
+        ui.listTitle = g.title
+        ui.listCount = ""
+        ui.listPages = pagedLists.getOrPut(g.pages) { PagedChannels(g.pages) }
+        ui.listPlaying = ch?.url
         lifecycleScope.launch(DbErrors) {
             val pos = ch?.let { g.pages.indexOf(it) } ?: 0
             val focused = g.pages.get(pos)
-            if (groups.getOrNull(listGroupIndex) !== g || listPanel.visibility != View.VISIBLE) return@launch
-            listCount.text = getString(R.string.list_count, pos + 1, g.pages.size)
-            focusListRow(pos)
+            if (groups.getOrNull(listGroupIndex) !== g || !ui.listShown) return@launch
+            ui.listCount = getString(R.string.list_count, pos + 1, g.pages.size)
+            ui.focusListRow(pos)
             showListEpg(focused)
-        }
-    }
-
-    private fun focusListRow(pos: Int) {
-        val lm = listChannels.layoutManager as LinearLayoutManager
-        listChannels.post {
-            lm.scrollToPositionWithOffset(pos, listChannels.height / 3)
-            listChannels.post {
-                val vh = listChannels.findViewHolderForAdapterPosition(pos)
-                if (vh != null) vh.itemView.requestFocus() else listChannels.requestFocus()
-            }
         }
     }
 
@@ -735,13 +678,26 @@ class PlayerActivity : AppCompatActivity() {
         play(ch, pos)
     }
 
-    private fun onListFocusMoved() {
-        val focused = listChannels.focusedChild ?: return
-        val pos = listChannels.getChildAdapterPosition(focused)
-        if (pos >= 0) {
-            listCount.text = getString(R.string.list_count, pos + 1, listAdapter.itemCount)
-            showListEpg(groups.getOrNull(listGroupIndex)?.pages?.peek(pos))
-        }
+    private fun onListFocusMoved(pos: Int) {
+        ui.listFocused = pos
+        val pages = groups.getOrNull(listGroupIndex)?.pages ?: return
+        ui.listCount = getString(R.string.list_count, pos + 1, pages.size)
+        showListEpg(pages.peek(pos))
+    }
+
+    private val overlayActions = object : PlayerOverlayActions {
+        override fun listPick(pos: Int) = onListPick(pos)
+        override fun listFocusMoved(pos: Int) = onListFocusMoved(pos)
+        override fun prevGroup() = switchListGroup(-1)
+        override fun nextGroup() = switchListGroup(1)
+        override fun openList() { hideOptions(); showChannelList() }
+        override fun favorite() { toggleFavorite(); bumpOptions() }
+        override fun aspect() { cycleAspect(); bumpOptions() }
+        override fun tracks() { hideOptions(); showTracks() }
+        override fun sleep() { hideOptions(); showSleep() }
+        override fun playlists() { hideOptions(); switchPlaylist() }
+        override fun stats() { toggleStats(); bumpOptions() }
+        override fun fullscreen() { setFullscreen(!fullscreen); bumpOptions() }
     }
 
     // ---------- remote / keyboard ----------
@@ -749,8 +705,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun appendDigit(d: Int) {
         if (numberBuffer.length >= 5) numberBuffer = ""
         numberBuffer += d
-        tvNumberEntry.text = numberBuffer
-        tvNumberEntry.visibility = View.VISIBLE
+        ui.numberEntry = numberBuffer
         handler.removeCallbacks(commitNumber)
         handler.postDelayed(commitNumber, 2000)
     }
@@ -759,7 +714,7 @@ class PlayerActivity : AppCompatActivity() {
         handler.removeCallbacks(commitNumber)
         val num = numberBuffer.toIntOrNull()
         numberBuffer = ""
-        tvNumberEntry.visibility = View.GONE
+        ui.numberEntry = ""
         if (num == null) return
         lifecycleScope.launch(DbErrors) {
             val view = listView
@@ -785,12 +740,34 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** The screen took a Back press (closed the list, the options, a number...): its release must not close the player. */
+    private var backTaken = false
+    private var passedOn = false
+
+    private fun passOn(event: KeyEvent): Boolean {
+        passedOn = true
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // A Back press used here (closing the list, the options, a number): its release is kept here too, so nothing
+        // else on the screen takes it for a Back of its own.
+        if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP && backTaken) {
+            backTaken = false
+            return true
+        }
+        passedOn = false
+        val handled = handleKey(event)
+        if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_DOWN) backTaken = handled && !passedOn
+        return handled
+    }
+
+    private fun handleKey(event: KeyEvent): Boolean {
         val code = event.keyCode
         val down = event.action == KeyEvent.ACTION_DOWN
         val first = down && event.repeatCount == 0
-        val listOpen = listPanel.visibility == View.VISIBLE
-        val optionsOpen = topBar.visibility == View.VISIBLE
+        val listOpen = ui.listShown
+        val optionsOpen = ui.optionsShown
 
         if (listOpen) {
             bumpList()
@@ -801,9 +778,7 @@ class PlayerActivity : AppCompatActivity() {
                 KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> { if (down) pageList(-1); return true }
                 KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> { if (down) pageList(1); return true }
             }
-            val handled = super.dispatchKeyEvent(event)
-            if (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN) listChannels.post { onListFocusMoved() }
-            return handled
+            return passOn(event)
         }
 
         if (optionsOpen) {
@@ -812,7 +787,7 @@ class PlayerActivity : AppCompatActivity() {
                 KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_MENU -> { if (first) hideOptions(); return true }
                 KeyEvent.KEYCODE_DPAD_DOWN -> { if (first) hideOptions(); return true }
             }
-            return super.dispatchKeyEvent(event)
+            return passOn(event)
         }
 
         val digit = when (code) {
@@ -868,32 +843,33 @@ class PlayerActivity : AppCompatActivity() {
                 if (numberBuffer.isNotEmpty()) {
                     if (first) {
                         numberBuffer = ""
-                        tvNumberEntry.visibility = View.GONE
+                        ui.numberEntry = ""
                         handler.removeCallbacks(commitNumber)
                     }
                     return true
                 }
-                if (infoPanel.visibility == View.VISIBLE) {
-                    if (first) { handler.removeCallbacks(hideInfo); infoPanel.visibility = View.GONE }
+                if (ui.infoShown) {
+                    if (first) { handler.removeCallbacks(hideInfo); ui.infoShown = false }
                     return true
                 }
             }
         }
-        return super.dispatchKeyEvent(event)
+        return passOn(event)
     }
 
     private fun pageList(dir: Int) {
-        val lm = listChannels.layoutManager as LinearLayoutManager
-        val focused = listChannels.focusedChild?.let { listChannels.getChildAdapterPosition(it) } ?: lm.findFirstVisibleItemPosition()
-        val visible = (lm.findLastVisibleItemPosition() - lm.findFirstVisibleItemPosition()).coerceAtLeast(1)
-        val target = (focused + dir * visible).coerceIn(0, (listAdapter.itemCount - 1).coerceAtLeast(0))
-        focusListRow(target)
-        listCount.text = getString(R.string.list_count, target + 1, listAdapter.itemCount)
+        val count = groups.getOrNull(listGroupIndex)?.pages?.size ?: return
+        val info = ui.listState.layoutInfo
+        val focused = ui.listFocused.takeIf { it >= 0 } ?: ui.listState.firstVisibleItemIndex
+        val visible = (info.visibleItemsInfo.size - 1).coerceAtLeast(1)
+        val target = (focused + dir * visible).coerceIn(0, (count - 1).coerceAtLeast(0))
+        ui.focusListRow(target)
+        ui.listCount = getString(R.string.list_count, target + 1, count)
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (listPanel.visibility == View.VISIBLE) bumpList()
-        if (topBar.visibility == View.VISIBLE) bumpOptions()
+        if (ui.listShown) bumpList()
+        if (ui.optionsShown) bumpOptions()
         return super.dispatchTouchEvent(ev)
     }
 
