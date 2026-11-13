@@ -10,11 +10,30 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
-import android.view.View
-import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -40,11 +59,13 @@ class VodPlayerActivity : AppCompatActivity() {
 
     private lateinit var repo: Repository
     private lateinit var playerView: PlayerView
-    private lateinit var tvError: TextView
+    /** The message over the picture (reconnecting, an error); null = none. */
+    private var error by mutableStateOf<String?>(null)
+    /** The title shows together with the player's controls. */
+    private var controlsShown by mutableStateOf(false)
     private var player: ExoPlayer? = null
     private var url = ""
-    private var title = ""
-    private lateinit var titleView: TextView
+    private var title by mutableStateOf("")
     /** The episodes after this one, in order: they follow by themselves (series only; empty for a movie). */
     private var nextUrls = ArrayList<String>()
     private var nextTitles = ArrayList<String>()
@@ -62,23 +83,45 @@ class VodPlayerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!isTv()) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        setContentView(R.layout.activity_vod_player)
         repo = Repository.get(this)
         val from = savedInstanceState ?: intent.extras
         url = from?.getString(EXTRA_URL) ?: run { finish(); return }
         title = from.getString(EXTRA_TITLE).orEmpty()
         nextUrls = from.getStringArrayList(EXTRA_NEXT_URLS) ?: ArrayList()
         nextTitles = from.getStringArrayList(EXTRA_NEXT_TITLES) ?: ArrayList()
-        playerView = findViewById(R.id.vodPlayerView)
-        tvError = findViewById(R.id.vodError)
-        titleView = findViewById(R.id.vodTitle)
-        titleView.text = title
+        playerView = PlayerView(this).apply {
+            setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+            keepScreenOn = true
+        }
         playerView.resizeMode = ASPECT_MODES[repo.vodAspectMode.coerceIn(0, ASPECT_MODES.size - 1)]
         addAspectButton()
         playerView.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v ->
-            findViewById<View>(R.id.vodTitle).visibility = v
+            controlsShown = v == android.view.View.VISIBLE
         })
+        window.setBackgroundDrawable(null)
+        setContent { Screen() }
         hideSystemUi()
+    }
+
+    /** The picture with the player's own controls, the title above them and a message in the middle. */
+    @Composable
+    private fun Screen() {
+        val wide = resources.configuration.screenWidthDp >= 900
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            AndroidView({ playerView }, Modifier.fillMaxSize())
+            if (controlsShown && title.isNotEmpty()) {
+                Text(
+                    title, color = Color.White, fontSize = if (wide) 19.sp else 17.sp, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0xB3000000), Color.Transparent)))
+                        .padding(start = if (wide) 36.dp else 20.dp, end = if (wide) 36.dp else 20.dp, top = 16.dp, bottom = 32.dp),
+                )
+            }
+            error?.let {
+                Text(it, color = Color.White, fontSize = 15.sp, modifier = Modifier.align(Alignment.Center)
+                    .background(Color(0xEB2C2C2E), RoundedCornerShape(18.dp)).padding(16.dp))
+            }
+        }
     }
 
     /**
@@ -107,7 +150,7 @@ class VodPlayerActivity : AppCompatActivity() {
 
     /** A button among the player's own, before the settings gear, looking like them. */
     private fun addBarButton(icon: Int, label: Int, onClick: () -> Unit) {
-        val gear = playerView.findViewById<View>(androidx.media3.ui.R.id.exo_settings) ?: return
+        val gear = playerView.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_settings) ?: return
         val bar = gear.parent as? android.view.ViewGroup ?: return
         val button = android.widget.ImageButton(this).apply {
             layoutParams = android.view.ViewGroup.LayoutParams(gear.layoutParams)
@@ -154,7 +197,7 @@ class VodPlayerActivity : AppCompatActivity() {
     private fun retryNow() {
         retries = 0
         handler.removeCallbacks(retry)
-        tvError.setText(R.string.reconnecting)
+        error = getString(R.string.reconnecting)
         retry.run()
     }
 
@@ -173,9 +216,8 @@ class VodPlayerActivity : AppCompatActivity() {
         if (nextUrls.isEmpty()) return false
         url = nextUrls.removeAt(0)
         title = nextTitles.removeAtOrNull() ?: ""
-        titleView.text = title
         retries = 0
-        tvError.visibility = View.GONE
+        error = null
         Toast.makeText(this, getString(R.string.next_episode, title), Toast.LENGTH_LONG).show()
         open(p)
         p.play()
@@ -199,18 +241,16 @@ class VodPlayerActivity : AppCompatActivity() {
                 // player does, instead of leaving the movie on an error until the viewer starts it again.
                 if (error.errorCode in 2000..2999 && retries < MAX_RETRIES) {
                     retries++
-                    tvError.setText(R.string.reconnecting)
-                    tvError.visibility = View.VISIBLE
+                    this@VodPlayerActivity.error = getString(R.string.reconnecting)
                     handler.removeCallbacks(retry)
                     handler.postDelayed(retry, 2_000L * retries)
                     return
                 }
-                tvError.text = getString(R.string.err_stream, error.errorCodeName)
-                tvError.visibility = View.VISIBLE
+                this@VodPlayerActivity.error = getString(R.string.err_stream, error.errorCodeName)
             }
 
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY) { tvError.visibility = View.GONE; retries = 0 }
+                if (state == Player.STATE_READY) { error = null; retries = 0 }
                 if (state == Player.STATE_ENDED) {
                     clearPosition()
                     if (!playNext()) finish()
@@ -280,6 +320,9 @@ class VodPlayerActivity : AppCompatActivity() {
                 }
             }
         }
+        // The picture sits inside Compose: until the remote is on one of the player's own buttons, Compose has nothing
+        // focused to give the key to, so the player gets it straight (it shows its controls and takes the focus).
+        if (!playerView.hasFocus() && playerView.dispatchKeyEvent(event)) return true
         return super.dispatchKeyEvent(event)
     }
 
