@@ -320,9 +320,10 @@ class VodPlayerActivity : AppCompatActivity() {
                 }
             }
         }
-        // The picture sits inside Compose: until the remote is on one of the player's own buttons, Compose has nothing
-        // focused to give the key to, so the player gets it straight (it shows its controls and takes the focus).
-        if (!playerView.hasFocus() && playerView.dispatchKeyEvent(event)) return true
+        // The player and its controls sit inside Compose, which did not pass the remote's keys on to them: the controls
+        // never came up. The player gets every key first (it shows its controls, and gives OK to the focused button);
+        // what it leaves (moving between its buttons, Back) goes the usual way.
+        if (event.keyCode != KeyEvent.KEYCODE_BACK && playerView.dispatchKeyEvent(event)) return true
         return super.dispatchKeyEvent(event)
     }
 

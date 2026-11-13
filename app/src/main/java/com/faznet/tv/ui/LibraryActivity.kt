@@ -246,16 +246,18 @@ class LibraryActivity : AppCompatActivity() {
     @Composable
     private fun Posters(modifier: Modifier) {
         val placeholder = painterResource(if (series) R.drawable.ic_series else R.drawable.ic_movie)
-        Box(modifier) {
+        BoxWithConstraints(modifier) {
+            // Five or so posters a row on a TV, as before: two rows on the screen, not one of three big ones.
+            val columns = (maxWidth.value / 120).toInt().coerceIn(2, 7)
             val list = shown
             val gridState = rememberLazyGridState()
             LaunchedEffect(shownVersion) { if (gridState.firstVisibleItemIndex > 0) gridState.scrollToItem(0) }
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(140.dp),
+                columns = GridCells.Fixed(columns),
                 state = gridState,
                 // Fewer, bigger posters with air between them (Apple TV), room for the focused one to grow.
                 contentPadding = PaddingValues(start = 12.dp, end = 16.dp, top = 16.dp, bottom = 28.dp),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
@@ -284,11 +286,12 @@ class LibraryActivity : AppCompatActivity() {
                 focusedColor = Fz.surface,
                 focusedBrush = null,
                 outline = false,
-                focusScale = 1.1f,
+                // Grown more, it covered the title under it.
+                focusScale = 1.06f,
             ) {
                 Box(Modifier.fillMaxSize().padding(2.dp).clip(RoundedCornerShape(10.dp)).posterImage(item.image?.takeIf { it.isNotBlank() }, placeholder))
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
             Text(item.title, color = if (focused) Color.White else Fz.text.copy(alpha = 0.75f), fontSize = 13.sp,
                 fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Medium, maxLines = 2, minLines = 2,
                 overflow = TextOverflow.Ellipsis, lineHeight = 17.sp)
