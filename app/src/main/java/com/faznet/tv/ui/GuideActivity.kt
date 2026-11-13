@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -101,13 +102,13 @@ class GuideActivity : AppCompatActivity() {
 
     // The programme on the right
     private var shownChannel by mutableStateOf<Channel?>(null)
-    private var shownIndex by mutableStateOf(-1)
+    private var shownIndex by mutableIntStateOf(-1)
     /** The channel's guide id; null = the account has no guide for it. */
     private var streamId by mutableStateOf<String?>(null)
     private var programmes by mutableStateOf<List<XProgramme>>(emptyList())
     private var loadingProgrammes by mutableStateOf(false)
     /** Increased when a new programme list is shown: it scrolls to what is on now. */
-    private var programmesVersion by mutableStateOf(0)
+    private var programmesVersion by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

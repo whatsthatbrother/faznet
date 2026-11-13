@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -98,7 +99,7 @@ class LibraryActivity : AppCompatActivity() {
     private var failed by mutableStateOf(false)
     private var query by mutableStateOf("")
     /** Increased when a new category is shown: the grid goes back to the top. */
-    private var shownVersion by mutableStateOf(0)
+    private var shownVersion by mutableIntStateOf(0)
     private var loadJob: Job? = null
     private var filterJob: Job? = null
 

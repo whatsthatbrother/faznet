@@ -58,7 +58,6 @@
     <string name="hint_long_press">Tip: long-press a channel to add it to favorites</string>
     <string name="use_ffmpeg">Software audio decoder (FFmpeg) — fixes channels without sound</string>
     <string name="device_title">Upload from the web</string>
-    <string name="device_open_site">On your phone or PC open (or scan the QR):</string>
     <string name="device_mac">MAC address</string>
     <string name="device_pin">PIN</string>
     <string name="device_sync">Sync now</string>

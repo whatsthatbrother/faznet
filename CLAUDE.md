@@ -25,9 +25,17 @@ Known provider behaviour: Full HD channels often send a bad first second (pictur
 re-opening); HTTP 403 when zapping fast (account connection limit).
 
 ## Code map (app/src/main/java/com/faznet/tv)
-- `ui/PlayerActivity.kt` — live player. Fresh player per channel, clean start (hidden until the picture runs),
-  watchdogs in `player/PlaybackWatch.kt`: frozen picture, stuck playback, stall, 403 retries, last-resort re-open
-  (15→30→60→120 s, counts frames). The channel list reads pages (`data/ChannelPages.kt`).
+- Every screen is Compose (no XML layouts since 5.0.8); dialogs are still Material `AlertDialog`s.
+- `ui/PlayerActivity.kt` — live player: channels, groups and the remote's keys. `ui/LivePlayback.kt` plays one channel:
+  fresh player per channel, clean start (hidden until the picture runs), watchdogs in `player/PlaybackWatch.kt`: frozen
+  picture, stuck playback, stall, 403 retries, last-resort re-open (15→30→60→120 s, counts frames). The picture is
+  Media3's `PlayerView` inside Compose; everything over it is `ui/PlayerOverlay.kt` (state in `PlayerOverlayState`,
+  loading circle + message in `PlayerMessages`). Channel rows read pages (`data/ChannelPages.kt` via
+  `ui/compose/ChannelRows.kt`, also used by the guide).
+- `ui/VodPlayerActivity.kt` (movies, episodes, catch-up: Media3's own controls), `ui/LibraryActivity.kt` (movie/series
+  posters), `ui/SeriesActivity.kt`, `ui/GuideActivity.kt`, `ui/PlaylistsActivity.kt` (list + add form),
+  `ui/DeviceActivity.kt` (MAC + PIN). Shared screen pieces in `ui/compose/Widgets.kt` (back button, title, search and
+  form fields that open the keyboard only on OK, side list row, pill button, loading/retry/empty).
 - `player/PlayerFactory.kt` (ExoPlayer/Media3 1.11 + Jellyfin FFmpeg audio 1.9.0+1, the newest Jellyfin build). VLC was removed: it almost never helped and was 80% of the APK.
 - `ui/MainActivity.kt` (thin host), `ui/HomeViewModel.kt`, `ui/compose/HomeScreen.kt` — Compose home (groups, channel grid
   from Paging, top bar, update button). `ui/compose/Theme.kt` — colours, `FocusBox` (remote + touch), `PivotScroll`

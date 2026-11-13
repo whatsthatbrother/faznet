@@ -59,17 +59,17 @@ fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
 
 /** A spinning circle in the middle of the space it is given. */
 @Composable
-fun LoadingBox(modifier: Modifier = Modifier.fillMaxSize()) {
-    Box(modifier, contentAlignment = Alignment.Center) {
+fun LoadingBox(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(44.dp))
     }
 }
 
 /** "Could not reach the server": a button that asks again, with the remote's focus on it. */
 @Composable
-fun RetryBox(text: String, onRetry: () -> Unit, modifier: Modifier = Modifier.fillMaxSize(), takeFocus: Boolean = true) {
+fun RetryBox(text: String, onRetry: () -> Unit, modifier: Modifier = Modifier, takeFocus: Boolean = true) {
     val requester = remember { FocusRequester() }
-    Box(modifier, contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         FocusBox(
             onClick = onRetry, modifier = Modifier.focusRequester(requester), shape = RoundedCornerShape(14.dp),
             color = Fz.surface, focusedColor = Fz.focusLight, focusedBrush = null, outline = false, focusScale = 1.04f,
@@ -83,8 +83,8 @@ fun RetryBox(text: String, onRetry: () -> Unit, modifier: Modifier = Modifier.fi
 
 /** A quiet message in the middle (an empty list). */
 @Composable
-fun EmptyText(text: String, modifier: Modifier = Modifier.fillMaxSize()) {
-    Box(modifier, contentAlignment = Alignment.Center) { Text(text, color = Fz.dim, fontSize = 16.sp) }
+fun EmptyText(text: String, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(text, color = Fz.dim, fontSize = 16.sp) }
 }
 
 /**

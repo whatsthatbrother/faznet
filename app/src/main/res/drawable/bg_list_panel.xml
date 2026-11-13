@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Channel list over the picture: a floating dark glass panel (tvOS) -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#EB1C1C1E" />
-    <corners android:radius="28dp" />
-</shape>

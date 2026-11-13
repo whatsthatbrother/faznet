@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,7 +76,7 @@ class PlaylistsActivity : AppCompatActivity() {
     private var playlists by mutableStateOf<List<Playlist>>(emptyList())
     private var activeId by mutableStateOf<String?>(null)
     /** Increased when the list changed: the active playlist takes the remote's focus once. */
-    private var listVersion by mutableStateOf(0)
+    private var listVersion by mutableIntStateOf(0)
     private var adding by mutableStateOf(false)
 
     // The add form

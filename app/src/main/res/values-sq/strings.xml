@@ -57,7 +57,6 @@
     <string name="hint_long_press">Këshillë: mbaje shtypur një kanal për ta shtuar te të preferuarat</string>
     <string name="use_ffmpeg">Dekoder audio me softuer (FFmpeg) — rregullon kanalet pa zë</string>
     <string name="device_title">Ngarko nga webi</string>
-    <string name="device_open_site">Në telefon ose PC hap (ose skano QR):</string>
     <string name="device_mac">MAC adresa</string>
     <string name="device_pin">PIN</string>
     <string name="device_sync">Sinkronizo tani</string>

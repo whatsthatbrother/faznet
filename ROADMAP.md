@@ -7,8 +7,10 @@ Work happens on branch `v5`; `main` is what users run. Nothing is published with
 1. [x] Phase 0: real git working copy, 4.0.3 source on GitHub, timing logs, measuring tools (`tools/`)
 2. [x] Phase 1: quick wins without restructuring (library upgrades, byte M3U parser, channel opening, freezes, Home)
 3. [x] Phase 2: data layer (Hilt, Room, streaming import, migration of favourites and recents; playlists, MAC + PIN stay in preferences)
-4. [ ] Phase 3: player split in pieces with tests (engines, watchdog, ViewModel, Compose overlay)
-5. [ ] Phase 4: redesign, one design system, every screen in Compose (2-3 looks to choose from on the TV)
+4. [ ] Phase 3: player split in pieces with tests (engines, watchdog, ViewModel, Compose overlay). Done: watchdog with
+   tests, VLC gone, playback in LivePlayback, Compose overlay (2026-11-13). Not done: a ViewModel for the player.
+5. [x] Phase 4: redesign, one design system, every screen in Compose. The tvOS look went out as 5.0.0; the last XML
+   screens (library, device, playlists, guide, movie player, live player overlays) moved to Compose on 2026-11-13.
 6. [ ] Phase 5: baseline profile from the emulator, phones and tablets, clean-up, 5.0.0
 
 Targets with 50 000 channels on the Mi TV Stick: under 5% late frames, 99% of frames under 35 ms, restart to list under

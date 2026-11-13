@@ -166,15 +166,4 @@
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:windowFullscreen">true</item>
     </style>
-
-    <style name="IconButton">
-        <item name="android:layout_width">48dp</item>
-        <item name="android:layout_height">48dp</item>
-        <item name="android:padding">12dp</item>
-        <item name="android:background">@drawable/bg_icon_button</item>
-        <item name="android:focusable">true</item>
-        <item name="android:clickable">true</item>
-        <item name="android:scaleType">fitCenter</item>
-        <item name="tint">@color/icon_tint</item>
-    </style>
 </resources>
