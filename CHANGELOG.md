@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.8
+
+### Improved
+- Movies, series, the TV guide, playlists and the device screen have a new look that matches the home screen, and move more smoothly with the remote.
+- Movies and series: posters are shown five to a row, and the focused poster no longer covers its title.
+- Live TV: the channel list, info bar, options and number entry over the picture have the new look.
+- Adding a playlist happens on the screen itself instead of in a pop-up; typing starts when you press OK.
+
+### Fixed
+- Movie player: the remote's keys reach the player's controls.
+
 ## 5.0.7
 
 ### Improved
