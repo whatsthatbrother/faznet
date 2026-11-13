@@ -183,3 +183,22 @@ fun SideItem(
 /** The whole screen's background, with the TV's safe margins (overscan) when [tv]. */
 fun Modifier.screen(tv: Boolean): Modifier =
     background(ScreenBrush).then(if (tv) Modifier.padding(horizontal = 32.dp, vertical = 18.dp) else Modifier)
+
+/** A rounded button that turns white under the remote (tvOS); [primary] is blue, the others grey. */
+@Composable
+fun PillButton(
+    text: String,
+    primary: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+) {
+    FocusBox(
+        onClick = onClick, onLongClick = onLongClick, modifier = modifier.height(50.dp),
+        shape = RoundedCornerShape(25.dp), color = if (primary) Fz.accent else Fz.surface2, focusedColor = Fz.focusLight,
+        focusedBrush = null, outline = false, focusScale = 1.06f,
+    ) { focused ->
+        Text(text, color = if (focused) Fz.onLight else Fz.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, modifier = Modifier.align(Alignment.Center).padding(horizontal = 22.dp))
+    }
+}
