@@ -202,3 +202,59 @@ fun PillButton(
             maxLines = 1, modifier = Modifier.align(Alignment.Center).padding(horizontal = 22.dp))
     }
 }
+
+/**
+ * A text field of a form that suits the remote, like [SearchField]: OK starts typing, moving over it does not open
+ * the keyboard. [password] hides what is typed.
+ */
+@Composable
+fun FormField(
+    value: String,
+    onValue: (String) -> Unit,
+    hint: String,
+    modifier: Modifier = Modifier,
+    keyboardType: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text,
+    password: Boolean = false,
+) {
+    var editing by remember { mutableStateOf(false) }
+    val field = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    FocusBox(
+        onClick = { editing = true },
+        modifier = modifier.fillMaxWidth().height(54.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = Fz.surface2,
+        focusedColor = if (editing) Fz.surface2 else Fz.focusLight,
+        focusedBrush = null,
+        outline = false,
+        focusScale = if (editing) 1f else 1.02f,
+    ) { focused ->
+        val light = focused && !editing
+        Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
+            if (editing) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValue,
+                    singleLine = true,
+                    textStyle = TextStyle(color = Fz.text, fontSize = 16.sp),
+                    cursorBrush = SolidColor(Fz.accent),
+                    visualTransformation = if (password) androidx.compose.ui.text.input.PasswordVisualTransformation()
+                    else androidx.compose.ui.text.input.VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); editing = false }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(field)
+                        .onFocusChanged { if (!it.hasFocus && editing) editing = false },
+                )
+                if (value.isEmpty()) Text(hint, color = Fz.dim, fontSize = 16.sp)
+                LaunchedEffect(Unit) {
+                    runCatching { field.requestFocus() }
+                    keyboard?.show()
+                }
+            } else {
+                val shown = if (password) "•".repeat(value.length) else value
+                Text(shown.ifEmpty { hint }, color = if (light) Fz.onLight else if (value.isEmpty()) Fz.dim else Fz.text,
+                    fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
