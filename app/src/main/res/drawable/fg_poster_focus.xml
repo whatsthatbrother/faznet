@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Drawn OVER the poster image: as a background it sat under the picture (centerCrop covers it all), so the focused
-     poster could not be told from the others on the TV. A white ring, as on the Apple TV. -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true">
-        <shape><solid android:color="@android:color/transparent" /><stroke android:width="3dp" android:color="#FFFFFF" /><corners android:radius="12dp" /></shape>
-    </item>
-    <item android:drawable="@android:color/transparent" />
-</selector>

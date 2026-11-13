@@ -2,23 +2,54 @@ package com.faznet.tv.ui
 
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.ImageView
-import android.widget.TextView
+import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.widget.doAfterTextChanged
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import coil3.load
-import coil3.request.error
-import coil3.request.placeholder
 import com.faznet.tv.R
 import com.faznet.tv.data.LibraryCache
 import com.faznet.tv.data.Repository
@@ -26,7 +57,19 @@ import com.faznet.tv.data.XSeries
 import com.faznet.tv.data.XVod
 import com.faznet.tv.data.XtreamAccount
 import com.faznet.tv.data.XtreamApi
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.faznet.tv.ui.compose.BackButton
+import com.faznet.tv.ui.compose.EmptyText
+import com.faznet.tv.ui.compose.FaznetTheme
+import com.faznet.tv.ui.compose.FocusBox
+import com.faznet.tv.ui.compose.Fz
+import com.faznet.tv.ui.compose.LoadingBox
+import com.faznet.tv.ui.compose.PivotScroll
+import com.faznet.tv.ui.compose.RetryBox
+import com.faznet.tv.ui.compose.ScreenTitle
+import com.faznet.tv.ui.compose.SearchField
+import com.faznet.tv.ui.compose.SideItem
+import com.faznet.tv.ui.compose.posterImage
+import com.faznet.tv.ui.compose.screen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -37,97 +80,70 @@ import kotlinx.coroutines.withContext
 class LibraryActivity : AppCompatActivity() {
 
     /** One poster in the grid (a movie or a series). */
-    private class Item(val id: String, val title: String, val image: String?, val sub: String, val play: () -> Unit) {
+    private class Item(val title: String, val image: String?, val sub: String, val play: () -> Unit) {
         /** For the search: lowered once, not at every letter for every title. */
         val key = title.lowercase()
     }
 
     private lateinit var account: XtreamAccount
     private var series = false
-    private lateinit var categories: GroupAdapter
-    private lateinit var grid: PosterAdapter
-    private lateinit var progress: View
-    private lateinit var empty: TextView
-    private lateinit var search: EditText
+
+    private var categories by mutableStateOf<List<GroupItem>>(emptyList())
+    private var selected by mutableStateOf(ALL)
+    /** Every title of the open category; [shown] is what matches the search. */
     private var items: List<Item> = emptyList()
+    private var shown by mutableStateOf<List<Item>>(emptyList())
+    private var loading by mutableStateOf(true)
+    /** The last load could not reach the server: the screen says so, and OK asks again. */
+    private var failed by mutableStateOf(false)
+    private var query by mutableStateOf("")
+    /** Increased when a new category is shown: the grid goes back to the top. */
+    private var shownVersion by mutableStateOf(0)
     private var loadJob: Job? = null
     private var filterJob: Job? = null
-    private var selected = ALL
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_library)
-        findViewById<View>(android.R.id.content).applyTvSafeArea()
-        val repo = Repository.get(this)
-        account = XtreamAccount.from(repo.activePlaylist()) ?: run { finish(); return }
+        account = XtreamAccount.from(Repository.get(this).activePlaylist()) ?: run { finish(); return }
         series = intent.getBooleanExtra(EXTRA_SERIES, false)
-        findViewById<TextView>(R.id.libTitle).setText(if (series) R.string.series else R.string.movies)
-        findViewById<View>(R.id.libBack).setOnClickListener { finish() }
-        progress = findViewById(R.id.libProgress)
-        empty = findViewById<TextView>(R.id.libEmpty).apply {
-            setBackgroundResource(R.drawable.bg_choice)
-            val pad = (16 * resources.displayMetrics.density).toInt()
-            setPadding(pad, pad / 2, pad, pad / 2)
-            gravity = android.view.Gravity.CENTER
-        }
-        search = findViewById(R.id.libSearch)
-        search.doAfterTextChanged { applyFilter(typing = true) }
-
-        val portrait = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-        categories = GroupAdapter(horizontal = portrait, selectOnFocus = !portrait, onSelect = { key, fromClick -> loadItems(key, fromClick) })
-        findViewById<RecyclerView>(R.id.libCategories).apply {
-            layoutManager = LinearLayoutManager(this@LibraryActivity, if (portrait) RecyclerView.HORIZONTAL else RecyclerView.VERTICAL, false)
-            adapter = categories
-            itemAnimator = null
-        }
-        grid = PosterAdapter()
-        val widthDp = resources.configuration.screenWidthDp - if (portrait) 20 else 260
-        findViewById<RecyclerView>(R.id.libItems).apply {
-            // Fewer, bigger posters with air between them (Apple TV)
-            layoutManager = GridLayoutManager(this@LibraryActivity, (widthDp / 140).coerceIn(2, 7))
-            adapter = grid
-            itemAnimator = null
-        }
-
-        lifecycleScope.launch {
-            progress.visibility = View.VISIBLE
-            val cats = if (series) XtreamApi.seriesCategories(account) else XtreamApi.vodCategories(account)
-            val list = ArrayList<GroupItem>()
-            list.add(GroupItem(ALL, getString(R.string.library_all), -1))
-            cats.forEach { list.add(GroupItem(it.id, it.name, -1)) }
-            categories.submit(list, ALL)
-            val first = if (cats.isNotEmpty()) cats.first().id else ALL
-            loadItems(first)
-            // The remote starts on the category being shown, not on the Back button (one OK there closed the screen).
-            if (!portrait) findViewById<RecyclerView>(R.id.libCategories).let { rv ->
-                val at = list.indexOfFirst { it.key == first }.coerceAtLeast(0)
-                rv.post { rv.findViewHolderForAdapterPosition(at)?.itemView?.requestFocus() }
+        val tv = isTv()
+        window.setBackgroundDrawable(null)
+        setContent {
+            FaznetTheme {
+                if (tv) {
+                    @OptIn(ExperimentalFoundationApi::class)
+                    CompositionLocalProvider(LocalBringIntoViewSpec provides PivotScroll) { Screen(tv) }
+                } else Screen(tv)
             }
+        }
+        lifecycleScope.launch {
+            val cats = if (series) XtreamApi.seriesCategories(account) else XtreamApi.vodCategories(account)
+            categories = listOf(GroupItem(ALL, getString(R.string.library_all), -1)) + cats.map { GroupItem(it.id, it.name, -1) }
+            loadItems(if (cats.isNotEmpty()) cats.first().id else ALL)
         }
     }
 
     /** [now] false = the remote is only passing over the category: load it once the remote stops there. */
     private fun loadItems(key: String, now: Boolean = true) {
         selected = key
-        categories.select(key)
         loadJob?.cancel()
         filterJob?.cancel()
-        progress.visibility = View.VISIBLE
-        empty.visibility = View.GONE
+        loading = true
+        failed = false
         loadJob = lifecycleScope.launch {
             if (!now) delay(CATEGORY_DELAY_MS)
             val cat = key.takeUnless { it == ALL }
-            // "All" can be tens of thousands of titles: the tiles are made off the main thread too.
-            failed = false
             // A category seen before in this session comes from memory, not from the server again.
             val cacheKey = LibraryCache.key(account, series, cat)
+            var gotNothing = false
+            // "All" can be tens of thousands of titles: the tiles are made off the main thread too.
             items = if (series) {
                 val found = LibraryCache.get<XSeries>(cacheKey)
                     ?: XtreamApi.series(account, cat)?.also { LibraryCache.put(cacheKey, it) }
-                    ?: emptyList<XSeries>().also { failed = true }
+                    ?: emptyList<XSeries>().also { gotNothing = true }
                 withContext(Dispatchers.Default) {
                     found.map { s ->
-                        Item(s.id, s.name, s.cover, s.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" } ?: "") {
+                        Item(s.name, s.cover, s.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" } ?: "") {
                             SeriesActivity.start(this@LibraryActivity, s.id, s.name, s.cover, s.plot, s.rating)
                         }
                     }
@@ -135,16 +151,18 @@ class LibraryActivity : AppCompatActivity() {
             } else {
                 val found = LibraryCache.get<XVod>(cacheKey)
                     ?: XtreamApi.vodStreams(account, cat)?.also { LibraryCache.put(cacheKey, it) }
-                    ?: emptyList<XVod>().also { failed = true }
+                    ?: emptyList<XVod>().also { gotNothing = true }
                 withContext(Dispatchers.Default) {
                     found.map { v ->
                         val url = XtreamApi.vodUrl(account, v)
-                        Item(v.id, v.name, v.icon, listOf(v.year, v.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" })
+                        Item(v.name, v.icon, listOf(v.year, v.rating.takeIf { it.isNotEmpty() && it != "0" }?.let { "★ $it" })
                             .filter { !it.isNullOrEmpty() }.joinToString(" · ")) { VodPlayerActivity.start(this@LibraryActivity, url, v.name) }
                     }
                 }
             }
-            progress.visibility = View.GONE
+            failed = gotNothing
+            loading = false
+            shownVersion++
             applyFilter()
         }
     }
@@ -155,72 +173,125 @@ class LibraryActivity : AppCompatActivity() {
      */
     private fun applyFilter(typing: Boolean = false) {
         filterJob?.cancel()
-        val q = search.text.toString().trim().lowercase()
+        val q = query.trim().lowercase()
         val all = items
-        if (q.isEmpty()) { show(all); return }
+        if (q.isEmpty()) { shown = all; return }
         filterJob = lifecycleScope.launch {
             if (typing) delay(SEARCH_DELAY_MS)
-            show(withContext(Dispatchers.Default) { all.filter { it.key.contains(q) } })
+            shown = withContext(Dispatchers.Default) { all.filter { it.key.contains(q) } }
         }
     }
 
-    private fun show(shown: List<Item>) {
-        grid.submit(shown)
-        val show = shown.isEmpty() && progress.visibility != View.VISIBLE
-        // The server did not answer: say so, and OK on the message asks again (before it read "nothing here", as if the
-        // account had no movies, with no way to try again but choosing another category).
-        empty.text = getString(if (failed) R.string.err_library else R.string.no_items)
-        empty.isFocusable = failed
-        empty.isClickable = failed
-        empty.setOnClickListener(if (failed) View.OnClickListener { loadItems(selected) } else null)
-        empty.visibility = if (show) View.VISIBLE else View.GONE
-        if (show && failed) empty.requestFocus()
+    @Composable
+    private fun Screen(tv: Boolean) {
+        BoxWithConstraints(Modifier.fillMaxSize().screen(tv)) {
+            val wide = maxWidth >= 600.dp
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().height(if (wide) 76.dp else 64.dp).padding(start = 8.dp, end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BackButton(::finish)
+                    ScreenTitle(stringResource(if (series) R.string.series else R.string.movies), Modifier.weight(1f))
+                    SearchField(
+                        query, { query = it; applyFilter(typing = true) }, stringResource(R.string.library_search),
+                        Modifier.width(if (wide) 300.dp else 170.dp),
+                    )
+                }
+                if (wide) {
+                    Row(Modifier.fillMaxSize()) {
+                        Categories(vertical = true, tv = tv, modifier = Modifier.width(250.dp).fillMaxHeight())
+                        Spacer(Modifier.width(8.dp))
+                        Posters(Modifier.weight(1f).fillMaxHeight())
+                    }
+                } else {
+                    Categories(vertical = false, tv = tv, modifier = Modifier.fillMaxWidth())
+                    Posters(Modifier.fillMaxSize())
+                }
+            }
+        }
     }
 
-    /** The last load could not reach the server. */
-    private var failed = false
-
-    private inner class PosterAdapter : RecyclerView.Adapter<PosterAdapter.VH>() {
-        private var list: List<Item> = emptyList()
-
-        fun submit(l: List<Item>) {
-            list = l
-            notifyDataSetChanged()
+    @Composable
+    private fun Categories(vertical: Boolean, tv: Boolean, modifier: Modifier) {
+        val cats = categories
+        if (cats.isEmpty()) return
+        // The remote starts on the category being shown, not on the back button (one OK there closed the screen).
+        val start = remember { FocusRequester() }
+        val first = remember(cats) { cats.indexOfFirst { it.key == selected }.coerceAtLeast(0) }
+        val item: @Composable (Int, GroupItem) -> Unit = { i, g ->
+            SideItem(
+                g.title, selected = g.key == selected, vertical = vertical,
+                onClick = { loadItems(g.key) },
+                // TV: moving over a category opens it, like a TV guide.
+                onFocus = { f -> if (f && vertical && tv && g.key != selected) loadItems(g.key, now = false) },
+                modifier = if (i == first) Modifier.focusRequester(start) else Modifier,
+            )
         }
-
-        inner class VH(v: View) : RecyclerView.ViewHolder(v) {
-            val image: ImageView = v.findViewById<ImageView>(R.id.posterImage).apply { clipToOutline = true } // rounded poster
-            val title: TextView = v.findViewById(R.id.posterTitle)
-            val sub: TextView = v.findViewById(R.id.posterSub)
+        if (vertical) {
+            LazyColumn(modifier, contentPadding = PaddingValues(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                itemsIndexed(cats) { i, g -> item(i, g) }
+            }
+        } else {
+            LazyRow(modifier.padding(bottom = 6.dp), contentPadding = PaddingValues(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                itemsIndexed(cats) { i, g -> item(i, g) }
+            }
         }
+        if (tv) LaunchedEffect(cats) { delay(80); runCatching { start.requestFocus() } }
+    }
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-            VH(LayoutInflater.from(parent.context).inflate(R.layout.item_poster, parent, false))
-
-        override fun getItemCount() = list.size
-
-        override fun onBindViewHolder(h: VH, position: Int) {
-            val item = list[position]
-            h.title.text = item.title
-            h.sub.text = item.sub
-            h.image.load(item.image) {
-                placeholder(R.drawable.ic_tv)
-                error(R.drawable.ic_tv)
+    @Composable
+    private fun Posters(modifier: Modifier) {
+        val placeholder = painterResource(if (series) R.drawable.ic_series else R.drawable.ic_movie)
+        Box(modifier) {
+            val list = shown
+            val gridState = rememberLazyGridState()
+            LaunchedEffect(shownVersion) { if (gridState.firstVisibleItemIndex > 0) gridState.scrollToItem(0) }
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(140.dp),
+                state = gridState,
+                // Fewer, bigger posters with air between them (Apple TV), room for the focused one to grow.
+                contentPadding = PaddingValues(start = 12.dp, end = 16.dp, top = 16.dp, bottom = 28.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                // The place is the key: server ids repeat on some panels, and a repeated key closes the app.
+                items(list.size, key = { it }, contentType = { "poster" }) { i -> Poster(list[i], placeholder) }
             }
-            h.itemView.setOnClickListener { item.play() }
-            // Apple TV: the focused poster lifts above its neighbours and grows, with a white ring (fg_poster_focus). On a
-            // TV the others step back a little while the remote is in the grid, so the one OK will play stands out.
-            val tv = !h.itemView.isInTouchMode
-            h.itemView.alpha = if (h.itemView.isFocused || !tv) 1f else UNFOCUSED_ALPHA
-            // A recycled tile may still be grown from the poster it showed before.
-            (if (h.itemView.isFocused) 1.14f else 1f).let { h.itemView.scaleX = it; h.itemView.scaleY = it }
-            h.itemView.translationZ = if (h.itemView.isFocused) 16f * h.itemView.resources.displayMetrics.density else 0f
-            h.itemView.setOnFocusChangeListener { v, f ->
-                val sc = if (f) 1.14f else 1f
-                v.animate().scaleX(sc).scaleY(sc).alpha(if (f || v.isInTouchMode) 1f else UNFOCUSED_ALPHA)
-                    .translationZ(if (f) 16f * v.resources.displayMetrics.density else 0f)
-                    .setDuration(160).start()
+            when {
+                loading -> LoadingBox()
+                failed && list.isEmpty() -> RetryBox(stringResource(R.string.err_library), { loadItems(selected) })
+                list.isEmpty() -> EmptyText(stringResource(R.string.no_items))
             }
+        }
+    }
+
+    @Composable
+    private fun Poster(item: Item, placeholder: Painter) {
+        var focused by remember { mutableStateOf(false) }
+        Column {
+            // Apple TV: the focused poster lifts above its neighbours and grows, with a white ring.
+            FocusBox(
+                onClick = item.play,
+                onFocus = { focused = it },
+                modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f),
+                shape = RoundedCornerShape(12.dp),
+                color = Fz.surface,
+                focusedColor = Fz.surface,
+                focusedBrush = null,
+                outline = false,
+                focusScale = 1.1f,
+            ) {
+                Box(Modifier.fillMaxSize().padding(2.dp).clip(RoundedCornerShape(10.dp)).posterImage(item.image?.takeIf { it.isNotBlank() }, placeholder))
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(item.title, color = if (focused) Color.White else Fz.text.copy(alpha = 0.75f), fontSize = 13.sp,
+                fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Medium, maxLines = 2, minLines = 2,
+                overflow = TextOverflow.Ellipsis, lineHeight = 17.sp)
+            if (item.sub.isNotEmpty()) Text(item.sub, color = Fz.dim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 
@@ -228,7 +299,6 @@ class LibraryActivity : AppCompatActivity() {
         private const val ALL = "\u0000all"
         private const val CATEGORY_DELAY_MS = 350L
         private const val SEARCH_DELAY_MS = 250L
-        private const val UNFOCUSED_ALPHA = 0.7f
         const val EXTRA_SERIES = "series"
 
         fun start(c: Context, series: Boolean) =

@@ -26,6 +26,7 @@ import coil3.size.Precision
 import coil3.size.Scale
 import coil3.toBitmap
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -36,7 +37,10 @@ import kotlin.math.roundToInt
  * channels appears much sooner this way than with a composable image per channel, and a logo arriving only
  * repaints its own tile.
  */
-fun Modifier.channelLogo(url: String?, placeholder: Painter?): Modifier = this then LogoElement(url, placeholder)
+fun Modifier.channelLogo(url: String?, placeholder: Painter?): Modifier = this then LogoElement(url, placeholder, false)
+
+/** A poster: like [channelLogo], but the picture fills the element and what sticks out is cut off (centre crop). */
+fun Modifier.posterImage(url: String?, placeholder: Painter?): Modifier = this then LogoElement(url, placeholder, true)
 
 /** Logos that just failed: a dead server must not be asked again every time a tile scrolls back into view. */
 private object FailedLogos {
@@ -57,8 +61,12 @@ private object FailedLogos {
     }
 }
 
-private class LogoElement(private val url: String?, private val placeholder: Painter?) : ModifierNodeElement<LogoNode>() {
-    override fun create() = LogoNode(url, placeholder)
+private class LogoElement(
+    private val url: String?,
+    private val placeholder: Painter?,
+    private val crop: Boolean,
+) : ModifierNodeElement<LogoNode>() {
+    override fun create() = LogoNode(url, placeholder, crop)
 
     override fun update(node: LogoNode) = node.update(url, placeholder)
 
@@ -67,12 +75,12 @@ private class LogoElement(private val url: String?, private val placeholder: Pai
         properties["url"] = url
     }
 
-    override fun equals(other: Any?) = other is LogoElement && other.url == url && other.placeholder === placeholder
+    override fun equals(other: Any?) = other is LogoElement && other.url == url && other.placeholder === placeholder && other.crop == crop
 
-    override fun hashCode() = url.hashCode() * 31 + placeholder.hashCode()
+    override fun hashCode() = (url.hashCode() * 31 + placeholder.hashCode()) * 31 + crop.hashCode()
 }
 
-private class LogoNode(private var url: String?, private var placeholder: Painter?) :
+private class LogoNode(private var url: String?, private var placeholder: Painter?, private val crop: Boolean) :
     Modifier.Node(), DrawModifierNode, LayoutAwareModifierNode, CompositionLocalConsumerModifierNode {
 
     private var image: ImageBitmap? = null
@@ -118,7 +126,7 @@ private class LogoNode(private var url: String?, private var placeholder: Painte
             ImageRequest.Builder(context)
                 .data(u)
                 .size(measured.width, measured.height)
-                .scale(Scale.FIT)
+                .scale(if (crop) Scale.FILL else Scale.FIT)
                 .precision(Precision.INEXACT)
                 .target(
                     onSuccess = { image -> show(image) },
@@ -135,7 +143,18 @@ private class LogoNode(private var url: String?, private var placeholder: Painte
 
     override fun ContentDrawScope.draw() {
         val img = image
-        if (img != null) {
+        if (img != null && crop) {
+            // Only the middle of the picture that fits the element's shape is drawn.
+            val scale = max(size.width / img.width, size.height / img.height)
+            val w = (size.width / scale).roundToInt().coerceAtMost(img.width)
+            val h = (size.height / scale).roundToInt().coerceAtMost(img.height)
+            drawImage(
+                img,
+                srcOffset = IntOffset((img.width - w) / 2, (img.height - h) / 2),
+                srcSize = IntSize(w, h),
+                dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+            )
+        } else if (img != null) {
             val scale = min(size.width / img.width, size.height / img.height)
             val w = (img.width * scale).roundToInt()
             val h = (img.height * scale).roundToInt()
@@ -147,7 +166,8 @@ private class LogoNode(private var url: String?, private var placeholder: Painte
         } else {
             placeholder?.let { p ->
                 val own = p.intrinsicSize
-                val scale = min(size.width / own.width, size.height / own.height)
+                // A poster without a picture: a small sign in the middle, not one as big as the poster.
+                val scale = min(size.width / own.width, size.height / own.height) * (if (crop) 0.4f else 1f)
                 val w = own.width * scale
                 val h = own.height * scale
                 translate((size.width - w) / 2, (size.height - h) / 2) { with(p) { draw(Size(w, h)) } }
