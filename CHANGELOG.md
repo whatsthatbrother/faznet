@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.0.9
+
+### Fixed
+- Live TV on slower TV boxes (Google MX10): standard-definition channels no longer keep stopping to buffer every few minutes.
+
 ## 5.0.8
 
 ### Improved

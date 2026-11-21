@@ -106,6 +106,21 @@ internal class LivePlayback(
     /** If a live stream stays stuck in buffering, re-open it at the live edge instead of freezing. */
     private val stallWatchdog = Runnable {
         if (player?.playbackState == Player.STATE_BUFFERING) {
+            // Buffering with a full buffer and no network load: the data is there, the software decoder cannot turn
+            // it into pictures fast enough (MX10 on SD channels: no dropped pictures, so softwareTooSlow never saw it).
+            // Back to the hardware decoder for good instead of re-opening into the same stall every few minutes.
+            val ch = channel
+            if (ch != null && softwareVideo && PlayerFactory.isSoftwareDecoder(videoDecoder) &&
+                (player?.totalBufferedDuration ?: 0L) >= SOFTWARE_STARVED_BUFFER_MS
+            ) {
+                softwareFailed.add(ch.url)
+                ChannelMemory.useSoftware(activity, ch.url, false)
+                problem("software decoder starved while buffering (${player?.totalBufferedDuration} ms buffered) → hardware decoder")
+                showReconnecting()
+                freshPlayer()
+                startCurrent()
+                return@Runnable
+            }
             if (retries < MAX_RETRIES) {
                 retries++
                 problem("buffering for ${STALL_TIMEOUT_MS / 1000} s")
@@ -695,5 +710,6 @@ internal class LivePlayback(
         const val SOFTWARE_MAX_HEIGHT = 576
         /** Pictures (shown and dropped) before the software decoder's speed is judged: a few seconds. */
         const val SLOW_CHECK_FRAMES = 100
+        const val SOFTWARE_STARVED_BUFFER_MS = 3_000L
     }
 }
